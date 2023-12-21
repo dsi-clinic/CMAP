@@ -1,0 +1,14 @@
+# development tools
+flake8~=6.1
+flake8-bugbear~=23.11
+black~=23.11
+pre-commit~=3.5
+coverage~=7.3
+pytest~=7.4
+ipykernel~=6.16
+
+# project packages
+pandas~=2.1
+ # cluster specific
+submitit~=1.4
+
