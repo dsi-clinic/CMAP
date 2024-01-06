@@ -1,5 +1,9 @@
 # 2024-winter-cmap
 
+## Team Members
+
+- Spencer Ellis, sjne@uchicago.edu
+
 ## Project Background
 
 [Please add project background]
