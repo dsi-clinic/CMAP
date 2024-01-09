@@ -8,7 +8,6 @@ current_directory = Path(__file__).parent
 repo_root = current_directory.parent
 
 if __name__ == "__main__":
-    
     # code that will only be run when this file is executed as a script
     # (not if it is imported into another file as a module)
     import argparse
