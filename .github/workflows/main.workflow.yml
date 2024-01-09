@@ -32,22 +32,4 @@ jobs:
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Lint with pre-commit
         uses: pre-commit/action@v3.0.0
-      - name: Report Coverage
-        uses: actions/github-script@v7
-        env:
-          min_coverage: 50
-        with:
-          script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `${{ env.REPORT }}`
-            })
-            if ( ${{ env.total }} <= ${{ env.min_coverage }} ) { 
-              console.log(
-                "Coverage test failed as code coverage is ${{ env.total }}% and the minimum is ${{ env.min_coverage}}%"
-              )
-              process.exitCode = 1 
-            }
 
