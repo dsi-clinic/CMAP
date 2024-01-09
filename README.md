@@ -2,7 +2,7 @@
 
 ## Project Background
 
-[Please add project background]
+Tamami Tamura tamamitamura@uchicago.edu
 
 ## Project Goals
 
