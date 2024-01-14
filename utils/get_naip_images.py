@@ -1,13 +1,12 @@
-import fiona
 import os
-import pystac_client
+from typing import Any, Dict, Iterator, NoReturn
+
+import fiona
 import planetary_computer
+import pystac_client
 import requests
-
-from shapely.geometry import shape
-from typing import Iterator, NoReturn, Any, Dict
-
 from constants import DATA_DIR
+from shapely.geometry import shape
 
 
 def get_geometry(fpath: str) -> Iterator[Dict[str, Any]]:
@@ -82,7 +81,9 @@ def get_image(
         Directory to save the image to
     """
     if img_type not in ["rendered_preview", "image"]:
-        raise ValueError("img_type must be either 'rendered_preview' or 'image'")
+        raise ValueError(
+            "img_type must be either 'rendered_preview' or 'image'"
+        )
 
     # access the planetary computer catalog and retrieve NAIP images that
     # intersect with the geometry

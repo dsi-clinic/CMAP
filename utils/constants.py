@@ -1,1 +1,1 @@
-DATA_DIR = '/net/projects/cmap/data'
+DATA_DIR = "/net/projects/cmap/data"
