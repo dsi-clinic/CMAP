@@ -129,14 +129,13 @@ def get_image(
         print(f"Writing image {img_name} to disk")
 
     with open(save_fpath, "wb") as f:
-        # f.write(res.content)
         for chunk in res.iter_content(chunk_size=8192):
             f.write(chunk)
 
 
 def main():
-    pass
-    geometry_stream = get_geometry(DATA_DIR + "/GIBI_Calumet.shp")
+    data_fpath = os.path.join(DATA_DIR, "GIBI_2021_shapefiles/GIBI_All.shp")
+    geometry_stream = get_geometry(data_fpath)
     save_dir = os.path.join(DATA_DIR, "GIBI-images")
 
     for geometry in geometry_stream:
