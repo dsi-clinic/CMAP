@@ -8,7 +8,13 @@ pytest~=7.4
 ipykernel~=6.16
 
 # project packages
+fiona~=1.9.5
 pandas~=2.1
- # cluster specific
+planetary-computer~=1.0.0
+pystac-client~=0.7.5
+requests~=2.31
+shapely~=2.0.2
+
+# cluster specific
 submitit~=1.4
 
