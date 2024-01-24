@@ -10,7 +10,7 @@ from fiona import transform
 from shapely.geometry import shape
 
 
-def get_geometry(fpath: str) -> Iterator[Dict[str, Any]]:
+def get_geometry(fpath: str, layer: int = None) -> Iterator[Dict[str, Any]]:
     """
     Read in a shapefile and yield each feature as a dictionary with id and geometry.
 
@@ -19,12 +19,15 @@ def get_geometry(fpath: str) -> Iterator[Dict[str, Any]]:
     fpath : str
         Path to shapefile
 
+    layer : int
+        Index of the layer in the shapefile to read in
+
     Yields
     ------
     dict
         Dictionary with id and geometry
     """
-    with fiona.open(fpath) as sf:
+    with fiona.open(fpath, layer=layer) as sf:
         for feature in iter(sf):
             # transform the geometry to EPSG:4326 (standard lat/long)
             geom = transform.transform_geom(
@@ -211,17 +214,41 @@ def download_image(
                 f.write(chunk)
 
 
-def main(img_type: str, data_fpath: str, save_dir: str):
+def get_images(
+    img_type: str, data_fpath: str, save_dir: str, layer: int = None
+):
+    """
+    Retrieves NAIP images overlapping the geometries in a shapefile.
+
+    Parameters
+    ----------
+    img_type : str
+        Type of image to retrieve. Options are "rendered_preview" and "image"
+            "rendered_preview" is a preview image in png format
+            "image" is the full image in GeoTIFF format
+
+    data_fpath : str
+        Path to shapefile containing geometries to retrieve images for
+
+    save_dir : str
+        Directory to save the images to
+
+    layer : int
+        Index of the layer in the shapefile to get images for
+    """
     geometry_stream = get_geometry(data_fpath)
     catalog = get_catalog()
 
     urls = set()
     for geometry in geometry_stream:
-        url = get_image_url(
-            geometry["geometry"], catalog, "2021-01-01/2024-01-01", img_type
-        )
-        if url not in urls:
-            urls.add(url)
+        try:
+            url = get_image_url(
+                geometry["geometry"], catalog, "2021-01-01/2024-01-01", img_type
+            )
+            if url not in urls:
+                urls.add(url)
+        except Exception:
+            print("Error retrieving image url")
 
     for url in urls:
         url = url + "?" + get_token()
@@ -231,4 +258,4 @@ def main(img_type: str, data_fpath: str, save_dir: str):
 if __name__ == "__main__":
     data_fpath = os.path.join(DATA_DIR, "GIBI_2021_shapefiles/GIBI_All.shp")
     save_dir = os.path.join(DATA_DIR, "GIBI-images")
-    main("image", data_fpath, save_dir)
+    get_images("image", data_fpath, save_dir)
