@@ -1,17 +1,20 @@
 import os
-from typing import List, NoReturn
+from typing import Dict, List, NoReturn
 
-import fiona
 import geopandas as gpd
 import numpy as np
 import rasterio
 import shapely
 from rasterio.mask import mask
-from shapely.geometry import box, shape
+from shapely.geometry import box
 
 
 def create_mask(
-    img_fpath: str, shape_fpath: str, save_dir: str, layer: int = None
+    img_fpath: str,
+    gdf: gpd.GeoDataFrame,
+    save_dir: str,
+    label_col: str,
+    labels: Dict[str, int],
 ) -> NoReturn:
     """
     Creates a mask for shapefile features that intersect with a given image.
@@ -21,47 +24,59 @@ def create_mask(
     img_fpath : str
         Path to image
 
-    shape_fpath : str
-        Path to shapefile
+    gdf : geopandas.GeoDataFrame
+        A geopandas dataframe containing geometries
 
     save_dir : str
         Path to save directory
 
-    layer : int
-        Layer of shapefile to use
+    label_col : str
+        The column containing the labels of the shapes
+
+    labels : Dict[str, int]
+        A dict containing the labels of the shapes and their corresponding values
     """
+
     # open image and get bounding box
-    img = rasterio.open(img_fpath)
-    bbox = box(*img.bounds)
+    with rasterio.open(img_fpath) as src:
+        bbox = box(*src.bounds)
+        crs = src.crs
 
-    # extract intersecting shapes
-    shapes = get_intersecting_shapes(bbox, img.crs, shape_fpath, layer)
+        # extract intersecting shapes
+        shapes = get_intersecting_shapes(
+            bbox, crs, gdf, label_col, set(labels.keys())
+        )
 
-    # create mask and stack into 3-channel image
-    out_img, out_transform = mask(img, shapes, crop=False)
-    out_img_unique = np.where(out_img != 0, 255, out_img)
-    msk = np.dstack(
-        (out_img_unique[0], out_img_unique[1], out_img_unique[2])
-    ).astype("uint8")
+        # create empty mask and copy metadata from image
+        output = np.zeros((src.count, src.height, src.width), dtype=np.uint8)
+        out_meta = src.meta.copy()
+
+        # create mask for each label and combine into one mask
+        for label in shapes:
+            out_img, out_transform = mask(src, shapes[label], crop=False)
+            out_img_unique = np.where(out_img != 0, labels[label], out_img)
+            output = np.maximum(output, out_img_unique)
+
+    # transpose mask to match image dimensions
+    msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
+        "uint8"
+    )
     msk = msk.transpose(2, 0, 1)
 
-    # set output metadata and filename
+    # set output filename and metadata
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
-    out_tif = os.path.join(
-        save_dir, os.path.basename(img_fpath).replace(".tif", "_mask.tif")
-    )
+    out_tif = os.path.join(save_dir, f"mask_{os.path.basename(img_fpath)}")
 
-    out_meta = img.meta.copy()
     out_meta.update(
         {
             "driver": "GTiff",
             "dtype": "uint8",
-            "height": out_img.shape[1],
-            "width": out_img.shape[2],
+            "height": output.shape[1],
+            "width": output.shape[2],
             "transform": out_transform,
-            "count": 3,
-            "crs": img.crs,
+            "count": 4,
+            "crs": crs,
         }
     )
 
@@ -71,39 +86,79 @@ def create_mask(
 
 
 def get_intersecting_shapes(
-    bbox: box, crs: str, shape_fpath: str, layer: int = None
-) -> List[shapely.Geometry]:
+    bbox: shapely.Polygon,
+    crs: str,
+    gdf: gpd.GeoDataFrame,
+    label_col: str,
+    labels: List[str],
+) -> Dict[str, List[shapely.Geometry]]:
     """
-    Returns a list of shapes in a shapefile that intersect with a given bounding box.
+    Returns a dict containing a list of shapes that intersect with a given bounding
+    box for each key in labels.
 
     Parameters
     ----------
-    bbox : shapely.geometry.box
+    bbox : shapely.Polygon
         The bounding box to check for intersections
 
     crs : str
         The CRS of the bounding box
 
-    shape_fpath : str
-        The path to the shapefile
+    gdf : geopandas.GeoDataFrame
+        A geopandas dataframe containing geometries
+
+    label_col : str
+        The column containing the labels of the shapes
+
+    labels : Set[str]
+        The labels of the shapes to extract from the gdf
 
     Returns
     -------
-    List[shapely.geometry.Geometry]
-        A list of shapes that intersect with the bounding box
+    Dict[str, List[shapely.Geometry]]
+        A dict with label as key and a list of shapes as value
     """
-    if fiona.listlayers(shape_fpath) is None:
-        gdf = gpd.read_file(shape_fpath)
-    elif layer is not None:
-        gdf = gpd.read_file(shape_fpath, layer=layer)
-    else:
-        raise ValueError("No layer specified")
+    gdf.to_crs(crs, inplace=True)
+    intersecting = gdf[gdf["geometry"].intersects(bbox)]
 
-    gdf = gdf.to_crs(crs)
-    shapes = [
-        row["geometry"]
-        for _, row in gdf.iterrows()
-        if shapely.intersection(shape(row["geometry"]), bbox)
-    ]
+    shapes = {}
+    for _, row in intersecting.iterrows():
+        if row[label_col] in labels:
+            if row[label_col] in shapes:
+                shapes[row[label_col]].append(row["geometry"])
+            else:
+                shapes[row[label_col]] = [row["geometry"]]
 
     return shapes
+
+
+def create_kane_county_masks(
+    img_root: str,
+    shape_fpath: str,
+    save_dir: str,
+    layer: int,
+    labels: List[str] = None,
+):
+    gdf = gpd.read_file(shape_fpath, layer=layer)
+
+    for img_fname in os.listdir(img_root):
+        try:
+            img_fpath = os.path.join(img_root, img_fname)
+            create_mask(img_fpath, gdf, save_dir, "BasinType", labels=labels)
+        except Exception:
+            continue
+
+
+if __name__ == "__main__":
+    kc = "/net/projects/cmap/data/kane-county-data/KC_StormwaterDataJan2024.gdb.zip"
+    layer = 4
+    img_root = "/net/projects/cmap/data/KC-images"
+    labels = {
+        "POND": 1,
+        "WETLAND": 2,
+        "DRY BOTTOM - TURF": 3,
+        "DRY BOTTOM - MESIC PRAIRIE": 4,
+    }
+    create_kane_county_masks(
+        img_root, kc, "/net/projects/cmap/data/KC-masks/test", layer, labels
+    )
