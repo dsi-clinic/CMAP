@@ -1,5 +1,7 @@
 ## -*- mode: gitignore; -*-
 
+GeoSeg_Tutorial/airs/data/uavid/UAVidToolKit/
+
 ## Terraform Files
 .terraform
 .terraform*
