@@ -50,7 +50,7 @@ class KaneCounty(RasterDataset):
         12: "PICP ALLEY",
         13: "INFILTRATION TRENCH",
         14: "BIORETENTION",
-        15: "",
+        15: "UNKNOWN",
     }
 
     labels_inverse = {v: k for k, v in labels.items()}
