@@ -23,4 +23,3 @@ geopandas~=0.14.2
 
 # cluster specific
 submitit~=1.4
-
