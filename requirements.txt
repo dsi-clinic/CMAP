@@ -14,7 +14,7 @@ planetary-computer~=1.0.0
 pystac-client~=0.7.5
 requests~=2.31
 shapely~=2.0.2
+torchgeo~=0.5.1
 
 # cluster specific
 submitit~=1.4
-
