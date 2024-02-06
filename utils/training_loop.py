@@ -3,7 +3,8 @@ import os
 
 import torch
 import torch.nn as nn
-from segmentation_models_pytorch.losses import JaccardLoss
+
+# from segmentation_models_pytorch.losses import JaccardLoss
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -52,21 +53,28 @@ train_sampler = RandomBatchGeoSampler(
     dataset=dataset, size=patch_size, batch_size=batch_size, roi=train_roi
 )
 test_roi = BoundingBox(midx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt)
-test_sampler = GridGeoSampler(dataset, size=patch_size, stride=patch_size, roi=test_roi)
+test_sampler = GridGeoSampler(
+    dataset, size=patch_size, stride=patch_size, roi=test_roi
+)
 
 # create dataloaders (must use batch_sampler)
 train_dataloader = DataLoader(
     dataset, batch_sampler=train_sampler, collate_fn=stack_samples
 )
 test_dataloader = DataLoader(
-    dataset, batch_size=batch_size, sampler=test_sampler, collate_fn=stack_samples
+    dataset,
+    batch_size=batch_size,
+    sampler=test_sampler,
+    collate_fn=stack_samples,
 )
 
 # get device for training
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps" if torch.backends.mps.is_available() else "cpu"
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
 )
 print(f"Using {device} device")
 
@@ -81,8 +89,10 @@ optimizer = AdamW(model.parameters(), lr=lr)
 
 
 # TODO: transforms
-def train(dataloader: DataLoader, model: Module, loss_fn: Module, optimizer: Optimizer):
-    size = len(dataloader.dataset)
+def train(
+    dataloader: DataLoader, model: Module, loss_fn: Module, optimizer: Optimizer
+):
+    size = len(dataloader.dataset)  # TODO: what is this?
     model.train()
     for batch, sample in enumerate(dataloader):
         X = sample["image"].to(device)
@@ -99,7 +109,9 @@ def train(dataloader: DataLoader, model: Module, loss_fn: Module, optimizer: Opt
 
         if batch % 20 == 0:
             loss, current = loss.item(), (batch + 1)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]")
+            print(
+                f"loss: {loss:>7f}  [{current:>5d}/{size:>5d}]"
+            )  # TODO: not correct currently
 
 
 def test(dataloader, model, loss_fn):
@@ -114,7 +126,7 @@ def test(dataloader, model, loss_fn):
             pred = model(X)
             test_loss += loss_fn(pred, y[:, 0, :, :]).item()
             correct += (pred.argmax(1) == y).type(torch.float).sum().item()
-    test_loss /= num_batches
+    test_loss /= num_batches  # TODO: not working
     correct /= size
     print(
         f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
@@ -131,4 +143,6 @@ print("Done!")
 
 # TODO: update with the correct path
 torch.save(model.state_dict(), "/home/sjne/2024-winter-cmap/output/model.pth")
-print("Saved PyTorch Model State to /home/sjne/2024-winter-cmap/output/model.pth")
+print(
+    "Saved PyTorch Model State to /home/sjne/2024-winter-cmap/output/model.pth"
+)

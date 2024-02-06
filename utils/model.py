@@ -65,7 +65,9 @@ class SegmentationModel:
             )
         elif model == "fcn":
             self.model = FCN(
-                in_channels=in_channels, classes=num_classes, num_filters=num_filters
+                in_channels=in_channels,
+                classes=num_classes,
+                num_filters=num_filters,
             )
         else:
             raise ValueError(
@@ -73,6 +75,7 @@ class SegmentationModel:
                 "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
             )
 
+        # set custom weights
         if model != "fcn":
             if weights and weights is not True:
                 if isinstance(weights, WeightsEnum):
@@ -80,5 +83,7 @@ class SegmentationModel:
                 elif os.path.exists(weights):
                     _, state_dict = utils.extract_backbone(weights)
                 else:
-                    state_dict = get_weight(weights).get_state_dict(progress=True)
+                    state_dict = get_weight(weights).get_state_dict(
+                        progress=True
+                    )
                 self.model.encoder.load_state_dict(state_dict)
