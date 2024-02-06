@@ -25,6 +25,7 @@ KC_SHAPE_DIR = os.path.join(DATA_DIR, "kane-county-data")
 KC_IMAGE_DIR = os.path.join(DATA_DIR, "KC-images")
 KC_MASK_DIR = os.path.join(DATA_DIR, "KC-masks/top-structures-masks")
 """
+# KaneCounty class defined by Spencer's code
 KC_images_data = KaneCounty(root=KC_IMAGE_DIR) # check if we need to define this root, or just leave it as root
 KC_masks_data = KaneCounty(root=KC_MASK_DIR)
 img_masks_data = KC_images_data & KC_masks_data
@@ -59,7 +60,10 @@ model = timm.create_model("resnet18", in_chans=weights.meta["in_chans"], num_cla
 model = model.load_state_dict(weights.get_state_dict(progress=True), strict=False)
 
 # Loss function
-loss_fn = torch.nn.CrossEntropyLoss()
+loss_fn = torch.nn.CrossEntropyLoss() 
+# requires 1 channel images, but masks have 4 channels; maybe loss fn expects one-hot-encoded output?
+#may need to tweak model definition
+# masks are not one-hot-encoded
 
 # Optimizer = stochastic gradient descent with momentum
 """
@@ -80,7 +84,7 @@ def train_one_epoch(epoch_index, tb_writer):
         target = batch["mask"]
         
         ## Transforms
-        transforms = AugmentationSequential( #check function
+        transforms = AugmentationSequential( # Check function
             MinMaxNormalize(mins, maxs),
             # Check augmentations to see if they produce results we'd actually see
             K.RandomHorizontalFlip(p=0.5),
@@ -109,6 +113,7 @@ def train_one_epoch(epoch_index, tb_writer):
 
         # Gather data and report
         running_loss += loss.item()
+        # check with implementations of loss, IoU
         if i % 1000 == 999: #check i 
             last_loss = running_loss / 1000 # loss per batch
             print('  batch {} loss: {}'.format(i + 1, last_loss))
@@ -118,7 +123,8 @@ def train_one_epoch(epoch_index, tb_writer):
 
     return last_loss
 
-# Calculate IoU across a batch
+# Calculate IoU across a batch - trying to optimize IoU, ideally IoU goes up and loss goes down. At some point these two start to plateau. 
+# Frequently, loss will plateau before the IoU, but we stop training when IoU plateaus
 SMOOTH = 1e-6
 def iou_pytorch(outputs: torch.Tensor, labels: torch.Tensor):
     # You can comment out this line if you are passing tensors of equal shape
