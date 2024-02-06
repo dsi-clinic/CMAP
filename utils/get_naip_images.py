@@ -5,7 +5,6 @@ import fiona
 import planetary_computer
 import pystac_client
 import requests
-from constants import DATA_DIR
 from fiona import transform
 from shapely.geometry import shape
 
@@ -236,7 +235,7 @@ def get_images(
     layer : int
         Index of the layer in the shapefile to get images for
     """
-    geometry_stream = get_geometry(data_fpath)
+    geometry_stream = get_geometry(data_fpath, layer)
     catalog = get_catalog()
 
     urls = set()
@@ -253,9 +252,3 @@ def get_images(
     for url in urls:
         url = url + "?" + get_token()
         download_image(url, save_dir, img_type)
-
-
-if __name__ == "__main__":
-    data_fpath = os.path.join(DATA_DIR, "GIBI_2021_shapefiles/GIBI_All.shp")
-    save_dir = os.path.join(DATA_DIR, "GIBI-images")
-    get_images("image", data_fpath, save_dir)

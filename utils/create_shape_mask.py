@@ -5,6 +5,7 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import shapely
+from einops import rearrange
 from rasterio.mask import mask
 from shapely.geometry import box
 
@@ -61,7 +62,7 @@ def create_mask(
     msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
         "uint8"
     )
-    msk = msk.transpose(2, 0, 1)
+    msk = rearrange[msk, "h w c -> c h w"]
 
     # set output filename and metadata
     if not os.path.exists(save_dir):
@@ -130,35 +131,3 @@ def get_intersecting_shapes(
                 shapes[row[label_col]] = [row["geometry"]]
 
     return shapes
-
-
-def create_kane_county_masks(
-    img_root: str,
-    shape_fpath: str,
-    save_dir: str,
-    layer: int,
-    labels: List[str] = None,
-):
-    gdf = gpd.read_file(shape_fpath, layer=layer)
-
-    for img_fname in os.listdir(img_root):
-        try:
-            img_fpath = os.path.join(img_root, img_fname)
-            create_mask(img_fpath, gdf, save_dir, "BasinType", labels=labels)
-        except Exception:
-            continue
-
-
-if __name__ == "__main__":
-    kc = "/net/projects/cmap/data/kane-county-data/KC_StormwaterDataJan2024.gdb.zip"
-    layer = 4
-    img_root = "/net/projects/cmap/data/KC-images"
-    labels = {
-        "POND": 1,
-        "WETLAND": 2,
-        "DRY BOTTOM - TURF": 3,
-        "DRY BOTTOM - MESIC PRAIRIE": 4,
-    }
-    create_kane_county_masks(
-        img_root, kc, "/net/projects/cmap/data/KC-masks/test", layer, labels
-    )
