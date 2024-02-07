@@ -204,7 +204,7 @@ for epoch in range(num_epochs):
     # Disable gradient computation and reduce memory consumption.
     vbatch_number = 0
     with torch.no_grad():
-        for vbatch in enumerate(dataloader_test):
+        for , vbatch in enumerate(dataloader_test):
             vimage = vbatch["image"]
             vtarget = vbatch["mask"]
             voutputs = model(vimage)
