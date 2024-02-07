@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name= trainingCMAP
+#SBATCH --job-name=g005
 #SBATCH --mail-user=rubensteinm@uchicago.edu
 #SBATCH --mail-type=ALL
 #SBATCH --output=/home/rubensteinm/slurm/out/%j.%N.stdout
@@ -10,8 +10,6 @@
 #SBATCH --time=1:00:00
 #SBATCH --mem=16GB
 #SBATCH --gres=gpu:1
-
-conda create --name cmap python=3.9.18
 
 export PATH="/home/rubenstein/miniconda/bin:$PATH"
 
