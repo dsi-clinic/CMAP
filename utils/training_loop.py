@@ -3,6 +3,8 @@ import os
 
 import torch
 import torch.nn as nn
+import kornia as K
+from kornia.augmentation.container import AugmentationSequential
 
 # from segmentation_models_pytorch.losses import JaccardLoss
 from torch.nn.modules import Module
@@ -97,6 +99,20 @@ def train(
     for batch, sample in enumerate(dataloader):
         X = sample["image"].to(device)
         y = sample["mask"].to(device)
+
+        # Apply transformations
+        X = K.enhance.normalize_min_max(X, min_val=-1., max_val=1.), # Normalize intensity
+        transforms = AugmentationSequential( 
+            K.augmentation.RandomHorizontalFlip(p=0.5),
+            K.augmentation.RandomVerticalFlip(p=0.5),
+            K.augmentation.RandomPlasmaShadow(roughness=(0.1, 0.7), shade_intensity=(-1.0, 0.0), shade_quantity=(0.0, 1.0), keepdim=True),
+            K.augmentation.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+            K.augmentation.RandomResizedCrop(size=(patch_size, patch_size), scale=(0.08, 1.0), p=0.25),
+            K.augmentation.RandomRotation(degrees=[90.0, 180.0, 270.0]),
+            data_keys=["image"],
+            keepdim = True
+        ).to(device) 
+        X = transforms(X)
 
         # Compute prediction error
         pred = model(X)
