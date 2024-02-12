@@ -2,14 +2,17 @@ import importlib.util
 import os
 
 import torch
-import torch.nn as nn
 
-# from segmentation_models_pytorch.losses import JaccardLoss
+from segmentation_models_pytorch.losses import JaccardLoss
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 from torchgeo.datasets import NAIP, BoundingBox, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
+from torchmetrics import Metric
+from torchmetrics.classification import MulticlassJaccardIndex
+from torchvision.transforms import *
+
 
 # project imports
 # TODO: figure out how to import as package
@@ -66,6 +69,7 @@ test_dataloader = DataLoader(
     batch_size=batch_size,
     sampler=test_sampler,
     collate_fn=stack_samples,
+    num_workers = 2,
 )
 
 # get device for training
@@ -83,14 +87,23 @@ model = SegmentationModel(num_classes=num_classes).model.to(device)
 print(model)
 
 # set the loss function and optimizer
-# loss_fn = JaccardLoss(mode="multiclass", classes=num_classes)
-loss_fn = nn.CrossEntropyLoss(ignore_index=0)
+loss_fn = JaccardLoss(mode="multiclass", classes=num_classes)
+train_metric = MulticlassJaccardIndex(
+    num_classes=num_classes,
+    ignore_index=0,
+    average="micro",
+).to(device)
+test_metric = MulticlassJaccardIndex(
+    num_classes=num_classes,
+    ignore_index=0,
+    average="micro",
+).to(device)
 optimizer = AdamW(model.parameters(), lr=lr)
 
 
 # TODO: transforms
 def train(
-    dataloader: DataLoader, model: Module, loss_fn: Module, optimizer: Optimizer
+    dataloader: DataLoader, model: Module, loss_fn: Module, metric: Metric, optimizer: Optimizer
 ):
     size = len(dataloader.dataset)  # TODO: what is this?
     model.train()
@@ -98,9 +111,25 @@ def train(
         X = sample["image"].to(device)
         y = sample["mask"].to(device)
 
-        # Compute prediction error
-        pred = model(X)
-        loss = loss_fn(pred, y[:, 0, :, :])
+        y_squeezed = y[:, 0, :, :].squeeze()
+
+        # Apply transformations
+        transforms = [
+            Normalize(mean=[0.485, 0.456, 0.406, 0.427], std=[0.229, 0.224, 0.225, 0.227]),
+            RandomHorizontalFlip(p=0.5),
+            RandomVerticalFlip(p=0.5),
+            RandomRotation(degrees=[90, 270]),
+            RandomResizedCrop(size=(256, 256), scale=(0.08, 1.0)),
+            GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0)),
+        ]
+
+        # Apply transformations to input image
+        for transform in transforms:
+            X = transform(X)
+
+        # compute prediction error
+        outputs = model(X)
+        loss = loss_fn(outputs, y_squeezed)
 
         # Backpropagation
         loss.backward()
@@ -114,7 +143,7 @@ def train(
             )  # TODO: not correct currently
 
 
-def test(dataloader, model, loss_fn):
+def test(dataloader, model, loss_fn, metric):
     size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
@@ -123,26 +152,36 @@ def test(dataloader, model, loss_fn):
         for sample in dataloader:
             X = sample["image"].to(device)
             y = sample["mask"].to(device)
-            pred = model(X)
-            test_loss += loss_fn(pred, y[:, 0, :, :]).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            y_squeezed = y[:, 0, :, :].squeeze()
+
+            # compute prediction error
+            outputs = model(X)
+            loss = loss_fn(outputs, y_squeezed)
+
+            # update metric
+            preds = outputs.argmax(dim=1)
+            metric(preds, y_squeezed)
+
+            # add test loss to rolling total
+            test_loss += loss.item()
     test_loss /= num_batches  # TODO: not working
-    correct /= size
+    final_metric = metric.compute()
     print(
-        f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n"
+        f"Test Error: \n Jaccard index: {final_metric:>7f}, "
+        + "Avg loss: {test_loss:>7f} \n"
     )
 
 
 epochs = 5
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, optimizer)
-    test(test_dataloader, model, loss_fn)
+    train(train_dataloader, model, loss_fn, train_metric, optimizer)
+    test(test_dataloader, model, loss_fn, test_metric)
 print("Done!")
 
 
 # TODO: update with the correct path
-torch.save(model.state_dict(), "/home/sjne/2024-winter-cmap/output/model.pth")
+torch.save(model.state_dict(), "/home/rubensteinm/2024-winter-cmap/output/model.pth")
 print(
-    "Saved PyTorch Model State to /home/sjne/2024-winter-cmap/output/model.pth"
+    "Saved PyTorch Model State to /home/rubensteinm/2024-winter-cmap/output/model.pth"
 )
