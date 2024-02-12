@@ -2,9 +2,14 @@ import argparse
 import importlib.util
 import os
 
-import kornia as K
+import albumentations as A
+import numpy as np
+
+# import kornia as K
 import torch
-from kornia.augmentation.container import AugmentationSequential
+from albumentations.pytorch import ToTensorV2
+
+# from kornia.augmentation.container import AugmentationSequential
 from segmentation_models_pytorch.losses import JaccardLoss
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
@@ -13,12 +18,12 @@ from torchgeo.datasets import NAIP, BoundingBox, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
-from torchvision.transforms import *
-
 
 # project imports
 from . import repo_root
 from .model import SegmentationModel
+
+# from .plot_sample import plot_training_sample
 
 # import KaneCounty dataset class
 spec = importlib.util.spec_from_file_location(
@@ -105,6 +110,71 @@ test_metric = MulticlassJaccardIndex(
 optimizer = AdamW(model.parameters(), lr=config.LR)
 
 
+def get_train_augmentation_pipeline():
+    """
+    Extend the augmentation pipeline for aerial image segmentation with additional
+    transformations to simulate various environmental conditions and viewing angles.
+
+    Returns:
+        A callable augmentation pipeline that applies the defined transformations.
+    """
+    # Define the extended augmentation pipeline
+    augmentation_pipeline = A.Compose(
+        [
+            # Rotate the image by up to 180 degrees, without a preferred direction
+            A.Rotate(limit=180, p=0.5, border_mode=0),
+            # Horizontal and vertical flipping
+            A.HorizontalFlip(p=0.5),
+            A.VerticalFlip(p=0.5),
+            # Random scaling
+            A.RandomScale(scale_limit=0.1, p=0.5),
+            # Brightness and contrast adjustments
+            A.RandomBrightnessContrast(
+                brightness_limit=0.2, contrast_limit=0.2, p=0.5
+            ),
+            # Slight Gaussian blur to mimic atmospheric effects
+            A.GaussianBlur(blur_limit=(3, 3), p=0.2),
+            # Normalize the image (ensure to adjust mean and std as per your dataset)
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], p=1.0
+            ),
+            # Convert image and mask to PyTorch tensors
+            ToTensorV2(),
+        ],
+        additional_targets={"mask": "image"},
+    )  # Apply the same transform to both image and mask
+
+    return augmentation_pipeline
+
+
+def get_test_augmentation_pipeline():
+    """
+    Extend the augmentation pipeline for aerial image segmentation with additional
+    transformations to simulate various environmental conditions and viewing angles.
+
+    Returns:
+        A callable augmentation pipeline that applies the defined transformations.
+    """
+    # Define the extended augmentation pipeline
+    augmentation_pipeline = A.Compose(
+        [
+            # Normalize the image (ensure to adjust mean and std as per your dataset)
+            A.Normalize(
+                mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], p=1.0
+            ),
+            # Convert image and mask to PyTorch tensors
+            ToTensorV2(),
+        ],
+        additional_targets={"mask": "image"},
+    )  # Apply the same transform to both image and mask
+
+    return augmentation_pipeline
+
+
+train_augmentation_pipeline = get_train_augmentation_pipeline()
+test_augmentation_pipeline = get_test_augmentation_pipeline()
+
+
 # TODO: add transforms
 def train(
     dataloader: DataLoader,
@@ -115,25 +185,25 @@ def train(
 ):
     num_batches = len(dataloader)
     model.train()
+
     for batch, sample in enumerate(dataloader):
-        X = sample["image"].to(device)
-        y = sample["mask"].to(device)
+        images = sample["image"]
+        masks = sample["mask"]
 
-        y_squeezed = y[:, 0, :, :].squeeze()
+        # Convert PyTorch tensors to numpy arrays for Albumentations
+        images_np = images.cpu().numpy().astype(np.float32)
+        masks_np = masks.cpu().numpy().astype(np.float32)
 
-        # Apply transformations
-        transforms = [
-            Normalize(mean=[0.485, 0.456, 0.406, 0.427], std=[0.229, 0.224, 0.225, 0.227]),
-            RandomHorizontalFlip(p=0.5),
-            RandomVerticalFlip(p=0.5),
-            RandomRotation(degrees=[90, 270]),
-            RandomResizedCrop(size=(256, 256), scale=(0.08, 1.0)),
-            GaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0)),
-        ]
+        # Apply augmentations
+        augmented = train_augmentation_pipeline(image=images_np, mask=masks_np)
+        augmented_image, augmented_mask = augmented["image"], augmented["mask"]
 
-        # Apply transformations to input image
-        for transform in transforms:
-            X = transform(X)
+        # Convert numpy arrays back to PyTorch tensors
+        X = torch.from_numpy(augmented_image).to(device)
+        y = torch.from_numpy(augmented_mask).to(device)
+
+        # Assuming your mask has a channel dimension that needs to be squeezed
+        y_squeezed = y.squeeze(1)
 
         # compute prediction error
         outputs = model(X)
@@ -147,6 +217,8 @@ def train(
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
+        # if batch < 5:
+        #    plot_training_sample(sample[0])
 
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
@@ -156,15 +228,34 @@ def train(
 
 
 def test(dataloader, model, loss_fn, metric):
-    size = len(dataloader.dataset)
+    # size = len(dataloader.dataset)
     num_batches = len(dataloader)
     model.eval()
     test_loss = 0
     with torch.no_grad():
         for sample in dataloader:
-            X = sample["image"].to(device)
-            y = sample["mask"].to(device)
-            y_squeezed = y[:, 0, :, :].squeeze()
+            images = sample["image"]
+            masks = sample["mask"]
+
+            # Convert PyTorch tensors to numpy arrays for Albumentations
+            images_np = images.cpu().numpy().astype(np.float32)
+            masks_np = masks.cpu().numpy().astype(np.float32)
+
+            # Apply augmentations
+            augmented = train_augmentation_pipeline(
+                image=images_np, mask=masks_np
+            )
+            augmented_image, augmented_mask = (
+                augmented["image"],
+                augmented["mask"],
+            )
+
+            # Convert numpy arrays back to PyTorch tensors
+            X = torch.from_numpy(augmented_image).to(device)
+            y = torch.from_numpy(augmented_mask).to(device)
+
+            # Assuming your mask has a channel dimension that needs to be squeezed
+            y_squeezed = y.squeeze(1)
 
             # compute prediction error
             outputs = model(X)
