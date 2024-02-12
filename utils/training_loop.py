@@ -13,6 +13,7 @@ from torchgeo.datasets import NAIP, BoundingBox, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
+from torch.utils.tensorboard import SummaryWriter
 
 # project imports
 from . import repo_root
@@ -84,6 +85,9 @@ device = (
 )
 print(f"Using {device} device")
 
+# prepare tensorboard for logging
+writer = SummaryWriter()
+
 # create the model
 model = SegmentationModel(num_classes=config.NUM_CLASSES).model.to(device)
 print(model)
@@ -113,6 +117,7 @@ def train(
 ):
     num_batches = len(dataloader)
     model.train()
+    train_loss = 0
     for batch, sample in enumerate(dataloader):
         X = sample["image"].to(device)
         y = sample["mask"].to(device)
@@ -161,9 +166,11 @@ def train(
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
             print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
-    final_metric = metric.compute()
+            train_loss += loss.item()
+    final_metric = metric.compute() # is this doing the same thing as line below?
     print(f"Jaccard Index: {final_metric}")
-
+    train_loss /= num_batches
+    return train_loss
 
 def test(dataloader, model, loss_fn, metric):
     num_batches = len(dataloader)
@@ -191,15 +198,26 @@ def test(dataloader, model, loss_fn, metric):
         f"Test Error: \n Jaccard index: {final_metric:>7f}, "
         + "Avg loss: {test_loss:>7f} \n"
     )
+    return test_loss, final_metric
 
 
 epochs = 5
 for t in range(epochs):
     print(f"Epoch {t+1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, train_metric, optimizer)
-    test(test_dataloader, model, loss_fn, test_metric)
+    loss_train = train(train_dataloader, model, loss_fn, train_metric, optimizer)
+    writer.add_scalar('Loss/train', loss_train, t)
+    loss_test = test(test_dataloader, model, loss_fn, test_metric)[0]
+    iou_test = test(test_dataloader, model, loss_fn, test_metric)[1]
+    writer.add_scalar('Loss/test', loss_test, t)
+    writer.add_scalar('IoU/test', iou_test, t)
+    writer.close()
 print("Done!")
 
+# visualize results with TensorBoard
+"""
+pip install tensorboard
+tensorboard --logdir=runs
+"""
 
 torch.save(
     model.state_dict(), os.path.join(config.MODEL_STATES_ROOT, "model.pth")
