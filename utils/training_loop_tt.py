@@ -1,6 +1,3 @@
-%matplotlib inline
-%load_ext tensorboard
-
 import importlib.util
 import os
 
@@ -53,7 +50,7 @@ checkpoint_callback = ModelCheckpoint(
     monitor="val_loss", dirpath=repo_root, save_top_k=1, save_last=True
 )
 early_stopping_callback = EarlyStopping(monitor="val_loss", min_delta=0.00, patience=10)
-logger = TensorBoardLogger(save_dir=repo_root, name="tutorial_logs")
+logger = TensorBoardLogger(save_dir=repo_root, name="lightning_logs", version=None)
 
 task = SemanticSegmentationTask(
     model='unet',
@@ -82,13 +79,13 @@ trainer = Trainer(
 
 trainer.fit(model=task, datamodule=KCDataModule)
 
-log_dir = os.path.join(repo_root, "log")
-%tensorboard --logdir log_dir
-
 trainer.test(model=task, datamodule=KCDataModule)
 
+# save the model status
+"""
 # TODO: update with the correct path
 torch.save(task.state_dict(), "/home/tamamitamura/2024-winter-cmap/output/model.pth")
 print(
     "Saved PyTorch Model State to /home/tamamitamura/2024-winter-cmap/output/model.pth"
 )
+"""
