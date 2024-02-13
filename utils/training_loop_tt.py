@@ -1,3 +1,9 @@
+"""
+Creating own DataModule: https://medium.com/@janwinkler91/pytorch-lightning-creating-my-first-custom-data-module-64a33f437356
+Lightning DataModule Docs: https://lightning.ai/docs/pytorch/stable/notebooks/lightning_examples/datamodules.html
+MNIST DataModule Docs: https://pytorch-lightning.readthedocs.io/en/1.5.10/extensions/datamodules.html#
+"""
+
 import importlib.util
 import os
 

@@ -144,7 +144,7 @@ def train(
                 scale=(0.08, 1.0),
                 p=0.25,
             ),
-            K.augmentation.RandomRotation(degrees=[90.0, 180.0, 270.0]),
+            K.augmentation.RandomRotation(degrees=(0., 360.)),
             data_keys=["image"],
             keepdim=True,
         ).to(device)
@@ -213,7 +213,7 @@ for t in range(epochs):
     writer.close()
 print("Done!")
 
-# visualize results with TensorBoard
+# visualize results with TensorBoard on cmd line
 """
 pip install tensorboard
 tensorboard --logdir=runs

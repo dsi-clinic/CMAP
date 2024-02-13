@@ -58,7 +58,8 @@ class KCDataModule(pl.LightningDataModule):
 
     def __init__(self,):
         super(KCDataModule).__init__()
-        
+        #self.prepare_data_per_node = True
+
     def prepare_data(self):
         pass
 
