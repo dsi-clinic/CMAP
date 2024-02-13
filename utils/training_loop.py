@@ -122,7 +122,7 @@ def train(
         X = sample["image"].to(device)
         y = sample["mask"].to(device)
         y_squeezed = y[:, 0, :, :].squeeze()
-
+        """
         # Apply transformations
         X = (
             K.enhance.normalize_min_max(X, min_val=-1.0, max_val=1.0),
@@ -149,6 +149,7 @@ def train(
             keepdim=True,
         ).to(device)
         X = transforms(X)
+        """
 
         # compute prediction error
         outputs = model(X)
@@ -166,7 +167,7 @@ def train(
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
             print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
-            train_loss += loss.item()
+            train_loss += loss
     final_metric = metric.compute() # is this doing the same thing as line below?
     print(f"Jaccard Index: {final_metric}")
     train_loss /= num_batches
