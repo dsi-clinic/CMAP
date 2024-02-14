@@ -1,6 +1,6 @@
 """
 To run: from repo directory (2024-winter-cmap)
-> python -m utils.training_loop configs.<config> [--experiment_name <name>]
+> python -m train configs.<config> [--experiment_name <name>]
 """
 
 import argparse
@@ -28,18 +28,11 @@ from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-# project imports
-from . import repo_root
-from .model import SegmentationModel
-from .plot_sample import plot_from_tensors
+from data.kc import KaneCounty
 
-# import KaneCounty dataset class
-spec = importlib.util.spec_from_file_location(
-    "kane_county", os.path.join(repo_root, "data", "kane_county.py")
-)
-kane_county = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(kane_county)
-KaneCounty = kane_county.KaneCounty
+# project imports
+from utils.model import SegmentationModel
+from utils.plot import plot_from_tensors
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -67,17 +60,9 @@ out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
 os.makedirs(out_root, exist_ok=False)
 writer = SummaryWriter(out_root)
 
-# copy training script to output directory
+# copy training script and config to output directory
 shutil.copy(Path(__file__).resolve(), out_root)
-
-# write config details to file
-with open(os.path.join(out_root, "config.txt"), "w") as f:
-    f.write(f"batch size: {config.BATCH_SIZE}\n")
-    f.write(f"patch size: {config.PATCH_SIZE}\n")
-    f.write(f"number of classes: {config.NUM_CLASSES}\n")
-    f.write(f"learning rate: {config.LR}\n")
-    f.write(f"number of workers: {config.NUM_WORKERS}\n")
-    f.write(f"epochs: {config.EPOCHS}\n")
+shutil.copy(Path(config.__file__).resolve(), out_root)
 
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
