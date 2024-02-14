@@ -8,7 +8,9 @@ import datetime
 import importlib.util
 import os
 import shutil
+import logging
 from pathlib import Path
+import sys
 from typing import Any, DefaultDict, Tuple
 
 # import albumentations as A
@@ -71,6 +73,17 @@ writer = SummaryWriter(out_root)
 # copy training script to output directory
 shutil.copy(Path(__file__).resolve(), out_root)
 
+# Set up logging
+log_filename = os.path.join(out_root, "training_log.txt")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(log_filename),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
 # write config details to file
 with open(os.path.join(out_root, "config.txt"), "w") as f:
     f.write(f"batch size: {config.BATCH_SIZE}\n")
@@ -126,14 +139,14 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
-print(f"Using {device} device")
+logging.info(f"Using {device} device")
 
 # prepare tensorboard for logging
 writer = SummaryWriter()
 
 # create the model
 model = SegmentationModel(num_classes=config.NUM_CLASSES).model.to(device)
-print(model)
+logging.info(model)
 
 # set the loss function, metrics, and optimizer
 loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
@@ -320,12 +333,12 @@ def train(
         train_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
+            logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
     final_metric = metric.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_metric, epoch)
-    print(f"Jaccard Index: {final_metric}")
+    logging.info(f"Jaccard Index: {final_metric}")
     train_loss /= num_batches
     return train_loss
 
@@ -398,7 +411,7 @@ def test(
     final_metric = metric.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_metric, epoch)
-    print(
+    logging.info(
         f"Test Error: \n Jaccard index: {final_metric:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
@@ -406,10 +419,11 @@ def test(
 
 
 for t in range(config.EPOCHS):
-    print(f"Epoch {t + 1}\n-------------------------------")
+    logging.info(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_metric, optimizer, t + 1)
     test(test_dataloader, model, loss_fn, test_metric, t + 1)
-print("Done!")
+
+logging.info("Done!")
 writer.close()
 
 # visualize results with TensorBoard on cmd line
@@ -419,4 +433,4 @@ tensorboard --logdir=runs
 """
 
 torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
-print(f"Saved PyTorch Model State to {out_root}")
+logging.info(f"Saved PyTorch Model State to {out_root}")
