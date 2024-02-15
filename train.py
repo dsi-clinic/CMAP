@@ -1,6 +1,6 @@
 """
 To run: from repo directory (2024-winter-cmap)
-> python -m utils.training_loop configs.<config> [--experiment_name <name>]
+> python -m train configs.<config> [--experiment_name <name>]
 """
 
 import argparse
@@ -28,18 +28,11 @@ from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-# project imports
-from . import repo_root
-from .model import SegmentationModel
-from .plot_sample import plot_from_tensors
+from data.kc import KaneCounty
 
-# import KaneCounty dataset class
-spec = importlib.util.spec_from_file_location(
-    "kane_county", os.path.join(repo_root, "data", "kane_county.py")
-)
-kane_county = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(kane_county)
-KaneCounty = kane_county.KaneCounty
+# project imports
+from utils.model import SegmentationModel
+from utils.plot import plot_from_tensors
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -65,19 +58,19 @@ if exp_name is None:
 # set output path and exit run if path already exists
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
 os.makedirs(out_root, exist_ok=False)
+
+# create directory for output images
+train_images_root = os.path.join(out_root, "train-images")
+test_image_root = os.path.join(out_root, "test-images")
+os.mkdir(train_images_root)
+os.mkdir(test_image_root)
+
+# open tensorboard writer
 writer = SummaryWriter(out_root)
 
-# copy training script to output directory
+# copy training script and config to output directory
 shutil.copy(Path(__file__).resolve(), out_root)
-
-# write config details to file
-with open(os.path.join(out_root, "config.txt"), "w") as f:
-    f.write(f"batch size: {config.BATCH_SIZE}\n")
-    f.write(f"patch size: {config.PATCH_SIZE}\n")
-    f.write(f"number of classes: {config.NUM_CLASSES}\n")
-    f.write(f"learning rate: {config.LR}\n")
-    f.write(f"number of workers: {config.NUM_WORKERS}\n")
-    f.write(f"epochs: {config.EPOCHS}\n")
+shutil.copy(Path(config.__file__).resolve(), out_root)
 
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
@@ -128,17 +121,22 @@ device = (
 print(f"Using {device} device")
 
 # create the model
-model = SegmentationModel(num_classes=config.NUM_CLASSES).model.to(device)
+model = SegmentationModel(
+    model=config.MODEL,
+    backbone=config.BACKBONE,
+    num_classes=config.NUM_CLASSES,
+    weights=config.WEIGHTS,
+).model.to(device)
 print(model)
 
 # set the loss function, metrics, and optimizer
 loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
-train_metric = MulticlassJaccardIndex(
+train_jaccard = MulticlassJaccardIndex(
     num_classes=config.NUM_CLASSES,
     ignore_index=config.IGNORE_INDEX,
     average="micro",
 ).to(device)
-test_metric = MulticlassJaccardIndex(
+test_jaccard = MulticlassJaccardIndex(
     num_classes=config.NUM_CLASSES,
     ignore_index=config.IGNORE_INDEX,
     average="micro",
@@ -250,20 +248,21 @@ def train_setup(
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
 
-    # plot first image with more than 1 class in first batch
+    # plot first batch
     if batch == 0:
-        i = 0
-        while len(y[i].unique()) < 2 and i < config.BATCH_SIZE - 1:
-            i += 1
-
-        plot_tensors = {
-            "image": sample["image"][i],
-            "mask": sample["mask"][i],
-            "augmented_image": denormalize(X)[i].cpu(),
-            "augmented_mask": y[i].cpu(),
-        }
-        sample_fname = os.path.join(out_root, f"train_sample-{epoch}.png")
-        plot_from_tensors(plot_tensors, sample_fname)
+        save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
+        os.mkdir(save_dir)
+        for i in range(config.BATCH_SIZE):
+            plot_tensors = {
+                "image": sample["image"][i],
+                "mask": sample["mask"][i],
+                "augmented_image": denormalize(X)[i].cpu(),
+                "augmented_mask": y[i].cpu(),
+            }
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
+            plot_from_tensors(plot_tensors, sample_fname, "grid")
 
     return X, y_squeezed
 
@@ -272,12 +271,13 @@ def train(
     dataloader: DataLoader,
     model: Module,
     loss_fn: Module,
-    metric: Metric,
+    jaccard: Metric,
     optimizer: Optimizer,
     epoch: int,
 ):
     num_batches = len(dataloader)
     model.train()
+    jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         # images = sample["image"]
@@ -304,9 +304,9 @@ def train(
         outputs = model(X)
         loss = loss_fn(outputs, y)
 
-        # update metric
+        # update jaccard index
         preds = outputs.argmax(dim=1)
-        metric(preds, y)
+        jaccard.update(preds, y)
 
         # backpropagation
         loss.backward()
@@ -318,21 +318,22 @@ def train(
             loss, current = loss.item(), (batch + 1)
             print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
-    final_metric = metric.compute()
+    final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
-    writer.add_scalar("Jaccard/train", final_metric, epoch)
-    print(f"Jaccard Index: {final_metric}")
+    writer.add_scalar("Jaccard/train", final_jaccard, epoch)
+    print(f"Jaccard Index: {final_jaccard}")
 
 
 def test(
     dataloader: DataLoader,
     model: Module,
     loss_fn: Module,
-    metric: Metric,
+    jaccard: Metric,
     epoch: int,
 ):
     num_batches = len(dataloader)
     model.eval()
+    jaccard.reset()
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
@@ -360,6 +361,7 @@ def test(
             # y_squeezed = y.squeeze(1)
 
             X = sample["image"].to(device)
+            X = normalize(X)
             y = sample["mask"].to(device)
             y_squeezed = y[:, 0, :, :].squeeze()
 
@@ -369,54 +371,39 @@ def test(
 
             # update metric
             preds = outputs.argmax(dim=1)
-            metric(preds, y_squeezed)
+            jaccard.update(preds, y_squeezed)
 
             # add test loss to rolling total
             test_loss += loss.item()
 
-            # plot first image with more than 1 class in first batch
+            # plot first batch
             if batch == 0:
-                i = 0
-                while len(y[i].unique()) < 2 and i < config.BATCH_SIZE - 1:
-                    i += 1
-
-                plot_tensors = {
-                    "image": sample["image"][i],
-                    "ground_truth": sample["mask"][i],
-                    "inference": preds[i].cpu(),
-                }
-                sample_fname = os.path.join(
-                    out_root, f"test_sample-{epoch}.png"
-                )
-                plot_from_tensors(plot_tensors, sample_fname)
+                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                os.mkdir(save_dir)
+                for i in range(config.BATCH_SIZE):
+                    plot_tensors = {
+                        "image": sample["image"][i],
+                        "ground_truth": sample["mask"][i],
+                        "inference": preds[i].cpu(),
+                    }
+                    sample_fname = os.path.join(
+                        save_dir, f"test_sample-{epoch}.{i}.png"
+                    )
+                    plot_from_tensors(plot_tensors, sample_fname, "row")
     test_loss /= num_batches
-    final_metric = metric.compute()
+    final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
-    writer.add_scalar("Jaccard/test", final_metric, epoch)
+    writer.add_scalar("Jaccard/test", final_jaccard, epoch)
     print(
-        f"Test Error: \n Jaccard index: {final_metric:>7f}, "
+        f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
-    return test_loss
 
-threshold =  0.01
-patience = 5
-best_loss = None
-plateau_count = 0
 
-for t in range(30):
+for t in range(config.EPOCHS):
     print(f"Epoch {t + 1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, train_metric, optimizer, t + 1)
-    test_loss = test(test_dataloader, model, loss_fn, test_metric, t + 1)
-    if best_loss is None:
-        best_loss = test_loss
-    elif test_loss < best_loss - threshold:
-        best_loss = test_loss
-        plateau_count = 0
-    else:
-        plateau_count += 1
-        if plateau_count >= patience:
-            break
+    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 print("Done!")
 writer.close()
 
