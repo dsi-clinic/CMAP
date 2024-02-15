@@ -39,7 +39,9 @@ def plot_from_sample(sample: DefaultDict[str, Any], save_root: str):
     plt.savefig(fname)
 
 
-def plot_from_tensors(sample: Dict[str, Tensor], save_path: str):
+def plot_from_tensors(
+    sample: Dict[str, Tensor], save_path: str, mode: str = "grid"
+):
     """
     Plots a sample from the training dataset and saves to provided file path.
 
@@ -51,22 +53,42 @@ def plot_from_tensors(sample: Dict[str, Tensor], save_path: str):
 
     save_path : str
         The path to save the plot to
-    """
-    _, axs = plt.subplots(
-        int(round(len(sample.keys()) / 2)), 2, figsize=(10, 10)
-    )
 
-    for i, (name, tensor) in enumerate(sample.items()):
-        ax = axs[i // 2][i % 2]
-        if len(tensor.shape) == 2:
-            ax.imshow(tensor)
-        elif len(tensor.shape) == 3:
-            ax.imshow(tensor[0])
-        else:
-            raise ValueError(
-                "Expected tensor with dimensions h x w or c x h x w"
-            )
-        ax.set_title(name)
-        ax.axis("off")
+    mode : str
+        Either 'grid' or 'row' for orientation of images on plot
+    """
+    if mode == "grid":
+        _, axs = plt.subplots(
+            int(round(len(sample.keys()) / 2)), 2, figsize=(10, 10)
+        )
+        for i, (name, tensor) in enumerate(sample.items()):
+            ax = axs[i // 2][i % 2]
+            if len(tensor.shape) == 2:
+                ax.imshow(tensor)
+            elif len(tensor.shape) == 3:
+                ax.imshow(tensor[0])
+            else:
+                raise ValueError(
+                    "Expected tensor with dimensions h x w or c x h x w"
+                )
+            ax.set_title(name)
+            ax.axis("off")
+    elif mode == "row":
+        _, axs = plt.subplots(1, len(sample.keys()), figsize=(10, 5))
+        for i, (name, tensor) in enumerate(sample.items()):
+            ax = axs[i]
+            if len(tensor.shape) == 2:
+                ax.imshow(tensor)
+            elif len(tensor.shape) == 3:
+                ax.imshow(tensor[0])
+            else:
+                raise ValueError(
+                    "Expected tensor with dimensions h x w or c x h x w"
+                )
+            ax.set_title(name)
+            ax.axis("off")
+    else:
+        raise ValueError("Invalid mode")
 
     plt.savefig(save_path)
+    plt.close()
