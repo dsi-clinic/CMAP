@@ -13,10 +13,10 @@ BACKBONE = None
 WEIGHTS = None
 
 # model hyperparams
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-3
-NUM_WORKERS = 2
-EPOCHS = 1
+NUM_WORKERS = 8
+EPOCHS = 5
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index

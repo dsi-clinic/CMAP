@@ -320,7 +320,7 @@ def train(
     train_loss /= num_batches
     final_metric = metric.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
-    writer.add_scalar("Metric/train", final_metric, epoch)
+    writer.add_scalar("Jaccard/train", final_metric, epoch)
     print(f"Jaccard Index: {final_metric}")
 
 
@@ -392,17 +392,31 @@ def test(
     test_loss /= num_batches
     final_metric = metric.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
-    writer.add_scalar("Metric/test", final_metric, epoch)
+    writer.add_scalar("Jaccard/test", final_metric, epoch)
     print(
         f"Test Error: \n Jaccard index: {final_metric:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
+    return test_loss
 
+threshold =  0.01
+patience = 5
+best_loss = None
+plateau_count = 0
 
-for t in range(config.EPOCHS):
+for t in range(30):
     print(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_metric, optimizer, t + 1)
-    test(test_dataloader, model, loss_fn, test_metric, t + 1)
+    test_loss = test(test_dataloader, model, loss_fn, test_metric, t + 1)
+    if best_loss is None:
+        best_loss = test_loss
+    elif test_loss < best_loss - threshold:
+        best_loss = test_loss
+        plateau_count = 0
+    else:
+        plateau_count += 1
+        if plateau_count >= patience:
+            break
 print("Done!")
 writer.close()
 
