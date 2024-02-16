@@ -8,7 +8,9 @@ import datetime
 import importlib.util
 import os
 import shutil
+import logging
 from pathlib import Path
+import sys
 from typing import Any, DefaultDict, Tuple
 
 # import albumentations as A
@@ -27,6 +29,7 @@ from torchgeo.datasets import NAIP, BoundingBox, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
+from torch.utils.tensorboard import SummaryWriter
 
 from data.kc import KaneCounty
 
@@ -58,11 +61,24 @@ if exp_name is None:
 # set output path and exit run if path already exists
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
 os.makedirs(out_root, exist_ok=False)
+
+# prepare tensorboard for logging
 writer = SummaryWriter(out_root)
 
 # copy training script and config to output directory
 shutil.copy(Path(__file__).resolve(), out_root)
 shutil.copy(Path(config.__file__).resolve(), out_root)
+
+# Set up logging
+log_filename = os.path.join(out_root, "training_log.txt")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(log_filename),
+        logging.StreamHandler(sys.stdout)
+    ]
+)
 
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
@@ -110,11 +126,11 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
-print(f"Using {device} device")
+logging.info(f"Using {device} device")
 
 # create the model
 model = SegmentationModel(num_classes=config.NUM_CLASSES).model.to(device)
-print(model)
+logging.info(model)
 
 # set the loss function, metrics, and optimizer
 loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
@@ -301,12 +317,12 @@ def train(
         train_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
+            logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
     final_metric = metric.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
-    writer.add_scalar("Metric/train", final_metric, epoch)
-    print(f"Jaccard Index: {final_metric}")
+    writer.add_scalar("IoU/train", final_metric, epoch)
+    logging.info(f"Jaccard Index: {final_metric}")
 
 
 def test(
@@ -377,20 +393,20 @@ def test(
     test_loss /= num_batches
     final_metric = metric.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
-    writer.add_scalar("Metric/test", final_metric, epoch)
-    print(
+    writer.add_scalar("IoU/test", final_metric, epoch)
+    logging.info(
         f"Test Error: \n Jaccard index: {final_metric:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
 
 
 for t in range(config.EPOCHS):
-    print(f"Epoch {t + 1}\n-------------------------------")
+    logging.info(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_metric, optimizer, t + 1)
     test(test_dataloader, model, loss_fn, test_metric, t + 1)
-print("Done!")
+logging.info("Done!")
 writer.close()
 
 
 torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
-print(f"Saved PyTorch Model State to {out_root}")
+logging.info(f"Saved PyTorch Model State to {out_root}")
