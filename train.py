@@ -8,9 +8,9 @@ import datetime
 import importlib.util
 import logging
 import os
-from pathlib import Path
 import shutil
 import sys
+from pathlib import Path
 from typing import Any, DefaultDict, Tuple
 
 # import albumentations as A
@@ -29,7 +29,6 @@ from torchgeo.datasets import NAIP, BoundingBox, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
-from torch.utils.tensorboard import SummaryWriter
 
 from data.kc import KaneCounty
 
@@ -82,8 +81,8 @@ logging.basicConfig(
     format="%(asctime)s [%(levelname)s] %(message)s",
     handlers=[
         logging.FileHandler(log_filename),
-        logging.StreamHandler(sys.stdout)
-    ]
+        logging.StreamHandler(sys.stdout),
+    ],
 )
 
 # build dataset
