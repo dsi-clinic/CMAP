@@ -6,10 +6,10 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
-import os
-import shutil
 import logging
+import os
 from pathlib import Path
+import shutil
 import sys
 from typing import Any, DefaultDict, Tuple
 
