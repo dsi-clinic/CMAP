@@ -1,10 +1,10 @@
+import json
 import os
 from typing import Dict, List, NoReturn
 
 import geopandas as gpd
 import rasterio
 import shapely
-import json
 from shapely.geometry import box
 
 
@@ -13,10 +13,11 @@ def create_geojson(
     gdf: gpd.GeoDataFrame,
     save_dir: str,
     label_col: str,
-    labels: Dict[str, int]
+    labels: Dict[str, int],
 ) -> NoReturn:
     """
-    Creates a GeoJSON file containing polygons for shapefile features that intersect with a given image.
+    Creates a GeoJSON file containing polygons for shapefile features
+    that intersect with a given image.
 
     Parameters
     ----------
@@ -47,18 +48,12 @@ def create_geojson(
 
     # write intersecting shapes to GeoJSON files
     for label, shapes in intersecting_shapes.items():
-        feature_collection = {
-            "type": "FeatureCollection",
-            "features": []
-        }
+        feature_collection = {"type": "FeatureCollection", "features": []}
         for shape in shapes:
             feature = {
                 "type": "Feature",
-                "properties": {
-                    label_col: label,
-                    "label_value": labels[label]
-                },
-                "geometry": shapely.geometry.mapping(shape)
+                "properties": {label_col: label, "label_value": labels[label]},
+                "geometry": shapely.geometry.mapping(shape),
             }
             feature_collection["features"].append(feature)
 
@@ -68,6 +63,7 @@ def create_geojson(
         # write GeoJSON to file
         with open(out_geojson, "w") as f:
             json.dump(feature_collection, f)
+
 
 def get_intersecting_shapes(
     bbox: shapely.Polygon,

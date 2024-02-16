@@ -28,7 +28,7 @@ from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.kc import KaneCounty
+from data.kcv import KaneCounty
 
 # project imports
 from utils.model import SegmentationModel
@@ -74,7 +74,7 @@ shutil.copy(Path(config.__file__).resolve(), out_root)
 
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
-kc = KaneCounty(config.KC_MASK_ROOT)
+kc = KaneCounty(config.KC_GEOJSON_ROOT)
 dataset = naip & kc
 
 # train/test split
