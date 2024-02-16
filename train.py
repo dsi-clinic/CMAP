@@ -62,7 +62,13 @@ if exp_name is None:
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
 os.makedirs(out_root, exist_ok=False)
 
-# prepare tensorboard for logging
+# create directory for output images
+train_images_root = os.path.join(out_root, "train-images")
+test_image_root = os.path.join(out_root, "test-images")
+os.mkdir(train_images_root)
+os.mkdir(test_image_root)
+
+# open tensorboard writer
 writer = SummaryWriter(out_root)
 
 # copy training script and config to output directory
@@ -129,17 +135,22 @@ device = (
 logging.info(f"Using {device} device")
 
 # create the model
-model = SegmentationModel(num_classes=config.NUM_CLASSES).model.to(device)
+model = SegmentationModel(
+    model=config.MODEL,
+    backbone=config.BACKBONE,
+    num_classes=config.NUM_CLASSES,
+    weights=config.WEIGHTS,
+).model.to(device)
 logging.info(model)
 
 # set the loss function, metrics, and optimizer
 loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
-train_metric = MulticlassJaccardIndex(
+train_jaccard = MulticlassJaccardIndex(
     num_classes=config.NUM_CLASSES,
     ignore_index=config.IGNORE_INDEX,
     average="micro",
 ).to(device)
-test_metric = MulticlassJaccardIndex(
+test_jaccard = MulticlassJaccardIndex(
     num_classes=config.NUM_CLASSES,
     ignore_index=config.IGNORE_INDEX,
     average="micro",
@@ -251,20 +262,21 @@ def train_setup(
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
 
-    # plot first image with more than 1 class in first batch
+    # plot first batch
     if batch == 0:
-        i = 0
-        while len(y[i].unique()) < 2 and i < config.BATCH_SIZE - 1:
-            i += 1
-
-        plot_tensors = {
-            "image": sample["image"][i],
-            "mask": sample["mask"][i],
-            "augmented_image": denormalize(X)[i].cpu(),
-            "augmented_mask": y[i].cpu(),
-        }
-        sample_fname = os.path.join(out_root, f"train_sample-{epoch}.png")
-        plot_from_tensors(plot_tensors, sample_fname)
+        save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
+        os.mkdir(save_dir)
+        for i in range(config.BATCH_SIZE):
+            plot_tensors = {
+                "image": sample["image"][i],
+                "mask": sample["mask"][i],
+                "augmented_image": denormalize(X)[i].cpu(),
+                "augmented_mask": y[i].cpu(),
+            }
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
+            plot_from_tensors(plot_tensors, sample_fname, "grid")
 
     return X, y_squeezed
 
@@ -273,12 +285,13 @@ def train(
     dataloader: DataLoader,
     model: Module,
     loss_fn: Module,
-    metric: Metric,
+    jaccard: Metric,
     optimizer: Optimizer,
     epoch: int,
 ):
     num_batches = len(dataloader)
     model.train()
+    jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         # images = sample["image"]
@@ -305,9 +318,9 @@ def train(
         outputs = model(X)
         loss = loss_fn(outputs, y)
 
-        # update metric
+        # update jaccard index
         preds = outputs.argmax(dim=1)
-        metric(preds, y)
+        jaccard.update(preds, y)
 
         # backpropagation
         loss.backward()
@@ -319,21 +332,22 @@ def train(
             loss, current = loss.item(), (batch + 1)
             logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
-    final_metric = metric.compute()
+    final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
-    writer.add_scalar("IoU/train", final_metric, epoch)
-    logging.info(f"Jaccard Index: {final_metric}")
+    writer.add_scalar("IoU/train", final_jaccard, epoch)
+    logging.info(f"Jaccard Index: {final_jaccard}")
 
 
 def test(
     dataloader: DataLoader,
     model: Module,
     loss_fn: Module,
-    metric: Metric,
+    jaccard: Metric,
     epoch: int,
 ):
     num_batches = len(dataloader)
     model.eval()
+    jaccard.reset()
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
@@ -361,6 +375,7 @@ def test(
             # y_squeezed = y.squeeze(1)
 
             X = sample["image"].to(device)
+            X = normalize(X)
             y = sample["mask"].to(device)
             y_squeezed = y[:, 0, :, :].squeeze()
 
@@ -370,40 +385,39 @@ def test(
 
             # update metric
             preds = outputs.argmax(dim=1)
-            metric(preds, y_squeezed)
+            jaccard.update(preds, y_squeezed)
 
             # add test loss to rolling total
             test_loss += loss.item()
 
-            # plot first image with more than 1 class in first batch
+            # plot first batch
             if batch == 0:
-                i = 0
-                while len(y[i].unique()) < 2 and i < config.BATCH_SIZE - 1:
-                    i += 1
-
-                plot_tensors = {
-                    "image": sample["image"][i],
-                    "ground_truth": sample["mask"][i],
-                    "inference": preds[i].cpu(),
-                }
-                sample_fname = os.path.join(
-                    out_root, f"test_sample-{epoch}.png"
-                )
-                plot_from_tensors(plot_tensors, sample_fname)
+                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                os.mkdir(save_dir)
+                for i in range(config.BATCH_SIZE):
+                    plot_tensors = {
+                        "image": sample["image"][i],
+                        "ground_truth": sample["mask"][i],
+                        "inference": preds[i].cpu(),
+                    }
+                    sample_fname = os.path.join(
+                        save_dir, f"test_sample-{epoch}.{i}.png"
+                    )
+                    plot_from_tensors(plot_tensors, sample_fname, "row")
     test_loss /= num_batches
-    final_metric = metric.compute()
+    final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
-    writer.add_scalar("IoU/test", final_metric, epoch)
+    writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
-        f"Test Error: \n Jaccard index: {final_metric:>7f}, "
+        f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
 
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, train_metric, optimizer, t + 1)
-    test(test_dataloader, model, loss_fn, test_metric, t + 1)
+    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 logging.info("Done!")
 writer.close()
 
