@@ -47,7 +47,7 @@ parser.add_argument(
     default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
 )
 
-# Current potential aug_type args: "all", "default", "plasma", "gauss" 
+# Current potential aug_type args: "all", "default", "plasma", "gauss"
 parser.add_argument(
     "--aug_type",
     type=str,
@@ -99,14 +99,18 @@ eightyy = roi.miny + (roi.maxy - roi.miny) * 8 / 10
 
 # random batch sampler for training, grid sampler for testing
 # Training sampler only splits on x, using eightyx on both train and test properly below
-train_roi = BoundingBox(roi.minx, eightyx, roi.miny, roi.maxy, roi.mint, roi.maxt)
+train_roi = BoundingBox(
+    roi.minx, eightyx, roi.miny, roi.maxy, roi.mint, roi.maxt
+)
 train_sampler = RandomBatchGeoSampler(
     dataset=dataset,
     size=config.PATCH_SIZE,
     batch_size=config.BATCH_SIZE,
     roi=train_roi,
 )
-test_roi = BoundingBox(eightyx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt)
+test_roi = BoundingBox(
+    eightyx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt
+)
 test_sampler = GridGeoSampler(
     dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE, roi=test_roi
 )
@@ -171,10 +175,10 @@ plasma_aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
     K.RandomPlasmaShadow(
-    roughness=(0.1, 0.7),
-    shade_intensity=(-1.0, 0.0),
-    shade_quantity=(0.0, 1.0),
-    keepdim=True,
+        roughness=(0.1, 0.7),
+        shade_intensity=(-1.0, 0.0),
+        shade_quantity=(0.0, 1.0),
+        keepdim=True,
     ),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
@@ -183,9 +187,7 @@ plasma_aug = AugmentationSequential(
 gauss_aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
-    K.RandomGaussianBlur(
-    kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25
-    ),
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
     keepdim=True,
@@ -194,14 +196,12 @@ all_aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
     K.RandomPlasmaShadow(
-    roughness=(0.1, 0.7),
-    shade_intensity=(-1.0, 0.0),
-    shade_quantity=(0.0, 1.0),
-    keepdim=True,
+        roughness=(0.1, 0.7),
+        shade_intensity=(-1.0, 0.0),
+        shade_quantity=(0.0, 1.0),
+        keepdim=True,
     ),
-    K.RandomGaussianBlur(
-    kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25
-    ),
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
     keepdim=True,
@@ -224,6 +224,7 @@ elif aug_type == "all":
 else:
     aug = default_aug
 
+
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
 ) -> Tuple[torch.Tensor]:
@@ -242,7 +243,7 @@ def train_setup(
 
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
-    
+
     # plot first batch
     if batch == 0:
         save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
@@ -275,20 +276,19 @@ def train(
     jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
-        
         X, y = train_setup(sample, epoch, batch)
         # The following comments provide pseudocode to theoretically filter tiles
         # The problem is that X here is a batch, not a specific image, so it won't work
         # Ideally, we filter before sending the dataset to the dataloader.
-        #total_pixels = X.size
-        #label_count = torch.sum(X != 0)
-        #percentage_cover = (label_count / total_pixels) * 100
-        
+        # total_pixels = X.size
+        # label_count = torch.sum(X != 0)
+        # percentage_cover = (label_count / total_pixels) * 100
+
         # Filter patches based on weight criteria
-        #if percentage_cover <= 1:
-            # Skip this sample if weight criteria is not met
+        # if percentage_cover <= 1:
+        # Skip this sample if weight criteria is not met
         #    continue
-        
+
         # compute prediction error
         outputs = model(X)
         loss = loss_fn(outputs, y)
@@ -328,7 +328,6 @@ def test(
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
-
             X = sample["image"].to(device)
             X = normalize(X)
             y = sample["mask"].to(device)
@@ -371,8 +370,9 @@ def test(
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss
 
+
 # How much the loss needs to drop to reset a plateau
-threshold =  0.01
+threshold = 0.01
 
 # How many epochs loss needs to plateau before terminating
 patience = 5
@@ -394,7 +394,8 @@ for t in range(config.EPOCHS):
     elif test_loss < best_loss - threshold:
         best_loss = test_loss
         plateau_count = 0
-    # Potentially add another clause such that if test_loss jumps up again, plateau resets?
+    # Potentially add another if clause to plateau check
+    # such that if test_loss jumps up again, plateau resets?
     else:
         plateau_count += 1
         if plateau_count >= patience:
