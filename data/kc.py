@@ -1,5 +1,6 @@
 from torchgeo.datasets import RasterDataset
 
+
 class KaneCounty(RasterDataset):
     filename_glob = "mask_m*.tif"
     filename_regex = r"""

@@ -21,4 +21,4 @@ LR = 1e-3
 NUM_WORKERS = 2
 EPOCHS = 1
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
-LOSS_FUNCTION = "JaccardLoss" # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
+LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss

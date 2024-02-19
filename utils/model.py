@@ -1,9 +1,10 @@
+import importlib
 import os
 from typing import Union
 
-import timm
 import segmentation_models_pytorch as smp
-from torchgeo.models import FCN, get_weight, ResNet50_Weights
+import timm
+from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
 
@@ -36,7 +37,7 @@ class SegmentationModel:
         in_channels : int
             The number of input channels, i.e. the depth of the input image. For NAIP
             data, this is 4.
-            When using TorchGeo's pretrained weights, change appropriately and add 
+            When using TorchGeo's pretrained weights, change appropriately and add
             channels to data.
 
         num_classes : int
@@ -74,9 +75,7 @@ class SegmentationModel:
             )
         elif model == "test_weights":
             self.model = timm.create_model(
-                backbone, 
-                in_chans=in_channels,
-                num_classes=num_classes
+                backbone, in_chans=in_channels, num_classes=num_classes
             )
         else:
             raise ValueError(
@@ -88,6 +87,10 @@ class SegmentationModel:
         if model != "fcn":
             if weights and weights is not True:
                 if isinstance(weights, WeightsEnum):
+                    weights = getattr(
+                        importlib.import_module("ResNet50_Weights"),
+                        weights,
+                    )
                     state_dict = weights.get_state_dict(progress=True)
                 elif os.path.exists(weights):
                     _, state_dict = utils.extract_backbone(weights)
@@ -96,4 +99,3 @@ class SegmentationModel:
                         progress=True
                     )
                 self.model.encoder.load_state_dict(state_dict)
-       
