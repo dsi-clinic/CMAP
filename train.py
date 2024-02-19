@@ -20,7 +20,6 @@ import kornia.augmentation as K
 # from albumentations.pytorch import ToTensorV2
 import torch
 from kornia.augmentation.container import AugmentationSequential
-from segmentation_models_pytorch.losses import JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -143,12 +142,12 @@ model = SegmentationModel(
 logging.info(model)
 
 # set the loss function, metrics, and optimizer
-loss_fn_class = getattr(importlib.import_module("segmentation_models_pytorch.losses"), config.LOSS_FUNCTION)
-# Initialize the loss function with the required parameters
-loss_fn = loss_fn_class(
-    mode="multiclass", 
-    classes=config.NUM_CLASSES
+loss_fn_class = getattr(
+    importlib.import_module("segmentation_models_pytorch.losses"),
+    config.LOSS_FUNCTION,
 )
+# Initialize the loss function with the required parameters
+loss_fn = loss_fn_class(mode="multiclass", classes=config.NUM_CLASSES)
 
 # IoU metric
 train_jaccard = MulticlassJaccardIndex(
@@ -249,16 +248,26 @@ aug = AugmentationSequential(
     keepdim=True,
 )
 
-def add_extra_channel(image_tensor):
-    # Assuming 'image_tensor' is a PyTorch tensor with shape (batch_size, num_channels, height, width)
-    
-    # Generate random values for the extra channel
-    extra_channel = torch.rand(image_tensor.size(0), 1, image_tensor.size(2), image_tensor.size(3), device=image_tensor.device)
 
-    # Concatenate the extra channel to the original image along the second dimension (channel dimension)
+def add_extra_channel(image_tensor):
+    # Assuming 'image_tensor' is a PyTorch tensor with shape
+    # (batch_size, num_channels, height, width)
+
+    # Generate random values for the extra channel
+    extra_channel = torch.rand(
+        image_tensor.size(0),
+        1,
+        image_tensor.size(2),
+        image_tensor.size(3),
+        device=image_tensor.device,
+    )
+
+    # Concatenate the extra channel to the original image along the second
+    # dimension (channel dimension)
     augmented_tensor = torch.cat((image_tensor, extra_channel), dim=1)
 
     return augmented_tensor
+
 
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
@@ -270,7 +279,7 @@ def train_setup(
     else:
         samp_image = sample["image"]
         samp_mask = sample["mask"]
-        
+
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
     y = samp_mask.type(torch.float32).to(device)
@@ -285,7 +294,11 @@ def train_setup(
     y = denormalize(y).type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, 0, :, :].squeeze() if config.EXTRA_CLASS is False else y[:, 0, :, :, :].squeeze()
+    y_squeezed = (
+        y[:, 0, :, :].squeeze()
+        if config.EXTRA_CLASS is False
+        else y[:, 0, :, :, :].squeeze()
+    )
 
     # plot first batch
     if batch == 0:
@@ -399,10 +412,22 @@ def test(
             # # Assuming your mask has a channel dimension that needs to be squeezed
             # y_squeezed = y.squeeze(1)
 
-            X = sample["image"].to(device) if config.EXTRA_CLASS is False else add_extra_channel(sample["image"]).to(device)
+            X = (
+                sample["image"].to(device)
+                if config.EXTRA_CLASS is False
+                else add_extra_channel(sample["image"]).to(device)
+            )
             X = normalize(X)
-            y = sample["mask"].to(device) if config.EXTRA_CLASS is False else add_extra_channel(sample["mask"]).to(device)
-            y_squeezed = y[:, 0, :, :].squeeze() if config.EXTRA_CLASS is False else y[:, 0, :, :, :].squeeze()
+            y = (
+                sample["mask"].to(device)
+                if config.EXTRA_CLASS is False
+                else add_extra_channel(sample["mask"]).to(device)
+            )
+            y_squeezed = (
+                y[:, 0, :, :].squeeze()
+                if config.EXTRA_CLASS is False
+                else y[:, 0, :, :, :].squeeze()
+            )
 
             # compute prediction error
             outputs = model(X)
