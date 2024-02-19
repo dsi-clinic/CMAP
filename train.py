@@ -6,8 +6,10 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
+import logging
 import os
 import shutil
+import sys
 from pathlib import Path
 from typing import Any, DefaultDict, Tuple
 
@@ -72,6 +74,17 @@ writer = SummaryWriter(out_root)
 shutil.copy(Path(__file__).resolve(), out_root)
 shutil.copy(Path(config.__file__).resolve(), out_root)
 
+# Set up logging
+log_filename = os.path.join(out_root, "training_log.txt")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    handlers=[
+        logging.FileHandler(log_filename),
+        logging.StreamHandler(sys.stdout),
+    ],
+)
+
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_GEOJSON_ROOT)
@@ -118,7 +131,7 @@ device = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
-print(f"Using {device} device")
+logging.info(f"Using {device} device")
 
 # create the model
 model = SegmentationModel(
@@ -127,7 +140,7 @@ model = SegmentationModel(
     num_classes=config.NUM_CLASSES,
     weights=config.WEIGHTS,
 ).model.to(device)
-print(model)
+logging.info(model)
 
 # set the loss function, metrics, and optimizer
 loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
@@ -316,12 +329,12 @@ def train(
         train_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
-            print(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
+            logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/train", train_loss, epoch)
-    writer.add_scalar("Jaccard/train", final_jaccard, epoch)
-    print(f"Jaccard Index: {final_jaccard}")
+    writer.add_scalar("IoU/train", final_jaccard, epoch)
+    logging.info(f"Jaccard Index: {final_jaccard}")
 
 
 def test(
@@ -393,20 +406,20 @@ def test(
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
-    writer.add_scalar("Jaccard/test", final_jaccard, epoch)
-    print(
+    writer.add_scalar("IoU/test", final_jaccard, epoch)
+    logging.info(
         f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
     )
 
 
 for t in range(config.EPOCHS):
-    print(f"Epoch {t + 1}\n-------------------------------")
+    logging.info(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
     test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
-print("Done!")
+logging.info("Done!")
 writer.close()
 
 
 torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
-print(f"Saved PyTorch Model State to {out_root}")
+logging.info(f"Saved PyTorch Model State to {out_root}")

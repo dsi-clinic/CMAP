@@ -4,10 +4,10 @@ from typing import NoReturn
 
 import geopandas as gpd
 
-from . import repo_root
+#from . import repo_root
 
 # repo_root = "~/home/rubensteinm/2024-winter-cmap"
-# repo_root = ""
+repo_root = ""
 
 spec = importlib.util.spec_from_file_location(
     "config", os.path.join(repo_root, "configs", "dsi.py")
