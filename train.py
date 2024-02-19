@@ -1,6 +1,7 @@
 """
 To run: from repo directory (2024-winter-cmap)
-> python -m train configs.<config> [--experiment_name <name>] [--aug_type <aug>]
+> python -m train configs.<config> [--experiment_name <name>]
+    [--aug_type <aug>] [--split <split>]
 """
 
 import argparse
@@ -21,11 +22,12 @@ import kornia.augmentation as K
 import torch
 from kornia.augmentation.container import AugmentationSequential
 from segmentation_models_pytorch.losses import JaccardLoss
+from torch import Generator
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, random_split
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, BoundingBox, stack_samples
+from torchgeo.datasets import NAIP, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
@@ -50,11 +52,19 @@ parser.add_argument(
 )
 
 # Current potential aug_type args: "all", "default", "plasma", "gauss"
+aug_types = "'all', 'default', 'plasma', 'gauss'"
 parser.add_argument(
     "--aug_type",
     type=str,
-    help="Type of augmentation",
+    help="Type of augmentation; potential inputs are: {aug_types}",
     default="default",
+)
+
+parser.add_argument(
+    "--split",
+    type=str,
+    help="Ratio of split; enter the size of the train split as an int out of 100",
+    default="80",
 )
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
@@ -67,6 +77,9 @@ if exp_name is None:
 aug_type = args.aug_type
 if aug_type is None:
     aug_type = "default"
+split = float(int(args.split) / 100)
+if split is None:
+    split = 0.80
 
 # set output path and exit run if path already exists
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
@@ -103,40 +116,55 @@ dataset = naip & kc
 
 # train/test split
 roi = dataset.bounds
-midx = roi.minx + (roi.maxx - roi.minx) / 2
-midy = roi.miny + (roi.maxy - roi.miny) / 2
 
-# New train/test 80-20 split
-eightyx = roi.minx + (roi.maxx - roi.minx) * 8 / 10
-eightyy = roi.miny + (roi.maxy - roi.miny) * 8 / 10
+# TODO: make train/test 80-20 split configurable
+# splitx = roi.minx + (roi.maxx - roi.minx) * 8 / 10
+# splity = roi.miny + (roi.maxy - roi.miny) * 8 / 10
 
-# random batch sampler for training, grid sampler for testing
-# Training sampler only splits on x, using eightyx on both train and test properly below
-train_roi = BoundingBox(
-    roi.minx, eightyx, roi.miny, roi.maxy, roi.mint, roi.maxt
+# Split train size
+train_size = int(len(dataset) * split)
+test_size = len(dataset) - train_size
+train_dataset, test_dataset = random_split(
+    dataset, [train_size, test_size], generator=Generator().manual_seed(0)
 )
+
 train_sampler = RandomBatchGeoSampler(
-    dataset=dataset,
+    dataset=train_dataset,
     size=config.PATCH_SIZE,
     batch_size=config.BATCH_SIZE,
-    roi=train_roi,
-)
-test_roi = BoundingBox(
-    eightyx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt
 )
 test_sampler = GridGeoSampler(
-    dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE, roi=test_roi
+    dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
 )
+
+
+# random batch sampler for training, grid sampler for testing
+# Training sampler only splits on x
+# train_roi = BoundingBox(
+#    roi.minx, splitx, roi.miny, roi.maxy, roi.mint, roi.maxt
+# )
+# train_sampler = RandomBatchGeoSampler(
+#    dataset=dataset,
+#    size=config.PATCH_SIZE,
+#    batch_size=config.BATCH_SIZE,
+#    roi=train_roi,
+# )
+# test_roi = BoundingBox(
+#    splitx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt
+# )
+# test_sampler = GridGeoSampler(
+#    dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE, roi=test_roi
+# )
 
 # create dataloaders (must use batch_sampler)
 train_dataloader = DataLoader(
-    dataset,
+    dataset=train_dataset,
     batch_sampler=train_sampler,
     collate_fn=stack_samples,
     num_workers=config.NUM_WORKERS,
 )
 test_dataloader = DataLoader(
-    dataset,
+    dataset=test_dataset,
     batch_size=config.BATCH_SIZE,
     sampler=test_sampler,
     collate_fn=stack_samples,
@@ -412,6 +440,9 @@ for t in range(config.EPOCHS):
     else:
         plateau_count += 1
         if plateau_count >= patience:
+            logging.info(
+                f"Loss Plateau: {t} epochs, reached patience of {patience}"
+            )
             break
 print("Done!")
 writer.close()
