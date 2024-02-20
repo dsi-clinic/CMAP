@@ -13,7 +13,7 @@ BACKBONE = "resnet50"
 WEIGHTS = True
 
 # model hyperparams
-BATCH_SIZE = 32
+BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-3
