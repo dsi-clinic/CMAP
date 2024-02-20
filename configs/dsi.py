@@ -14,11 +14,11 @@ EXTRA_CLASS = False
 WEIGHTS = True
 
 # model hyperparams
-BATCH_SIZE = 32
+BATCH_SIZE = 64
 PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-3
-NUM_WORKERS = 2
-EPOCHS = 1
+NUM_WORKERS = 8
+EPOCHS = 6
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
