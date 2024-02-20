@@ -56,7 +56,7 @@ class SegmentationModel:
         if model == "unet":
             self.model = smp.Unet(
                 encoder_name=backbone,
-                encoder_weights="imagenet" if weights is True else None,
+                encoder_weights="swsl" if weights is True else None,
                 in_channels=in_channels,
                 classes=num_classes,
             )
@@ -84,18 +84,23 @@ class SegmentationModel:
             )
 
         # set custom weights
+        # Assuming config.WEIGHTS contains the desired value, e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
         if model != "fcn":
             if weights and weights is not True:
-                if isinstance(weights, WeightsEnum):
-                    weights = getattr(
-                        importlib.import_module("ResNet50_Weights"),
-                        weights,
-                    )
-                    state_dict = weights.get_state_dict(progress=True)
-                elif os.path.exists(weights):
-                    _, state_dict = utils.extract_backbone(weights)
+                # Split the WEIGHTS input to extract module name and attribute
+                module_name, attribute_name = weights.split('.')
+                
+                # Import the module dynamically
+                weights_module = importlib.import_module(module_name)
+
+                # Get the attribute from the module
+                weights_attribute = getattr(weights_module, attribute_name)
+
+                if isinstance(weights_attribute, WeightsEnum):
+                    state_dict = weights_attribute.get_state_dict(progress=True)
+                elif os.path.exists(weights_attribute):
+                    _, state_dict = utils.extract_backbone(weights_attribute)
                 else:
-                    state_dict = get_weight(weights).get_state_dict(
-                        progress=True
-                    )
+                    state_dict = get_weight(weights_attribute).get_state_dict(progress=True)
+                
                 self.model.encoder.load_state_dict(state_dict)
