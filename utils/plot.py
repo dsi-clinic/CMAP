@@ -6,31 +6,12 @@ import torch
 from matplotlib.colors import ListedColormap
 from torch import Tensor
 
-colors = {
-    0: (0, 0, 0, 0),
-    1: (215, 80, 48, 255),
-    2: (49, 102, 80, 255),
-    3: (239, 169, 74, 255),
-    4: (100, 107, 99, 255),
-    5: (89, 53, 31, 255),
-    6: (2, 86, 105, 255),
-    7: (207, 211, 205, 255),
-    8: (195, 88, 49, 255),
-    9: (144, 70, 132, 255),
-    10: (29, 51, 74, 255),
-    11: (71, 64, 46, 255),
-    12: (114, 20, 34, 255),
-    13: (37, 40, 80, 255),
-    14: (94, 33, 41, 255),
-    15: (255, 255, 255, 255),
-}
-
 
 def plot_from_tensors(
     sample: Dict[str, Tensor],
     save_path: str,
-    mode: str = "grid",
-    colors: Dict[int, tuple] = colors,
+    mode: str = "row",
+    colors: Dict[int, tuple] = None,
     labels: Dict[int, str] = None,
 ):
     """
@@ -60,16 +41,19 @@ def plot_from_tensors(
             values : labels
     """
     # create the colormap
-    cmap_list = []
-    for i in range(len(colors)):
-        cmap_list.append(
-            (
-                colors[i][0] / 255.0,
-                colors[i][1] / 255.0,
-                colors[i][2] / 255.0,
+    if colors:
+        cmap_list = []
+        for i in range(len(colors)):
+            cmap_list.append(
+                (
+                    colors[i][0] / 255.0,
+                    colors[i][1] / 255.0,
+                    colors[i][2] / 255.0,
+                )
             )
-        )
-    cmap = ListedColormap(cmap_list)
+        cmap = ListedColormap(cmap_list)
+    else:
+        cmap = "viridis"
 
     # set the figure dimensions
     if mode == "grid":
