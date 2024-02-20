@@ -422,7 +422,7 @@ def test(
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
-    # train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
     test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 logging.info("Done!")
 writer.close()
