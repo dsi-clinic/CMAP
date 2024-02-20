@@ -220,10 +220,16 @@ optimizer = AdamW(model.parameters(), lr=config.LR)
 # train_augmentation_pipeline = get_train_augmentation_pipeline()
 # test_augmentation_pipeline = get_test_augmentation_pipeline()
 
-mean = torch.tensor(0.0)
-std = torch.tensor(255.0)
+mean = config.DATASET_MEAN
+std = config.DATASET_STD
+scale_mean = torch.tensor(0.0)
+scale_std = torch.tensor(255.0)
+
 normalize = K.Normalize(mean=mean, std=std)
+scale = K.Normalize(mean=scale_mean, std=scale_std)
 denormalize = K.Denormalize(mean=mean, std=std)
+descale = K.Denormalize(mean=scale_mean, std=scale_std)
+
 aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
@@ -249,14 +255,14 @@ def train_setup(
     X = sample["image"].to(device)
     y = sample["mask"].type(torch.float32).to(device)
 
-    # normalize both img and mask to range of [0, 1] (req'd for augmentations)
-    X, y = normalize(X), normalize(y)
+    # scale both img and mask to range of [0, 1] (req'd for augmentations)
+    X, y = scale(X), scale(y)
 
     # augment img and mask with same augmentations
-    X, y = aug(X, y)
+    X_aug, y_aug = aug(X, y)
 
     # denormalize mask to reset to index tensor (req'd for loss func)
-    y = denormalize(y).type(torch.int64)
+    y = descale(y_aug).type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
@@ -267,9 +273,9 @@ def train_setup(
         os.mkdir(save_dir)
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
-                "image": sample["image"][i],
+                "image": X[i].cpu(),
                 "mask": sample["mask"][i],
-                "augmented_image": denormalize(X)[i].cpu(),
+                "augmented_image": X_aug[i].cpu(),
                 "augmented_mask": y[i].cpu(),
             }
             sample_fname = os.path.join(
@@ -277,7 +283,7 @@ def train_setup(
             )
             plot_from_tensors(plot_tensors, sample_fname, "grid")
 
-    return X, y_squeezed
+    return normalize(X_aug), y_squeezed
 
 
 def train(
@@ -374,6 +380,7 @@ def test(
             # y_squeezed = y.squeeze(1)
 
             X = sample["image"].to(device)
+            X = scale(X)
             X = normalize(X)
             y = sample["mask"].to(device)
             y_squeezed = y[:, 0, :, :].squeeze()
@@ -395,9 +402,9 @@ def test(
                 os.mkdir(save_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "image": sample["image"][i],
+                        "image": X[i].cpu(),
                         "ground_truth": sample["mask"][i],
-                        "inference": preds[i].cpu(),
+                        "prediction": preds[i].cpu(),
                     }
                     sample_fname = os.path.join(
                         save_dir, f"test_sample-{epoch}.{i}.png"
@@ -415,7 +422,7 @@ def test(
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    # train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
     test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 logging.info("Done!")
 writer.close()
