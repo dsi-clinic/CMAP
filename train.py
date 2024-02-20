@@ -1,6 +1,7 @@
 """
 To run: from repo directory (2024-winter-cmap)
-> python -m train configs.<config> [--experiment_name <name>]
+> python train.py configs.<config> [--experiment_name <name>]
+    [--aug_type <aug>] [--split <split>]
 """
 
 import argparse
@@ -25,14 +26,12 @@ from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, BoundingBox, stack_samples
+from torchgeo.datasets import NAIP, random_bbox_splitting, stack_samples
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kc import KaneCounty
-
-# project imports
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 
@@ -48,6 +47,22 @@ parser.add_argument(
     help="Name of experiment",
     default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
 )
+
+# Current potential aug_type args: "all", "default", "plasma", "gauss"
+aug_types = "'all', 'default', 'plasma', 'gauss'"
+parser.add_argument(
+    "--aug_type",
+    type=str,
+    help="Type of augmentation; potential inputs are: {aug_types}",
+    default="default",
+)
+
+parser.add_argument(
+    "--split",
+    type=str,
+    help="Ratio of split; enter the size of the train split as an int out of 100",
+    default="80",
+)
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
@@ -56,6 +71,12 @@ config = importlib.import_module(args.config)
 exp_name = args.experiment_name
 if exp_name is None:
     exp_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+aug_type = args.aug_type
+if aug_type is None:
+    aug_type = "default"
+split = float(int(args.split) / 100)
+if split is None:
+    split = 0.80
 
 # set output path and exit run if path already exists
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
@@ -90,33 +111,26 @@ naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_MASK_ROOT)
 dataset = naip & kc
 
-# train/test split
-roi = dataset.bounds
-midx = roi.minx + (roi.maxx - roi.minx) / 2
-midy = roi.miny + (roi.maxy - roi.miny) / 2
+train_dataset, test_dataset = random_bbox_splitting(dataset, [split, 1 - split])
 
-# random batch sampler for training, grid sampler for testing
-train_roi = BoundingBox(roi.minx, midx, roi.miny, roi.maxy, roi.mint, roi.maxt)
 train_sampler = RandomBatchGeoSampler(
-    dataset=dataset,
+    dataset=train_dataset,
     size=config.PATCH_SIZE,
     batch_size=config.BATCH_SIZE,
-    roi=train_roi,
 )
-test_roi = BoundingBox(midx, roi.maxx, roi.miny, roi.maxy, roi.mint, roi.maxt)
 test_sampler = GridGeoSampler(
-    dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE, roi=test_roi
+    dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
 )
 
 # create dataloaders (must use batch_sampler)
 train_dataloader = DataLoader(
-    dataset,
+    dataset=train_dataset,
     batch_sampler=train_sampler,
     collate_fn=stack_samples,
     num_workers=config.NUM_WORKERS,
 )
 test_dataloader = DataLoader(
-    dataset,
+    dataset=test_dataset,
     batch_size=config.BATCH_SIZE,
     sampler=test_sampler,
     collate_fn=stack_samples,
@@ -156,69 +170,59 @@ test_jaccard = MulticlassJaccardIndex(
 ).to(device)
 optimizer = AdamW(model.parameters(), lr=config.LR)
 
-# def get_train_augmentation_pipeline():
-#     """
-#     Extend the augmentation pipeline for aerial image segmentation with additional
-#     transformations to simulate various environmental conditions and viewing angles.
+# Various augmentation definitions
+default_aug = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
+plasma_aug = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.RandomPlasmaShadow(
+        roughness=(0.1, 0.7),
+        shade_intensity=(-1.0, 0.0),
+        shade_quantity=(0.0, 1.0),
+        keepdim=True,
+    ),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
+gauss_aug = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
+all_aug = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.RandomPlasmaShadow(
+        roughness=(0.1, 0.7),
+        shade_intensity=(-1.0, 0.0),
+        shade_quantity=(0.0, 1.0),
+        keepdim=True,
+    ),
+    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
 
-#     Returns:
-#         A callable augmentation pipeline that applies the defined transformations.
-#     """
-#     # Define the extended augmentation pipeline
-#     augmentation_pipeline = A.Compose(
-#         [
-#             # Rotate the image by up to 180 degrees, without a preferred direction
-#             A.Rotate(limit=180, p=0.5, border_mode=0),
-#             # Horizontal and vertical flipping
-#             A.HorizontalFlip(p=0.5),
-#             A.VerticalFlip(p=0.5),
-#             # Random scaling
-#             A.RandomScale(scale_limit=0.1, p=0.5),
-#             # Brightness and contrast adjustments
-#             A.RandomBrightnessContrast(
-#                 brightness_limit=0.2, contrast_limit=0.2, p=0.5
-#             ),
-#             # Slight Gaussian blur to mimic atmospheric effects
-#             A.GaussianBlur(blur_limit=(3, 3), p=0.2),
-#             # Normalize the image (ensure to adjust mean and std as per your dataset)
-#             A.Normalize(
-#                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], p=1.0
-#             ),
-#             # Convert image and mask to PyTorch tensors
-#             ToTensorV2(),
-#         ],
-#         additional_targets={"mask": "image"},
-#     )  # Apply the same transform to both image and mask
-
-#     return augmentation_pipeline
-
-
-# def get_test_augmentation_pipeline():
-#     """
-#     Extend the augmentation pipeline for aerial image segmentation with additional
-#     transformations to simulate various environmental conditions and viewing angles.
-
-#     Returns:
-#         A callable augmentation pipeline that applies the defined transformations.
-#     """
-#     # Define the extended augmentation pipeline
-#     augmentation_pipeline = A.Compose(
-#         [
-#             # Normalize the image (ensure to adjust mean and std as per your dataset)
-#             A.Normalize(
-#                 mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225], p=1.0
-#             ),
-#             # Convert image and mask to PyTorch tensors
-#             ToTensorV2(),
-#         ],
-#         additional_targets={"mask": "image"},
-#     )  # Apply the same transform to both image and mask
-
-#     return augmentation_pipeline
-
-
-# train_augmentation_pipeline = get_train_augmentation_pipeline()
-# test_augmentation_pipeline = get_test_augmentation_pipeline()
+# Choose the proper augmentation format
+if aug_type == "plasma":
+    aug = plasma_aug
+elif aug_type == "gauss":
+    aug = gauss_aug
+elif aug_type == "all":
+    aug = all_aug
+else:
+    aug = default_aug
 
 mean = config.DATASET_MEAN
 std = config.DATASET_STD
@@ -227,25 +231,6 @@ scale_std = torch.tensor(255.0)
 
 normalize = K.Normalize(mean=mean, std=std)
 scale = K.Normalize(mean=scale_mean, std=scale_std)
-denormalize = K.Denormalize(mean=mean, std=std)
-descale = K.Denormalize(mean=scale_mean, std=scale_std)
-
-aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    # K.RandomPlasmaShadow(
-    # roughness=(0.1, 0.7),
-    # shade_intensity=(-1.0, 0.0),
-    # shade_quantity=(0.0, 1.0),
-    # keepdim=True,
-    # ),
-    # K.RandomGaussianBlur(
-    # kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25
-    # ),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
 
 
 def train_setup(
@@ -256,13 +241,13 @@ def train_setup(
     y = sample["mask"].type(torch.float32).to(device)
 
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
-    X, y = scale(X), scale(y)
+    X = scale(X)
 
     # augment img and mask with same augmentations
     X_aug, y_aug = aug(X, y)
 
     # denormalize mask to reset to index tensor (req'd for loss func)
-    y = descale(y_aug).type(torch.int64)
+    y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
@@ -299,25 +284,18 @@ def train(
     jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
-        # images = sample["image"]
-        # masks = sample["mask"]
-
-        # # Convert PyTorch tensors to numpy arrays for Albumentations
-        # images_np = images.cpu().numpy().astype(np.float32)
-        # masks_np = masks.cpu().numpy().astype(np.float32)
-
-        # # Apply augmentations
-        # augmented = train_augmentation_pipeline(image=images_np, mask=masks_np)
-        # augmented_image, augmented_mask = augmented["image"], augmented["mask"]
-
-        # # Convert numpy arrays back to PyTorch tensors
-        # X = torch.from_numpy(augmented_image).to(device)
-        # y = torch.from_numpy(augmented_mask).to(device)
-
-        # # Assuming your mask has a channel dimension that needs to be squeezed
-        # y_squeezed = y.squeeze(1)
-
         X, y = train_setup(sample, epoch, batch)
+        # The following comments provide pseudocode to theoretically filter tiles
+        # The problem is that X here is a batch, not a specific image, so it won't work
+        # Ideally, we filter before sending the dataset to the dataloader.
+        # total_pixels = X.size
+        # label_count = torch.sum(X != 0)
+        # percentage_cover = (label_count / total_pixels) * 100
+
+        # Filter patches based on weight criteria
+        # if percentage_cover <= 1:
+        # Skip this sample if weight criteria is not met
+        #    continue
 
         # compute prediction error
         outputs = model(X)
@@ -338,6 +316,8 @@ def train(
             logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
+
+    # Need to rename scalars?
     writer.add_scalar("Loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info(f"Jaccard Index: {final_jaccard}")
@@ -356,29 +336,6 @@ def test(
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
-            # images = sample["image"]
-            # masks = sample["mask"]
-
-            # # Convert PyTorch tensors to numpy arrays for Albumentations
-            # images_np = images.cpu().numpy().astype(np.float32)
-            # masks_np = masks.cpu().numpy().astype(np.float32)
-
-            # # Apply augmentations
-            # augmented = train_augmentation_pipeline(
-            #     image=images_np, mask=masks_np
-            # )
-            # augmented_image, augmented_mask = (
-            #     augmented["image"],
-            #     augmented["mask"],
-            # )
-
-            # # Convert numpy arrays back to PyTorch tensors
-            # X = torch.from_numpy(augmented_image).to(device)
-            # y = torch.from_numpy(augmented_mask).to(device)
-
-            # # Assuming your mask has a channel dimension that needs to be squeezed
-            # y_squeezed = y.squeeze(1)
-
             X = sample["image"].to(device)
             X = scale(X)
             X = normalize(X)
@@ -419,12 +376,43 @@ def test(
         + f"Avg loss: {test_loss:>7f} \n"
     )
 
+    # Now returns test_loss such that it can be compared against previous losses
+    return test_loss
+
+
+# How much the loss needs to drop to reset a plateau
+threshold = 0.01
+
+# How many epochs loss needs to plateau before terminating
+patience = 5
+
+# Beginning loss
+best_loss = None
+
+# How long it's been plateauing
+plateau_count = 0
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
-    test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
-logging.info("Done!")
+    test_loss = test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
+
+    # Checks for plateau
+    if best_loss is None:
+        best_loss = test_loss
+    elif test_loss < best_loss - threshold:
+        best_loss = test_loss
+        plateau_count = 0
+    # Potentially add another if clause to plateau check
+    # such that if test_loss jumps up again, plateau resets?
+    else:
+        plateau_count += 1
+        if plateau_count >= patience:
+            logging.info(
+                f"Loss Plateau: {t} epochs, reached patience of {patience}"
+            )
+            break
+print("Done!")
 writer.close()
 
 

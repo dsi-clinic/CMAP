@@ -26,9 +26,9 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 1024
+PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-3
 NUM_WORKERS = 8
-EPOCHS = 1
+EPOCHS = 11
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
