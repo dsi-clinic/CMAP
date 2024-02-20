@@ -18,32 +18,26 @@ There are several tasks associated with this project:
 2. Develop deep learning models for aerial imaging data, targeting green infrastructure and stormwater areas.
 3. Train a model to identify different types of locations (for example, wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
+This will be accomplished within the following pipeline structure:
+1. Utilizing a custom subclass of the RasterDataset (utils/kc.py), masks are created for Kane County images (data/kane_county_utils.py) utilizing a custom subclass of the RasterDataset (utils/kc.py), and if necessary, original NAIP images are downloaded (utils/get_naip_images.py)
+2. A training loop (train.py) takes in configurations (configs/dsi.py) and is assigned to the cluster (.job), utilizing the model defined in (utils/model.py)
+
 ## Usage
 Before running the repo (see details below) you will need to do the following:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
     1. Install miniconda:
-    '''
+    ```
     mkdir -p ~/miniconda3
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
     bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
-    '''
+    ```
     2. Create environment:
-    '''
+    ```
     conda create -y --name cmap python=3.10
     conda activate cmap
     conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
-    '''
-
-### Make
-
-We use `make` to run our code. There are three built-in `make` commands:
-
-* `make build-only`: This will build the image only. It is useful for testing and making changes to the Dockerfile.
-* `make run-notebooks`: This will run a jupyter server which also mounts the current directory into `\program`.
-* `make run-interactive`: This will create a container (with the current directory mounted as `\program`) and loads an interactive session. 
-
-The file `Makefile` contains information about about the specific commands that are run using when calling each `make` statement.
+    ```
 
 ### Developing inside a container with VS Code
 
@@ -54,11 +48,38 @@ If you prefer to develop inside a container with VS Code then do the following s
 3. Click the blue or green rectangle in the bottom left of VS code (should say something like `><` or `>< WSL`). Options should appear in the top center of your screen. Select `Reopen in Container`.
 
 
- ### Slurm
+### Slurm
 If you are using the DSI's cluster then you have another option with your `make` commands which is to run VS Code on the cluster login node. To do this execute in `make run-ssh`. 
 
 For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
+To run this repo on the slurm, after setting up your conda environment, you can use the following submit script to run a training loop:
+```
+#!/bin/bash -l
+#
+#SBATCH --mail-user=YOUR_USERNAME@cs.uchicago.edu
+#SBATCH --mail-type=ALL
+#SBATCH --output=/home/YOUR_USERNAME/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/YOUR_USERNAME/slurm/out/%j.%N.stderr
+#SBATCH --chdir=/home/YOUR_USERNAME/slurm
+#SBATCH --partition=general
+#SBATCH --job-name=cmap
+#SBATCH --time=12:00:00
+#SBATCH --mem=128GB
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=8
+
+conda activate cmap
+
+conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+
+export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
+
+pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
+
+cd /home/YOUR_USERNAME/2024-winter-cmap
+python -m train configs.dsi $SLURM_ARRAY_TASK_ID
+```
 
 ## Repository Structure
 
