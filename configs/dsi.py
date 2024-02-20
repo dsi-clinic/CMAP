@@ -19,6 +19,6 @@ PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-3
 NUM_WORKERS = 8
-EPOCHS = 5
+EPOCHS = 6
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
