@@ -84,12 +84,13 @@ class SegmentationModel:
             )
 
         # set custom weights
-        # Assuming config.WEIGHTS contains the desired value, e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
+        # Assuming config.WEIGHTS contains the desired value,
+        # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
         if model != "fcn":
             if weights and weights is not True:
                 # Split the WEIGHTS input to extract module name and attribute
-                module_name, attribute_name = weights.split('.')
-                
+                module_name, attribute_name = weights.split(".")
+
                 # Import the module dynamically
                 weights_module = importlib.import_module(module_name)
 
@@ -101,6 +102,8 @@ class SegmentationModel:
                 elif os.path.exists(weights_attribute):
                     _, state_dict = utils.extract_backbone(weights_attribute)
                 else:
-                    state_dict = get_weight(weights_attribute).get_state_dict(progress=True)
-                
+                    state_dict = get_weight(weights_attribute).get_state_dict(
+                        progress=True
+                    )
+
                 self.model.encoder.load_state_dict(state_dict)

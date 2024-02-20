@@ -147,7 +147,7 @@ loss_fn_class = getattr(
     config.LOSS_FUNCTION,
 )
 # Initialize the loss function with the required parameters
-loss_fn = loss_fn_class(mode="multiclass") 
+loss_fn = loss_fn_class(mode="multiclass")
 
 # IoU metric
 train_jaccard = MulticlassJaccardIndex(
