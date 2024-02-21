@@ -37,20 +37,10 @@ Before running the repo (see details below) you will need to do the following:
     conda create -y --name cmap python=3.10
     conda activate cmap
     conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+    pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
 
-### Developing inside a container with VS Code
-
-If you prefer to develop inside a container with VS Code then do the following steps. Note that this works with both regular scripts as well as jupyter notebooks.
-
-1. Open the repository in VS Code
-2. At the bottom right a window may appear that says `Folder contains a Dev Container configuration file...`. If it does, select, `Reopen in Container` and you are done. Otherwise proceed to next step. 
-3. Click the blue or green rectangle in the bottom left of VS code (should say something like `><` or `>< WSL`). Options should appear in the top center of your screen. Select `Reopen in Container`.
-
-
 ### Slurm
-If you are using the DSI's cluster then you have another option with your `make` commands which is to run VS Code on the cluster login node. To do this execute in `make run-ssh`. 
-
 For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
 To run this repo on the slurm, after setting up your conda environment, you can use the following submit script to run a training loop:
@@ -78,7 +68,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
-python -m train configs.dsi $SLURM_ARRAY_TASK_ID
+python -m train configs.dsi --experiment_name [<ExperimentName>] $SLURM_ARRAY_TASK_ID
 ```
 
 ## Repository Structure
