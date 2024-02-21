@@ -71,6 +71,10 @@ cd /home/YOUR_USERNAME/2024-winter-cmap
 python -m train configs.dsi --experiment_name [<ExperimentName>] $SLURM_ARRAY_TASK_ID
 ```
 
+## Git Usage
+
+* Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
+
 ## Repository Structure
 
 ### utils
