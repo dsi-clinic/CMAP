@@ -13,10 +13,18 @@ class KaneCounty(VectorDataset):
         (?:_(?P<processing_date>\d+))?
         \..*$
     """
+<<<<<<< HEAD
     # all_bands = ["R", "G", "B", "NIR"]
     # rgb_bands = ["R", "G", "B"]
     # is_image = False
 
+=======
+    
+    #all_bands = ["R", "G", "B", "NIR"]
+    #rgb_bands = ["R", "G", "B"]
+    #is_image = False
+    
+>>>>>>> 814b11c2c69a8fe2f667560cf3040d645c430cd7
     label_names = {
         1: "POND",
         2: "WETLAND",
