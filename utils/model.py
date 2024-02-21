@@ -89,11 +89,11 @@ class SegmentationModel:
             if weights and weights is not True:
 
                 weights_module, weights_spec = weights.split(".")
+                imported_module = importlib.import_module("torchgeo.models") 
                 weights_module = ".".join(["torchgeo.models", weights_module])
-                weights_module = importlib.import_module(weights_module)
                 # Get the attribute from the module
                 weights_attribute = getattr(weights_module, weights_spec)
-
+                del imported_module
                 """
                 # Split the WEIGHTS input to extract module name and attribute
                 module_name, attribute_name = weights.split(".")
