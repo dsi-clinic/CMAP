@@ -8,7 +8,6 @@ from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
 
-
 class SegmentationModel:
     def __init__(
         self,
@@ -88,14 +87,25 @@ class SegmentationModel:
         # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
         if model != "fcn":
             if weights and weights is not True:
+
+                weights_module, weights_spec = weights.split(".")
+                weights_module = ".".join(["torchgeo.models", weights_module])
+                weights_module = importlib.import_module(weights_module)
+                # Get the attribute from the module
+                weights_attribute = getattr(weights_module, weights_spec)
+
+                """
                 # Split the WEIGHTS input to extract module name and attribute
                 module_name, attribute_name = weights.split(".")
 
                 # Import the module dynamically
-                weights_module = importlib.import_module(module_name)
+                module_parts = ["torchgeo.model", module_name]
+                whole_module = ".".join(module_parts)
+                weights_module = importlib.import_module(whole_module)
 
                 # Get the attribute from the module
                 weights_attribute = getattr(weights_module, attribute_name)
+                """
 
                 if isinstance(weights_attribute, WeightsEnum):
                     state_dict = weights_attribute.get_state_dict(progress=True)

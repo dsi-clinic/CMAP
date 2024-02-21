@@ -253,7 +253,7 @@ def add_extra_channel(image_tensor):
     # Assuming 'image_tensor' is a PyTorch tensor with shape
     # (batch_size, num_channels, height, width)
 
-    # Generate random values for the extra channel
+    # Generate copy of channel and append to make new channel
     extra_channel = torch.rand(
         image_tensor.size(0),
         1,
