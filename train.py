@@ -404,7 +404,7 @@ plateau_count = 0
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
-    # train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
     test_loss = test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 
     # Checks for plateau
