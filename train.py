@@ -332,6 +332,7 @@ def test(
     loss_fn: Module,
     jaccard: Metric,
     epoch: int,
+    plateau_count: int,
 ):
     num_batches = len(dataloader)
     model.eval()
@@ -357,7 +358,9 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0:
+            if batch == 0 or (
+                plateau_count == config.PATIENCE - 1 and batch < 10
+            ):
                 save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
                 os.mkdir(save_dir)
                 for i in range(config.BATCH_SIZE):
@@ -391,10 +394,10 @@ def test(
 
 
 # How much the loss needs to drop to reset a plateau
-threshold = 0.01
+threshold = config.THRESHOLD
 
 # How many epochs loss needs to plateau before terminating
-patience = 5
+patience = config.PATIENCE
 
 # Beginning loss
 best_loss = None
@@ -405,7 +408,9 @@ plateau_count = 0
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
     train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
-    test_loss = test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
+    test_loss = test(
+        test_dataloader, model, loss_fn, test_jaccard, t + 1, plateau_count
+    )
 
     # Checks for plateau
     if best_loss is None:
