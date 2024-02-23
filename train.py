@@ -271,7 +271,7 @@ def train_setup(
     
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    # add an extra channel to the images and masks
+    # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
         for i in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)

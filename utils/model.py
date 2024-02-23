@@ -13,7 +13,7 @@ class SegmentationModel:
         self,
         model: str = "unet",
         backbone: str = "resnet50",
-        in_channels: int = None,
+        in_channels: int = 4,
         num_classes: int = None,
         num_filters: int = 3,
         weights: Union[WeightsEnum, str, bool] = True,
@@ -70,7 +70,7 @@ class SegmentationModel:
                     in_channels = weights_chans
                 
                 weights_backbone = weights_module.split("_")[0]
-                if weights_backbone != backbone:
+                if weights_backbone.lower() != backbone:
                     raise ValueError(
                         f"Backbone for weights '{weights_backbone}' does not match {backbone}. "
                     )
@@ -91,6 +91,7 @@ class SegmentationModel:
                         in_channels=in_channels,
                         classes=num_classes,
                     )
+                    self.in_channels = in_channels
                 elif model == "deeplabv3+":
                     self.model = smp.DeepLabV3Plus(
                         encoder_name=backbone,
@@ -98,16 +99,19 @@ class SegmentationModel:
                         in_channels=in_channels,
                         classes=num_classes,
                     )
+                    self.in_channels = in_channels
                 elif model == "fcn":
                     self.model = FCN(
                         in_channels=in_channels,
                         classes=num_classes,
                         num_filters=num_filters,
                     )
+                    self.in_channels = in_channels
                 elif model == "test_weights":
                     self.model = timm.create_model(
                         backbone, in_chans=in_channels, num_classes=num_classes
                     )
+                    self.in_channels = in_channels
                 else:
                     raise ValueError(
                         f"Model type '{model}' is not valid. "
