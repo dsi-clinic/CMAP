@@ -370,7 +370,7 @@ def test(
                         "prediction": preds[i].cpu(),
                     }
                     sample_fname = os.path.join(
-                        save_dir, f"test_sample-{epoch}.{i}.png"
+                        save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
                     )
                     plot_from_tensors(
                         plot_tensors,
