@@ -13,7 +13,7 @@ class SegmentationModel:
         self,
         model: str = "unet",
         backbone: str = "resnet50",
-        in_channels: int = 4,
+        in_channels: int = None,
         num_classes: int = None,
         num_filters: int = 3,
         weights: Union[WeightsEnum, str, bool] = True,
@@ -52,60 +52,28 @@ class SegmentationModel:
             weights. Options for pretrained weights are listed on the torchgeo docs:
             <https://torchgeo.readthedocs.io/en/stable/api/models.html#pretrained-weights>
         """
-        if model == "unet":
-            self.model = smp.Unet(
-                encoder_name=backbone,
-                encoder_weights="swsl" if weights is True else None,
-                in_channels=in_channels,
-                classes=num_classes,
-            )
-        elif model == "deeplabv3+":
-            self.model = smp.DeepLabV3Plus(
-                encoder_name=backbone,
-                encoder_weights="imagenet" if weights is True else None,
-                in_channels=in_channels,
-                classes=num_classes,
-            )
-        elif model == "fcn":
-            self.model = FCN(
-                in_channels=in_channels,
-                classes=num_classes,
-                num_filters=num_filters,
-            )
-        elif model == "test_weights":
-            self.model = timm.create_model(
-                backbone, in_chans=in_channels, num_classes=num_classes
-            )
-        else:
-            raise ValueError(
-                f"Model type '{model}' is not valid. "
-                "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
-            )
-
-        # set custom weights
-        # Assuming config.WEIGHTS contains the desired value,
-        # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
         if model != "fcn":
+            # set custom weights
+            # Assuming config.WEIGHTS contains the desired value,
+            # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
             if weights and weights is not True:
 
-                weights_module, weights_spec = weights.split(".")
+                weights_module, weights_submodule = weights.split(".")
                 imported_module = importlib.import_module("torchgeo.models") 
-                weights_module = ".".join(["torchgeo.models", weights_module])
                 # Get the attribute from the module
-                weights_attribute = getattr(weights_module, weights_spec)
+                weights_class = getattr(imported_module, weights_module)
+                weights_attribute = getattr(weights_class, weights_submodule)
+                weights_chans = getattr(weights_attribute, "meta")['in_chans']
                 del imported_module
-                """
-                # Split the WEIGHTS input to extract module name and attribute
-                module_name, attribute_name = weights.split(".")
 
-                # Import the module dynamically
-                module_parts = ["torchgeo.model", module_name]
-                whole_module = ".".join(module_parts)
-                weights_module = importlib.import_module(whole_module)
-
-                # Get the attribute from the module
-                weights_attribute = getattr(weights_module, attribute_name)
-                """
+                if weights_chans > in_channels:
+                    in_channels = weights_chans
+                
+                weights_backbone = weights_module.split("_")[0]
+                if weights_backbone != backbone:
+                    raise ValueError(
+                        f"Backbone for weights '{weights_backbone}' does not match {backbone}. "
+                    )
 
                 if isinstance(weights_attribute, WeightsEnum):
                     state_dict = weights_attribute.get_state_dict(progress=True)
@@ -115,5 +83,41 @@ class SegmentationModel:
                     state_dict = get_weight(weights_attribute).get_state_dict(
                         progress=True
                     )
-
+                    
+                if model == "unet":
+                    self.model = smp.Unet(
+                        encoder_name=backbone,
+                        encoder_weights="swsl" if weights is True else None,
+                        in_channels=in_channels,
+                        classes=num_classes,
+                    )
+                elif model == "deeplabv3+":
+                    self.model = smp.DeepLabV3Plus(
+                        encoder_name=backbone,
+                        encoder_weights="imagenet" if weights is True else None,
+                        in_channels=in_channels,
+                        classes=num_classes,
+                    )
+                elif model == "fcn":
+                    self.model = FCN(
+                        in_channels=in_channels,
+                        classes=num_classes,
+                        num_filters=num_filters,
+                    )
+                elif model == "test_weights":
+                    self.model = timm.create_model(
+                        backbone, in_chans=in_channels, num_classes=num_classes
+                    )
+                else:
+                    raise ValueError(
+                        f"Model type '{model}' is not valid. "
+                        "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
+                    )
+                
                 self.model.encoder.load_state_dict(state_dict)
+            
+
+       
+        
+
+                

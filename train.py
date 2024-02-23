@@ -249,18 +249,15 @@ aug = AugmentationSequential(
 )
 
 
-def add_extra_channel(image_tensor):
+def add_extra_channel(image_tensor, source_channel=0):
     # Assuming 'image_tensor' is a PyTorch tensor with shape
     # (batch_size, num_channels, height, width)
 
-    # Generate copy of channel and append to make new channel
-    extra_channel = torch.rand(
-        image_tensor.size(0),
-        1,
-        image_tensor.size(2),
-        image_tensor.size(3),
-        device=image_tensor.device,
-    )
+    # Select the source channel to duplicate
+    original_channel = image_tensor[:, source_channel:source_channel + 1, :, :]
+
+    # Generate copy of selected channel
+    extra_channel = original_channel.clone()
 
     # Concatenate the extra channel to the original image along the second
     # dimension (channel dimension)
@@ -268,17 +265,17 @@ def add_extra_channel(image_tensor):
 
     return augmented_tensor
 
-
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
 ) -> Tuple[torch.Tensor]:
+    
+    samp_image = sample["image"]
+    samp_mask = sample["mask"]
     # add an extra channel to the images and masks
-    if config.EXTRA_CLASS:
-        samp_image = add_extra_channel(sample["image"])
-        samp_mask = add_extra_channel(sample["mask"])
-    else:
-        samp_image = sample["image"]
-        samp_mask = sample["mask"]
+    if samp_image.size(1) != model.in_channels:
+        for i in range(model.in_channels - samp_image.size(1)):
+            samp_image = add_extra_channel(samp_image)
+            samp_mask = add_extra_channel(samp_mask)
 
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
@@ -294,27 +291,23 @@ def train_setup(
     y = denormalize(y).type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = (
-        y[:, 0, :, :].squeeze()
-        if config.EXTRA_CLASS is False
-        else y[:, 0, :, :, :].squeeze()
-    )
+    y_squeezed = (y[:, 0, :, :].squeeze())
 
-    # plot first batch
-    if batch == 0:
-        save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
-        os.mkdir(save_dir)
-        for i in range(config.BATCH_SIZE):
-            plot_tensors = {
-                "image": sample["image"][i],
-                "mask": sample["mask"][i],
-                "augmented_image": denormalize(X)[i].cpu(),
-                "augmented_mask": y[i].cpu(),
-            }
-            sample_fname = os.path.join(
-                save_dir, f"train_sample-{epoch}.{i}.png"
-            )
-            plot_from_tensors(plot_tensors, sample_fname, "grid")
+    # # plot first batch
+    # if batch == 0:
+    #     save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
+    #     os.mkdir(save_dir)
+    #     for i in range(config.BATCH_SIZE):
+    #         plot_tensors = {
+    #             "image": sample["image"][i],
+    #             "mask": sample["mask"][i],
+    #             "augmented_image": denormalize(X)[i].cpu(),
+    #             "augmented_mask": y[i].cpu(),
+    #         }
+    #         sample_fname = os.path.join(
+    #             save_dir, f"train_sample-{epoch}.{i}.png"
+    #         )
+    #         plot_from_tensors(plot_tensors, sample_fname, "grid")
 
     return X, y_squeezed
 
@@ -412,22 +405,17 @@ def test(
             # # Assuming your mask has a channel dimension that needs to be squeezed
             # y_squeezed = y.squeeze(1)
 
-            X = (
-                sample["image"].to(device)
-                if config.EXTRA_CLASS is False
-                else add_extra_channel(sample["image"]).to(device)
-            )
+            samp_image = sample["image"]
+            samp_mask = sample["mask"]
+            # add an extra channel to the images and masks
+            if samp_image.size(1) != model.in_channels:
+                for i in range(model.in_channels - samp_image.size(1)):
+                    samp_image = add_extra_channel(samp_image)
+                    samp_mask = add_extra_channel(samp_mask)
+            X = (samp_image.to(device))
             X = normalize(X)
-            y = (
-                sample["mask"].to(device)
-                if config.EXTRA_CLASS is False
-                else add_extra_channel(sample["mask"]).to(device)
-            )
-            y_squeezed = (
-                y[:, 0, :, :].squeeze()
-                if config.EXTRA_CLASS is False
-                else y[:, 0, :, :, :].squeeze()
-            )
+            y = (samp_mask.to(device))
+            y_squeezed = (y[:, 0, :, :].squeeze())
 
             # compute prediction error
             outputs = model(X)
@@ -440,20 +428,20 @@ def test(
             # add test loss to rolling total
             test_loss += loss.item()
 
-            # plot first batch
-            if batch == 0:
-                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                os.mkdir(save_dir)
-                for i in range(config.BATCH_SIZE):
-                    plot_tensors = {
-                        "image": sample["image"][i],
-                        "ground_truth": sample["mask"][i],
-                        "inference": preds[i].cpu(),
-                    }
-                    sample_fname = os.path.join(
-                        save_dir, f"test_sample-{epoch}.{i}.png"
-                    )
-                    plot_from_tensors(plot_tensors, sample_fname, "row")
+            # # plot first batch
+            # if batch == 0:
+            #     save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+            #     os.mkdir(save_dir)
+            #     for i in range(config.BATCH_SIZE):
+            #         plot_tensors = {
+            #             "image": sample["image"][i],
+            #             "ground_truth": sample["mask"][i],
+            #             "inference": preds[i].cpu(),
+            #         }
+            #         sample_fname = os.path.join(
+            #             save_dir, f"test_sample-{epoch}.{i}.png"
+            #         )
+            #         plot_from_tensors(plot_tensors, sample_fname, "row")
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
