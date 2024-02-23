@@ -9,7 +9,7 @@ OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
 
 # model selection
 MODEL = "unet"
-BACKBONE = "resnet50"
+BACKBONE = "resnet18"
 WEIGHTS = True
 
 # model hyperparams
