@@ -14,11 +14,7 @@ import sys
 from pathlib import Path
 from typing import Any, DefaultDict, Tuple
 
-# import albumentations as A
 import kornia.augmentation as K
-
-# import numpy as np
-# from albumentations.pytorch import ToTensorV2
 import torch
 from kornia.augmentation.container import AugmentationSequential
 from segmentation_models_pytorch.losses import JaccardLoss
@@ -266,7 +262,14 @@ def train_setup(
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
             )
-            plot_from_tensors(plot_tensors, sample_fname, "grid")
+            plot_from_tensors(
+                plot_tensors,
+                sample_fname,
+                "grid",
+                KaneCounty.colors,
+                KaneCounty.labels,
+                sample["bbox"][i],
+            )
 
     return normalize(X_aug), y_squeezed
 
@@ -337,8 +340,8 @@ def test(
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
             X = sample["image"].to(device)
-            X = scale(X)
-            X = normalize(X)
+            X_scaled = scale(X)
+            X = normalize(X_scaled)
             y = sample["mask"].to(device)
             y_squeezed = y[:, 0, :, :].squeeze()
 
@@ -359,14 +362,21 @@ def test(
                 os.mkdir(save_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "image": X[i].cpu(),
+                        "image": X_scaled[i].cpu(),
                         "ground_truth": sample["mask"][i],
                         "prediction": preds[i].cpu(),
                     }
                     sample_fname = os.path.join(
                         save_dir, f"test_sample-{epoch}.{i}.png"
                     )
-                    plot_from_tensors(plot_tensors, sample_fname, "row")
+                    plot_from_tensors(
+                        plot_tensors,
+                        sample_fname,
+                        "row",
+                        KaneCounty.colors,
+                        KaneCounty.labels,
+                        sample["bbox"][i],
+                    )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
@@ -394,7 +404,7 @@ plateau_count = 0
 
 for t in range(config.EPOCHS):
     logging.info(f"Epoch {t + 1}\n-------------------------------")
-    train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+    # train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
     test_loss = test(test_dataloader, model, loss_fn, test_jaccard, t + 1)
 
     # Checks for plateau
@@ -414,7 +424,6 @@ for t in range(config.EPOCHS):
             break
 print("Done!")
 writer.close()
-
 
 torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
 logging.info(f"Saved PyTorch Model State to {out_root}")
