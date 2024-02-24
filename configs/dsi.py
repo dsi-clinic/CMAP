@@ -5,12 +5,11 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = os.path.join(DATA_ROOT, "kane-county-data")
 KC_IMAGE_ROOT = os.path.join(DATA_ROOT, "KC-images")
 KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/top-structures-masks")
-OUTPUT_ROOT = "/net/projects/cmap/tamami/weights"
+OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
 
 # model selection
 MODEL = "unet"
 BACKBONE = "resnet50"
-EXTRA_CLASS = True
 WEIGHTS = "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
 
 # model hyperparams

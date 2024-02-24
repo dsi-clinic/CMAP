@@ -91,7 +91,7 @@ class SegmentationModel:
                         in_channels=in_channels,
                         classes=num_classes,
                     )
-                    self.in_channels = in_channels
+                    
                 elif model == "deeplabv3+":
                     self.model = smp.DeepLabV3Plus(
                         encoder_name=backbone,
@@ -99,25 +99,26 @@ class SegmentationModel:
                         in_channels=in_channels,
                         classes=num_classes,
                     )
-                    self.in_channels = in_channels
+                    
                 elif model == "fcn":
                     self.model = FCN(
                         in_channels=in_channels,
                         classes=num_classes,
                         num_filters=num_filters,
                     )
-                    self.in_channels = in_channels
+                    
                 elif model == "test_weights":
                     self.model = timm.create_model(
                         backbone, in_chans=in_channels, num_classes=num_classes
                     )
-                    self.in_channels = in_channels
+
                 else:
                     raise ValueError(
                         f"Model type '{model}' is not valid. "
                         "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
                     )
                 
+                self.model.in_channels = in_channels
                 self.model.encoder.load_state_dict(state_dict)
             
 
