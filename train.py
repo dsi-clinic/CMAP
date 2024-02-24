@@ -362,7 +362,8 @@ def test(
                 plateau_count == config.PATIENCE - 1 and batch < 10
             ):
                 save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                os.mkdir(save_dir)
+                if not os.path.exists(save_dir):
+                    os.mkdir(save_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "image": X_scaled[i].cpu(),
