@@ -9,7 +9,7 @@ OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
 
 # model selection
 MODEL = "unet"
-BACKBONE = "resnet50"
+BACKBONE = "resnet18"
 WEIGHTS = True
 
 # model hyperparams
@@ -28,7 +28,9 @@ DATASET_STD = [
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-3
+LR = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 11
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
+PATIENCE = 5
+THRESHOLD = 0.01
