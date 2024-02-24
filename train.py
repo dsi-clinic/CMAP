@@ -280,28 +280,28 @@ def train_setup(
     # remove channel dim from y (req'd for loss func)
     y_squeezed = y[:, 0, :, :].squeeze()
 
-    # # plot first batch
-    # if batch == 0:
-    #     save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
-    #     os.mkdir(save_dir)
-    #     for i in range(config.BATCH_SIZE):
-    #         plot_tensors = {
-    #             "image": X[i].cpu(),
-    #             "mask": sample["mask"][i],
-    #             "augmented_image": X_aug[i].cpu(),
-    #             "augmented_mask": y[i].cpu(),
-    #         }
-    #         sample_fname = os.path.join(
-    #             save_dir, f"train_sample-{epoch}.{i}.png"
-    #         )
-    #         plot_from_tensors(
-    #             plot_tensors,
-    #             sample_fname,
-    #             "grid",
-    #             KaneCounty.colors,
-    #             KaneCounty.labels,
-    #             sample["bbox"][i],
-    #         )
+    # plot first batch
+    if batch == 0:
+        save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
+        os.mkdir(save_dir)
+        for i in range(config.BATCH_SIZE):
+            plot_tensors = {
+                "image": X[i].cpu(),
+                "mask": samp_mask[i],
+                "augmented_image": X_aug[i].cpu(),
+                "augmented_mask": y[i].cpu(),
+            }
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
+            plot_from_tensors(
+                plot_tensors,
+                sample_fname,
+                "grid",
+                KaneCounty.colors,
+                KaneCounty.labels,
+                sample["bbox"][i],
+            )
 
     return normalize(X_aug), y_squeezed
 
@@ -395,27 +395,27 @@ def test(
             # add test loss to rolling total
             test_loss += loss.item()
 
-            # # plot first batch
-            # if batch == 0:
-            #     save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-            #     os.mkdir(save_dir)
-            #     for i in range(config.BATCH_SIZE):
-            #         plot_tensors = {
-            #             "image": X_scaled[i].cpu(),
-            #             "ground_truth": sample["mask"][i],
-            #             "prediction": preds[i].cpu(),
-            #         }
-            #         sample_fname = os.path.join(
-            #             save_dir, f"test_sample-{epoch}.{i}.png"
-            #         )
-            #         plot_from_tensors(
-            #             plot_tensors,
-            #             sample_fname,
-            #             "row",
-            #             KaneCounty.colors,
-            #             KaneCounty.labels,
-            #             sample["bbox"][i],
-            #         )
+            # plot first batch
+            if batch == 0:
+                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                os.mkdir(save_dir)
+                for i in range(config.BATCH_SIZE):
+                    plot_tensors = {
+                        "image": X_scaled[i].cpu(),
+                        "ground_truth": samp_mask[i],
+                        "prediction": preds[i].cpu(),
+                    }
+                    sample_fname = os.path.join(
+                        save_dir, f"test_sample-{epoch}.{i}.png"
+                    )
+                    plot_from_tensors(
+                        plot_tensors,
+                        sample_fname,
+                        "row",
+                        KaneCounty.colors,
+                        KaneCounty.labels,
+                        sample["bbox"][i],
+                    )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
