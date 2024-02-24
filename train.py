@@ -241,7 +241,9 @@ def add_extra_channel(image_tensor, source_channel=0):
     # (batch_size, num_channels, height, width)
 
     # Select the source channel to duplicate
-    original_channel = image_tensor[:, source_channel:source_channel + 1, :, :]
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -252,15 +254,15 @@ def add_extra_channel(image_tensor, source_channel=0):
 
     return augmented_tensor
 
+
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
 ) -> Tuple[torch.Tensor]:
-    
     samp_image = sample["image"]
     samp_mask = sample["mask"]
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
-        for i in range(model.in_channels - samp_image.size(1)):
+        for _i in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)
             samp_mask = add_extra_channel(samp_mask)
 
@@ -375,7 +377,7 @@ def test(
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
-                for i in range(model.in_channels - samp_image.size(1)):
+                for _i in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
                     samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
