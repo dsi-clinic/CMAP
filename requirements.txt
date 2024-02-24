@@ -26,7 +26,7 @@ importlib_metadata~=7.0.1
 importlib_resources~=6.1.1
 torch_utils~=0.1.2
 typing_extensions~=4.7.1
-
+kornia~=0.7.1
 
 # cluster specific
 submitit~=1.4
