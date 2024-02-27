@@ -17,7 +17,6 @@ from typing import Any, DefaultDict, Tuple
 import kornia.augmentation as K
 import torch
 from kornia.augmentation.container import AugmentationSequential
-from segmentation_models_pytorch.losses import JaccardLoss
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -153,7 +152,14 @@ model = SegmentationModel(
 logging.info(model)
 
 # set the loss function, metrics, and optimizer
-loss_fn = JaccardLoss(mode="multiclass", classes=config.NUM_CLASSES)
+loss_fn_class = getattr(
+    importlib.import_module("segmentation_models_pytorch.losses"),
+    config.LOSS_FUNCTION,
+)
+# Initialize the loss function with the required parameters
+loss_fn = loss_fn_class(mode="multiclass")
+
+# IoU metric
 train_jaccard = MulticlassJaccardIndex(
     num_classes=config.NUM_CLASSES,
     ignore_index=config.IGNORE_INDEX,
@@ -164,6 +170,7 @@ test_jaccard = MulticlassJaccardIndex(
     ignore_index=config.IGNORE_INDEX,
     average="micro",
 ).to(device)
+
 optimizer = AdamW(model.parameters(), lr=config.LR)
 
 # Various augmentation definitions
@@ -220,8 +227,26 @@ elif aug_type == "all":
 else:
     aug = default_aug
 
+
+def copy_first_entry(a_list):
+    """copies the first entry in a list and appends to the end"""
+    first_entry = a_list[0]
+
+    # Append the copy to the end
+    a_list.append(first_entry)
+
+    return a_list
+
+
 mean = config.DATASET_MEAN
 std = config.DATASET_STD
+# add copies of first entry to DATASET_MEAN and DATASET_STD
+# to match data in_channels
+if len(mean) != model.in_channels:
+    for _ in range(model.in_channels - len(mean)):
+        mean = copy_first_entry(mean)
+        std = copy_first_entry(std)
+
 scale_mean = torch.tensor(0.0)
 scale_std = torch.tensor(255.0)
 
@@ -229,12 +254,39 @@ normalize = K.Normalize(mean=mean, std=std)
 scale = K.Normalize(mean=scale_mean, std=scale_std)
 
 
+def add_extra_channel(image_tensor, source_channel=0):
+    # Assuming 'image_tensor' is a PyTorch tensor with shape
+    # (batch_size, num_channels, height, width)
+
+    # Select the source channel to duplicate
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
+
+    # Generate copy of selected channel
+    extra_channel = original_channel.clone()
+
+    # Concatenate the extra channel to the original image along the second
+    # dimension (channel dimension)
+    augmented_tensor = torch.cat((image_tensor, extra_channel), dim=1)
+
+    return augmented_tensor
+
+
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
 ) -> Tuple[torch.Tensor]:
+    samp_image = sample["image"]
+    samp_mask = sample["mask"]
+    # add extra channel(s) to the images and masks
+    if samp_image.size(1) != model.in_channels:
+        for _ in range(model.in_channels - samp_image.size(1)):
+            samp_image = add_extra_channel(samp_image)
+            samp_mask = add_extra_channel(samp_mask)
+
     # send img and mask to device; convert y to float tensor for augmentation
-    X = sample["image"].to(device)
-    y = sample["mask"].type(torch.float32).to(device)
+    X = samp_image.to(device)
+    y = samp_mask.type(torch.float32).to(device)
 
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
     X = scale(X)
@@ -255,7 +307,7 @@ def train_setup(
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
                 "image": X[i].cpu(),
-                "mask": sample["mask"][i],
+                "mask": samp_mask[i],
                 "augmented_image": X_aug[i].cpu(),
                 "augmented_mask": y[i].cpu(),
             }
@@ -340,10 +392,17 @@ def test(
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
-            X = sample["image"].to(device)
+            samp_image = sample["image"]
+            samp_mask = sample["mask"]
+            # add an extra channel to the images and masks
+            if samp_image.size(1) != model.in_channels:
+                for _i in range(model.in_channels - samp_image.size(1)):
+                    samp_image = add_extra_channel(samp_image)
+                    samp_mask = add_extra_channel(samp_mask)
+            X = samp_image.to(device)
             X_scaled = scale(X)
             X = normalize(X_scaled)
-            y = sample["mask"].to(device)
+            y = samp_mask.to(device)
             y_squeezed = y[:, 0, :, :].squeeze()
 
             # compute prediction error
@@ -367,7 +426,7 @@ def test(
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "image": X_scaled[i].cpu(),
-                        "ground_truth": sample["mask"][i],
+                        "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
                     sample_fname = os.path.join(
