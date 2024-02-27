@@ -71,7 +71,10 @@ class SegmentationModel:
                     in_channels = weights_chans
 
                 weights_backbone = weights_module.split("_")[0]
-                if weights_backbone.lower() != backbone and backbone != "vit_small_patch16_224":
+                if (
+                    weights_backbone.lower() != backbone
+                    and backbone != "vit_small_patch16_224"
+                ):
                     raise ValueError(
                         f"Backbone for weights '{weights_backbone}' does not match {backbone}."  # noqa: B950
                     )
@@ -84,7 +87,6 @@ class SegmentationModel:
                     state_dict = get_weight(weights_attribute).get_state_dict(
                         progress=True
                     )
-                
 
             if model == "unet":
                 self.model = smp.Unet(
@@ -122,4 +124,3 @@ class SegmentationModel:
             if weights and weights is not True and model != "test_weights":
                 self.model.encoder.load_state_dict(state_dict)
             self.model.in_channels = in_channels
-            
