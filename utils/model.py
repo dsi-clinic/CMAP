@@ -119,7 +119,7 @@ class SegmentationModel:
                     f"Model type '{model}' is not valid. "
                     "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
                 )
-            if weights and weights is not True:
+            if weights and weights is not True and model != "test_weights":
                 self.model.encoder.load_state_dict(state_dict)
             self.model.in_channels = in_channels
             
