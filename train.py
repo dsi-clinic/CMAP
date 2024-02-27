@@ -227,8 +227,24 @@ elif aug_type == "all":
 else:
     aug = default_aug
 
+def copy_first_entry(a_list):
+    """copies the first entry in a list and appends to the end"""
+    first_entry = a_list[0]
+
+    # Append the copy to the end
+    a_list.append(first_entry)
+
+    return a_list
+
 mean = config.DATASET_MEAN
 std = config.DATASET_STD
+# add copies of first entry to DATASET_MEAN and DATASET_STD 
+# to match data in_channels
+if len(mean) != model.in_channels:
+        for _i in range(model.in_channels - len(mean)):
+            mean = copy_first_entry(mean)
+            std = copy_first_entry(std)
+
 scale_mean = torch.tensor(0.0)
 scale_std = torch.tensor(255.0)
 

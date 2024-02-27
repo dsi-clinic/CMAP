@@ -71,7 +71,7 @@ class SegmentationModel:
                     in_channels = weights_chans
 
                 weights_backbone = weights_module.split("_")[0]
-                if weights_backbone.lower() != backbone:
+                if weights_backbone.lower() != backbone and backbone != "vit_small_patch16_224":
                     raise ValueError(
                         f"Backbone for weights '{weights_backbone}' does not match {backbone}."  # noqa: B950
                     )
@@ -84,40 +84,42 @@ class SegmentationModel:
                     state_dict = get_weight(weights_attribute).get_state_dict(
                         progress=True
                     )
+                
 
-                if model == "unet":
-                    self.model = smp.Unet(
-                        encoder_name=backbone,
-                        encoder_weights="swsl" if weights is True else None,
-                        in_channels=in_channels,
-                        classes=num_classes,
-                    )
+            if model == "unet":
+                self.model = smp.Unet(
+                    encoder_name=backbone,
+                    encoder_weights="ssl" if weights is True else None,
+                    in_channels=in_channels,
+                    classes=num_classes,
+                )
 
-                elif model == "deeplabv3+":
-                    self.model = smp.DeepLabV3Plus(
-                        encoder_name=backbone,
-                        encoder_weights="imagenet" if weights is True else None,
-                        in_channels=in_channels,
-                        classes=num_classes,
-                    )
+            elif model == "deeplabv3+":
+                self.model = smp.DeepLabV3Plus(
+                    encoder_name=backbone,
+                    encoder_weights="imagenet" if weights is True else None,
+                    in_channels=in_channels,
+                    classes=num_classes,
+                )
 
-                elif model == "fcn":
-                    self.model = FCN(
-                        in_channels=in_channels,
-                        classes=num_classes,
-                        num_filters=num_filters,
-                    )
+            elif model == "fcn":
+                self.model = FCN(
+                    in_channels=in_channels,
+                    classes=num_classes,
+                    num_filters=num_filters,
+                )
 
-                elif model == "test_weights":
-                    self.model = timm.create_model(
-                        backbone, in_chans=in_channels, num_classes=num_classes
-                    )
+            elif model == "test_weights":
+                self.model = timm.create_model(
+                    backbone, in_chans=in_channels, num_classes=num_classes
+                )
 
-                else:
-                    raise ValueError(
-                        f"Model type '{model}' is not valid. "
-                        "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
-                    )
-
-                self.model.in_channels = in_channels
+            else:
+                raise ValueError(
+                    f"Model type '{model}' is not valid. "
+                    "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
+                )
+            if weights and weights is not True:
                 self.model.encoder.load_state_dict(state_dict)
+            self.model.in_channels = in_channels
+            
