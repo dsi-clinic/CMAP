@@ -115,17 +115,17 @@ The below results were obtained with these specifications:
 
 ### example outputs
 The model can detect ponds fairly accurately:
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
+![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
+![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
+![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
 
 There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
+![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
+![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
 
 There also needs to be adjustments made to the model to account for false positives:
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
-![test_sample_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
+![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
 
 ## Collaborators
 Matthew Rubenstein - rubensteinm@uchicago.edu
