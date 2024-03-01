@@ -1,34 +1,33 @@
+"""
+To run: from repo directory (2024-winter-cmap)
+> python preproc_kc.py configs.<config>
+"""
+
+import argparse
 import importlib.util
 import os
 from typing import NoReturn
 
 import geopandas as gpd
 
-from . import repo_root
+from utils.create_shape_mask import create_mask
+from utils.get_naip_images import get_images
 
-spec = importlib.util.spec_from_file_location(
-    "config", os.path.join(repo_root, "configs", "dsi.py")
+parser = argparse.ArgumentParser(
+    description="Preprocess Kane County data to generate masks and get "
+    + "corresponding NAIP images"
 )
-config = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(config)
-
-spec = importlib.util.spec_from_file_location(
-    "get_naip_images", os.path.join(repo_root, "utils", "get_naip_images.py")
-)
-get_naip_images = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(get_naip_images)
-get_images = get_naip_images.get_images
-
-spec = importlib.util.spec_from_file_location(
-    "create_shape_mask",
-    os.path.join(repo_root, "utils", "create_shape_mask.py"),
-)
-create_shape_mask = importlib.util.module_from_spec(spec)
-spec.loader.exec_module(create_shape_mask)
-create_mask = create_shape_mask.create_mask
+parser.add_argument("config", type=str, help="Path to the configuration file")
+args = parser.parse_args()
+spec = importlib.util.spec_from_file_location(args.config)
+config = importlib.import_module(args.config)
 
 
 def create_kane_county_masks() -> NoReturn:
+    """
+    Creates masks for the Kane County stormwater structures dataset (layer 4
+    of KC_StormwaterDataJan2024.gdb.zip)
+    """
     shape_fpath = os.path.join(
         config.KC_SHAPE_DIR, "KC_StormwaterDataJan2024.gdb.zip"
     )
@@ -54,12 +53,14 @@ def create_kane_county_masks() -> NoReturn:
 
 
 def get_kane_county_images() -> NoReturn:
+    """
+    Retrieves NAIP images that have any intersection with shapes in the Kane
+    County stormwater structures dataset (layer 4 of
+    KC_StormwaterDataJan2024.gdb.zip)
+    """
     data_fpath = os.path.join(
         config.KC_SHAPE_DIR, "KC_StormwaterDataJan2024.gdb.zip"
     )
     layer = 4
     save_dir = config.KC_IMAGE_DIR
     get_images("image", data_fpath, save_dir, layer)
-
-
-create_kane_county_masks()
