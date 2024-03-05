@@ -117,7 +117,7 @@ def plot_from_tensors(
                     interpolation="none",
                 )
             unique_labels = torch.cat((unique, unique_labels)).unique()
-        ax.set_title(name)
+        ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
     # create the legend if labels were provided
