@@ -91,7 +91,7 @@ class SegmentationModel:
             if model == "unet":
                 self.model = smp.Unet(
                     encoder_name=backbone,
-                    encoder_weights="ssl" if weights is True else None,
+                    encoder_weights="swsl" if weights is True else None,
                     in_channels=in_channels,
                     classes=num_classes,
                 )

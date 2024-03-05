@@ -8,10 +8,10 @@ KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/top-structures-masks")
 OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
 
 # model selection
-MODEL = "unet"
+MODEL = "deeplabv3+"
 BACKBONE = "resnet50"
 # check backbone, mean, and std when setting weights
-WEIGHTS = "ResNet50_Weights.LANDSAT_TM_TOA_SIMCLR"
+WEIGHTS = True
 
 # model hyperparams
 DATASET_MEAN = [
