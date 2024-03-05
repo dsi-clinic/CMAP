@@ -5,7 +5,7 @@ To run:
 
 import argparse
 import os
-from typing import NoReturn, Tuple
+from typing import Tuple
 
 import cv2
 import numpy as np
@@ -33,7 +33,7 @@ def calculate_image_stats(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
     return mean, std
 
 
-def main(root: str) -> NoReturn:
+def main(root: str) -> None:
     """
     Calculate and print the mean and standard deviation of all images in a
     directory.

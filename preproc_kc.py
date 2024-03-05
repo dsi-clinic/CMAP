@@ -6,7 +6,6 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import importlib.util
 import os
-from typing import NoReturn
 
 import geopandas as gpd
 
@@ -23,7 +22,7 @@ spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
 
 
-def create_kane_county_masks() -> NoReturn:
+def create_kane_county_masks() -> None:
     """
     Creates masks for the Kane County stormwater structures dataset (layer 4
     of KC_StormwaterDataJan2024.gdb.zip)
@@ -52,7 +51,7 @@ def create_kane_county_masks() -> NoReturn:
             continue
 
 
-def get_kane_county_images() -> NoReturn:
+def get_kane_county_images() -> None:
     """
     Retrieves NAIP images that have any intersection with shapes in the Kane
     County stormwater structures dataset (layer 4 of

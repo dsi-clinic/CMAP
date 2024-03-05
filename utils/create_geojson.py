@@ -1,6 +1,6 @@
 import json
 import os
-from typing import Dict, List, NoReturn
+from typing import Dict, List
 
 import geopandas as gpd
 import rasterio
@@ -14,7 +14,7 @@ def create_geojson(
     save_dir: str,
     label_col: str,
     labels: Dict[str, int],
-) -> NoReturn:
+) -> None:
     """
     Creates a GeoJSON file containing polygons for shapefile features
     that intersect with a given image.
