@@ -228,8 +228,20 @@ else:
     aug = default_aug
 
 
-def copy_first_entry(a_list):
-    """copies the first entry in a list and appends to the end"""
+def copy_first_entry(a_list: list) -> list:
+    """
+    Copies the first entry in a list and appends it to the end.
+
+    Parameters
+    ----------
+    a_list : list
+        The list to modify
+
+    Returns
+    -------
+    list
+        The modified list
+    """
     first_entry = a_list[0]
 
     # Append the copy to the end
@@ -249,15 +261,30 @@ if len(mean) != model.in_channels:
 
 scale_mean = torch.tensor(0.0)
 scale_std = torch.tensor(255.0)
-
 normalize = K.Normalize(mean=mean, std=std)
 scale = K.Normalize(mean=scale_mean, std=scale_std)
 
 
-def add_extra_channel(image_tensor, source_channel=0):
-    # Assuming 'image_tensor' is a PyTorch tensor with shape
-    # (batch_size, num_channels, height, width)
+def add_extra_channel(
+    image_tensor: torch.Tensor, source_channel: int = 0
+) -> torch.Tensor:
+    """
+    Adds an additional channel to an image by copying an existing channel.
 
+    Parameters
+    ----------
+    image_tensor : torch.Tensor
+        A tensor containing image data. Expected shape is
+        (batch, channels, h, w)
+
+    source_channel : int
+        The index of the channel to be copied
+
+    Returns
+    -------
+    torch.Tensor
+        A modified tensor with added channels
+    """
     # Select the source channel to duplicate
     original_channel = image_tensor[
         :, source_channel : source_channel + 1, :, :
@@ -276,6 +303,26 @@ def add_extra_channel(image_tensor, source_channel=0):
 def train_setup(
     sample: DefaultDict[str, Any], epoch: int, batch: int
 ) -> Tuple[torch.Tensor]:
+    """
+    Sets up for the training step by sending images and masks to device,
+    applying augmentations, and saving training sample images.
+
+    Parameters
+    ----------
+    sample : DefaultDict[str, Any]
+        A dataloader sample containing image, mask, and bbox data
+
+    epoch : int
+        The current epoch
+
+    batch : int
+        The current batch
+
+    Returns
+    -------
+    Tuple[torch.Tensor]
+        Augmented image and mask tensors to be used in the train step
+    """
     samp_image = sample["image"]
     samp_mask = sample["mask"]
     # add extra channel(s) to the images and masks
@@ -333,24 +380,36 @@ def train(
     jaccard: Metric,
     optimizer: Optimizer,
     epoch: int,
-):
+) -> None:
+    """
+    Executes a training step for the model
+
+    Parameters
+    ----------
+    dataloder : DataLoader
+        Dataloader for the training data
+
+    model : Module
+        A PyTorch model
+
+    loss_fn : Module
+        A PyTorch loss function
+
+    jaccard : Metric
+        The metric to be used for evaluation, specifically the Jaccard Index
+
+    optimizer : Optimizer
+        The optimizer to be used for training
+
+    epoch : int
+        The current epoch
+    """
     num_batches = len(dataloader)
     model.train()
     jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         X, y = train_setup(sample, epoch, batch)
-        # The following comments provide pseudocode to theoretically filter tiles
-        # The problem is that X here is a batch, not a specific image, so it won't work
-        # Ideally, we filter before sending the dataset to the dataloader.
-        # total_pixels = X.size
-        # label_count = torch.sum(X != 0)
-        # percentage_cover = (label_count / total_pixels) * 100
-
-        # Filter patches based on weight criteria
-        # if percentage_cover <= 1:
-        # Skip this sample if weight criteria is not met
-        #    continue
 
         # compute prediction error
         outputs = model(X)
@@ -385,7 +444,35 @@ def test(
     jaccard: Metric,
     epoch: int,
     plateau_count: int,
-):
+) -> float:
+    """
+    Executes a testing step for the model and saves sample output images
+
+    Parameters
+    ----------
+    dataloder : DataLoader
+        Dataloader for the testing data
+
+    model : Module
+        A PyTorch model
+
+    loss_fn : Module
+        A PyTorch loss function
+
+    jaccard : Metric
+        The metric to be used for evaluation, specifically the Jaccard Index
+
+    epoch : int
+        The current epoch
+
+    plateau_count : int
+        The number of epochs the loss has been plateauing
+
+    Returns
+    -------
+    float
+        The test loss for the epoch
+    """
     num_batches = len(dataloader)
     model.eval()
     jaccard.reset()

@@ -1,10 +1,11 @@
 # 2024-winter-cmap
 
 ## Project Background
+
 No comprehensive inventory of stormwater storage and green infrastructure (GI) assets exists across northeastern Illinois. Understanding the location of these assets is critical to ensuring proper maintenance as well as building a better understanding of the potential impacts to water quality and stormwater management. An inventory could help county and municipal stormwater engineers, public works officials, and others ensure proper maintenance. The data could also inform the development of watershed-based plans and resilience plans.
 
 The Chicago Metropolitan Agency for Planning (CMAP) is interested in using deep learning to map and identify locations of stormwater storage and other related geographic features throughout Chicago and the surrounding area.
-To begin the project, CMAP has provided labeled geographic features in Kane County, Illinois, to be used to create a predictive deep learning model.
+To begin the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to be used to create a predictive deep learning model.
 The code in this repo does a few things:
 1. Creates masks of geographic features across Kane County.
 2. Will train and test various predictive deep learning models on surrounding geographies.
@@ -14,15 +15,16 @@ The code in this repo does a few things:
 
 There are several tasks associated with this project:
 
-1. Improve climate resiliency in northeastern Illinois with deep learning for mapping stormwater and green infrastructure from aerial data
+1. Improve climate resiliency in northeastern Illinois with deep learning for mapping stormwater and green infrastructure from aerial data.
 2. Develop deep learning models for aerial imaging data, targeting green infrastructure and stormwater areas.
 3. Train a model to identify different types of locations (for example, wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
 This will be accomplished within the following pipeline structure:
-1. Utilizing a custom subclass of the RasterDataset (utils/kc.py), masks are created for Kane County images (data/kane_county_utils.py) utilizing a custom subclass of the RasterDataset (utils/kc.py), and if necessary, original NAIP images are downloaded (utils/get_naip_images.py)
-2. A training loop (train.py) takes in configurations (configs/dsi.py) and is assigned to the cluster (.job), utilizing the model defined in (utils/model.py)
+1. Masks of shape data are created for Kane County stormwater structures (`preproc_kc.py`) and if necessary, original NAIP images are downloaded (`utils/get_naip_images.py`).
+2. A training loop (`train.py`) takes in configurations (`configs/dsi.py`) and is assigned to the cluster (.job), utilizing the model defined `utils/model.py` and the custom Raster Dataset defined in `utils/kc.py`.
 
 ## Usage
+
 Before running the repo (see details below) you will need to do the following:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
@@ -41,9 +43,10 @@ Before running the repo (see details below) you will need to do the following:
     ```
 
 ### Slurm
+
 For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
-To run this repo on the slurm, after setting up your conda environment, you can use the following submit script to run a training loop:
+To run this repo on the Slurm cluster after setting up your conda environment, you can use the following submit script to run a training loop:
 ```
 #!/bin/bash -l
 #
@@ -59,29 +62,39 @@ To run this repo on the slurm, after setting up your conda environment, you can 
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
 
-conda activate cmap
-
-conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
+source /home/YOUR_USERNAME/miniconda3/bin/activate cmap
 
 export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
-pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
+cd /home/YOUR_USERNAME/2024-winter-cmap
+
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] $SLURM_ARRAY_TASK_ID
+```
+
+Or, to run in an interactive session:
+```
+srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
+
+conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
-python -m train configs.dsi --experiment_name [<ExperimentName>] $SLURM_ARRAY_TASK_ID
+
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>]
 ```
 
 ## Git Usage
 
-* Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
+Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
 
 ## Repository Structure
 
 ### utils
+
 Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
 
 ### notebooks
-Contains short, clean notebooks to demonstrate analysis. Notebooks should be documented and a short description added to the [README.md](notebooks/README.md) file.
+
+Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
 
 ### data
 
@@ -89,10 +102,11 @@ Contains details of acquiring all raw data used in repository. If data is small 
 
 If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory. 
 
-This [README.md file](/data/README.md) should be kept up to date.
+Source attribution and descriptions included in the [README](data/README.md) file.
 
 ### output
-Should contain work product generated by the analysis. Keep in mind that results should (generally) be excluded from the git repository.
+
+Contains example model output images.
 
 ## Preliminary Results
 The below results were obtained with these specifications:
@@ -129,6 +143,6 @@ There also needs to be adjustments made to the model to account for false positi
 ![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
 
 ## Collaborators
-Matthew Rubenstein - rubensteinm@uchicago.edu
-Tamami Tamura - tamamitamura@uchicago.edu
-Spencer Ellis - sjne@uchicago.edu
+* Matthew Rubenstein - rubensteinm@uchicago.edu
+* Tamami Tamura - tamamitamura@uchicago.edu
+* Spencer Ellis - sjne@uchicago.edu
