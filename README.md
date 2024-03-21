@@ -146,3 +146,4 @@ There also needs to be adjustments made to the model to account for false positi
 - Matthew Rubenstein - rubensteinm@uchicago.edu
 - Spencer Ellis - sjne@uchicago.edu
 - Tamami Tamura - tamamitamura@uchicago.edu
+- Mingyan Wang - mingyan@uchicago.edu
