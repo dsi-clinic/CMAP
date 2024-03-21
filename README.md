@@ -143,6 +143,6 @@ There also needs to be adjustments made to the model to account for false positi
 ![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
 
 ## Collaborators
-* Matthew Rubenstein - rubensteinm@uchicago.edu
-* Tamami Tamura - tamamitamura@uchicago.edu
-* Spencer Ellis - sjne@uchicago.edu
+- Matthew Rubenstein - rubensteinm@uchicago.edu
+- Spencer Ellis - sjne@uchicago.edu
+- Tamami Tamura - tamamitamura@uchicago.edu
