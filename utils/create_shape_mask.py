@@ -1,5 +1,5 @@
 import os
-from typing import Dict, List, NoReturn
+from typing import Dict, List
 
 import geopandas as gpd
 import numpy as np
@@ -16,7 +16,7 @@ def create_mask(
     save_dir: str,
     label_col: str,
     labels: Dict[str, int],
-) -> NoReturn:
+) -> None:
     """
     Creates a mask for shapefile features that intersect with a given image.
 

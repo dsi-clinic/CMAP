@@ -1,5 +1,5 @@
 import os
-from typing import Any, Dict, Iterator, NoReturn
+from typing import Any, Dict, Iterator
 
 import fiona
 import planetary_computer
@@ -164,7 +164,7 @@ def get_image_url(
 
 def download_image(
     url: str, save_dir: str, img_type: str, id: str = None
-) -> NoReturn:
+) -> None:
     """
     Downloads images from specified URL.
 
