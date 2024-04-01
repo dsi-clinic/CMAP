@@ -1,8 +1,8 @@
 ## Literature Review and Report for augmentation
 
 ### Resources:
-possible technique[https://github.com/kornia/kornia-examples/blob/master/data_augmentation.ipynb]
-Kornia package[https://kornia.readthedocs.io/en/latest/augmentation.html]
+[Possible technique](https://github.com/kornia/kornia-examples/blob/master/data_augmentation.ipynb)  
+[Kornia package](https://kornia.readthedocs.io/en/latest/augmentation.html)
 
 * Geometric Transformation
     * Horizontal / Vertical flip: highest accuracy
