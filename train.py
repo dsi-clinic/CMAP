@@ -218,8 +218,8 @@ all_aug = AugmentationSequential(
 )
 
 
-#testing - both modified from Gaussian
-test_color =  AugmentationSequential(
+# testing - both modified from Gaussian
+test_color = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
     K.ColorJitter(0.5, 0.5),
@@ -231,7 +231,7 @@ test_color =  AugmentationSequential(
 test_blur = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
-    K.RandomBoxBlur(keepdim = True),
+    K.RandomBoxBlur(keepdim=True),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
     keepdim=True,
@@ -244,9 +244,9 @@ elif aug_type == "gauss":
     aug = gauss_aug
 elif aug_type == "all":
     aug = all_aug
-elif aug_type == 'color':
+elif aug_type == "color":
     aug = test_color
-elif aug_type == 'blur':
+elif aug_type == "blur":
     aug = test_blur
 else:
     aug = default_aug
