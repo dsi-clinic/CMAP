@@ -1,52 +1,64 @@
-from osgeo import gdal
+""""
+***************convert .gdb file to .tif file****************
+"""
+import argparse
+import importlib.util
+import os
+
+from osgeo import gdal, ogr
 # https://gis.stackexchange.com/questions/28966/python-gdal-package-missing-header-file-when-installing-via-pip
 
-# Path to your .adf file
-adf_file = "path/to/your/file.adf"
+parser = argparse.ArgumentParser(
+    description="Preprocess DEM data in .gdb format to generate masks"
+)
+args = parser.parse_args()
+config = importlib.import_module(args.config)
 
-# Open the .adf file
-dataset = gdal.Open(adf_file)
 
-# Check if the dataset was successfully opened
-if dataset is None:
-    print("Failed to open the dataset")
-    exit(1)
 
-# Get the raster band (assuming there is only one band)
-band = dataset.GetRasterBand(1)
+def create_dem_mask() -> None:
+    """
+    Creates masks for the Kane County DEM data stord in .gdb format
+    """
+    # Define paths
+    input_gdb = os.path.join(
+        config.KC_DEM_DIR, "Kane_DEM.gdb"
+    )
+    input_feature_class = "name_of_your_feature_class"
+    output_tif = "output_path.tif"
 
-# Get the elevation data for each pixel
-elevation_data = band.ReadAsArray()
+    # Open the input geodatabase
+    driver = ogr.GetDriverByName("OpenFileGDB")
+    gdb = driver.Open(input_gdb, 0)  # Change 0 to 1 for read-only access
 
-# Close the dataset
-dataset = None
+    # Get the input layer
+    layer = gdb.GetLayerByName(input_feature_class)
 
-# Print the elevation data for each pixel
-print("Elevation data:")
-print(elevation_data)
+    # Get extent and resolution
+    x_min, x_max, y_min, y_max = layer.GetExtent()
+    x_res = 100  # Define resolution in X direction
+    y_res = 100  # Define resolution in Y direction
+
+    # Create the output raster
+    target_ds = gdal.GetDriverByName('GTiff').Create(output_tif, int((x_max - x_min) / x_res), int((y_max - y_min) / y_res), 1, gdal.GDT_Float32)
+
+    # Set the projection
+    target_ds.SetProjection(layer.GetSpatialRef().ExportToWkt())
+
+    # Set the geotransform
+    target_ds.SetGeoTransform((x_min, x_res, 0, y_max, 0, -y_res))
+
+    # Rasterize
+    gdal.RasterizeLayer(target_ds, [1], layer, burn_values=[0], options=["ATTRIBUTE=Elevation"])
+
+    # Close datasets
+    target_ds = None
+    gdb = None
+
+    print("Conversion completed successfully.")
 
 """"
-***************convert .adf file to .tif file****************
-"""
-from osgeo import gdal
-
-# Path to the input .adf file
-input_adf = "input.adf"
-
-# Path to the output .tif file
-output_tif = "output.tif"
-
-# Open the .adf file
-dataset = gdal.Open(input_adf)
-
-# Convert to GeoTIFF (.tif) format and save
-gdal.Translate(output_tif, dataset, format="GTiff")
-
-# Close the dataset
-dataset = None
-
-""""
-***************create multi band raster dataset by merging .tif files**************
+***************define custom Raster Dataset .tif files**************
 """
 import rasterio
 from rasterio.merge import merge
