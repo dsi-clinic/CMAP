@@ -3,7 +3,7 @@
 ### Resources:
 [Possible technique](https://github.com/kornia/kornia-examples/blob/master/data_augmentation.ipynb)  
 [Kornia package](https://kornia.readthedocs.io/en/latest/augmentation.html)
-[Pytorch package]( https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#sphx-glr-auto-examples-transforms-plot-transforms-illustrations-py)
+[Pytorch package]( https://pytorch.org/vision/main/auto_examples/transforms/plot_transforms_illustrations.html#sphx-glr-auto-examples-transforms-plot-transforms-illustrations-py)  
 reference articles
 * [Image Augmentation for Satellite Images](https://arxiv.org/pdf/2207.14580.pdf)
 * [DATA AUGMENTATION APPROACHES FOR SATELLITE IMAGE SUPER-RESOLUTION](https://isprs-annals.copernicus.org/articles/IV-2-W7/47/2019/isprs-annals-IV-2-W7-47-2019.pdf)
