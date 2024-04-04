@@ -45,6 +45,8 @@ parser.add_argument(
 
 # Current potential aug_type args: "all", "default", "plasma", "gauss"
 aug_types = "'all', 'default', 'plasma', 'gauss'"
+
+# adding arguments
 parser.add_argument(
     "--aug_type",
     type=str,
@@ -58,6 +60,15 @@ parser.add_argument(
     help="Ratio of split; enter the size of the train split as an int out of 100",
     default="80",
 )
+
+parser.add_argument(
+    "--tune",
+    type=str,
+    help="Whether to apply hyperparameter tuning with wandb; enter True or False",
+    default=False,
+)
+
+# parsing arguments
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
@@ -72,6 +83,11 @@ if aug_type is None:
 split = float(int(args.split) / 100)
 if split is None:
     split = 0.80
+
+# tuning with wandb
+wandb_tune = args.tune
+if wandb_tune:
+    pass  # implement the initiation of wandb
 
 # set output path and exit run if path already exists
 out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
