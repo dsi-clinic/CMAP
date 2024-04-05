@@ -1,5 +1,11 @@
 """"
 ***************convert .gdb file to .tif file****************
+* must have gdal installed
+* first run 
+    gdal_translate -of GTiff "input.gdb" "output.tif" -b <band-number>
+in command line to convert .gdb file into .tif file.
+* replace "input.gdb" and "output.tif" in above code with file paths to
+input .gdb file and output .tif files
 """
 import argparse
 import importlib.util
@@ -9,17 +15,15 @@ from osgeo import gdal, ogr
 # https://gis.stackexchange.com/questions/28966/python-gdal-package-missing-header-file-when-installing-via-pip
 
 parser = argparse.ArgumentParser(
-    description="Preprocess DEM data in .gdb format to generate masks"
+    description="Preprocess DEM data in .tif format to generate a raster layer"
 )
 args = parser.parse_args()
 config = importlib.import_module(args.config)
 
 
-
+"""
 def create_dem_mask() -> None:
-    """
-    Creates masks for the Kane County DEM data stord in .gdb format
-    """
+
     # Define paths
     input_gdb = os.path.join(
         config.KC_DEM_DIR, "Kane_DEM.gdb"
@@ -56,6 +60,7 @@ def create_dem_mask() -> None:
     gdb = None
 
     print("Conversion completed successfully.")
+"""
 
 """"
 ***************define custom Raster Dataset .tif files**************
@@ -65,7 +70,7 @@ from rasterio.merge import merge
 from rasterio.plot import show
 
 # Paths to the input raster files
-input_files = ["band1.tif", "band2.tif", "band3.tif"]
+input_files = ["/net/projects/cmap/data/kane-county-data/KC_DEM_2017/KaneDEM.tif"]
 
 # Open each raster file and read its data
 src_files_to_mosaic = []
