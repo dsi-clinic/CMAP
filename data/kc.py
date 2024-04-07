@@ -13,8 +13,7 @@ class KaneCounty(RasterDataset):
         (?:_(?P<processing_date>\d+))?
         \..*$
     """
-    all_bands = ["R", "G", "B", "NIR"]
-    rgb_bands = ["R", "G", "B"]
+    all_bands = ["Label"]
     is_image = False
     colors = {
         0: (0, 0, 0, 0),
