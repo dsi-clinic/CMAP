@@ -27,7 +27,9 @@ def create_kane_county_masks() -> None:
     Creates masks for the Kane County stormwater structures dataset (layer 4
     of KC_StormwaterDataJan2024.gdb.zip)
     """
-    shape_fpath = os.path.join(config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip")
+    shape_fpath = os.path.join(
+        config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip"
+    )
     layer = 4
     gdf = gpd.read_file(shape_fpath, layer=layer)
     labels = {
@@ -41,7 +43,9 @@ def create_kane_county_masks() -> None:
     for img_fname in os.listdir(img_root):
         try:
             img_fpath = os.path.join(img_root, img_fname)
-            create_mask(img_fpath, gdf, config.KC_MASK_ROOT, "BasinType", labels=labels)
+            create_mask(
+                img_fpath, gdf, config.KC_MASK_ROOT, "BasinType", labels=labels
+            )
         except Exception:
             continue
 
@@ -52,7 +56,9 @@ def get_kane_county_images() -> None:
     County stormwater structures dataset (layer 4 of
     KC_StormwaterDataJan2024.gdb.zip)
     """
-    data_fpath = os.path.join(config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip")
+    data_fpath = os.path.join(
+        config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip"
+    )
     layer = 4
     save_dir = config.KC_IMAGE_ROOT
     get_images("image", data_fpath, save_dir, layer)
