@@ -5,7 +5,6 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import shapely
-from einops import rearrange
 from rasterio.mask import mask
 from shapely.geometry import box
 
