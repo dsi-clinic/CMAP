@@ -36,3 +36,8 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+
+# for wandb
+WANDB_API = "46825e107e95377f869464bdf74ff7686ae18442"
+COLOR_BRIGHT = 0.2
+COLOR_CONTRST = 0.3
