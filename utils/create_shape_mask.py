@@ -58,8 +58,11 @@ def create_mask(
             out_img_unique = np.where(out_img != 0, labels[label], out_img)
             output = np.maximum(output, out_img_unique)
 
-    # take one layer because all layers are the same
-    msk = np.array([output[0]]).astype("uint8")
+   # transpose mask to match image dimensions
+    msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
+        "uint8"
+    )
+    msk = rearrange[msk, "h w c -> c h w"]
 
     # set output filename and metadata
     if not os.path.exists(save_dir):
@@ -73,7 +76,7 @@ def create_mask(
             "height": output.shape[1],
             "width": output.shape[2],
             "transform": out_transform,
-            "count": 1,
+            "count": 4,
             "crs": crs,
         }
     )
