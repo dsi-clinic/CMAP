@@ -207,7 +207,8 @@ class BalancedGridGeoSampler(GeoSampler):
 
 
 def get_bounding_box(bounds, size, roi):
-    """Compute the bounding box of a patch sampled from a tile which is smaller than the given size.
+    """Compute the bounding box of a patch sampled from a tile which is
+        smaller than the given size.
     Args:
         bounds: bounding box of tile
         size: size of output patch

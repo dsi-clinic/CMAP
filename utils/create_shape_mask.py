@@ -44,7 +44,9 @@ def create_mask(
         crs = src.crs
 
         # extract intersecting shapes
-        shapes = get_intersecting_shapes(bbox, crs, gdf, label_col, set(labels.keys()))
+        shapes = get_intersecting_shapes(
+            bbox, crs, gdf, label_col, set(labels.keys())
+        )
 
         # create empty mask and copy metadata from image
         output = np.zeros((src.count, src.height, src.width), dtype=np.uint8)
