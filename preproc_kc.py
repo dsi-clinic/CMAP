@@ -9,7 +9,7 @@ import os
 
 import geopandas as gpd
 
-from utils.create_shape_mask import create_mask
+from utils.create_shape_mask import create_separate_masks
 from utils.get_naip_images import get_images
 
 parser = argparse.ArgumentParser(
@@ -44,7 +44,7 @@ def create_kane_county_masks() -> None:
     for img_fname in os.listdir(img_root):
         try:
             img_fpath = os.path.join(img_root, img_fname)
-            create_mask(
+            create_separate_masks(
                 img_fpath, gdf, config.KC_MASK_DIR, "BasinType", labels=labels
             )
         except Exception:

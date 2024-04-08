@@ -21,14 +21,14 @@ from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_splitting, stack_samples
-from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
+from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
+from utils.sampler import BalancedRandomBatchGeoSampler, BalancedGridGeoSampler
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -106,14 +106,12 @@ naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_MASK_ROOT)
 dataset = naip & kc
 
-train_dataset, test_dataset = random_bbox_splitting(dataset, [split, 1 - split])
+train_dataset, test_dataset = random_bbox_assignment(dataset, [split, 1 - split])
 
-train_sampler = RandomBatchGeoSampler(
-    dataset=train_dataset,
-    size=config.PATCH_SIZE,
-    batch_size=config.BATCH_SIZE,
+train_sampler = BalancedRandomBatchGeoSampler(
+    train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE
 )
-test_sampler = GridGeoSampler(
+test_sampler = BalancedGridGeoSampler(
     dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
 )
 
