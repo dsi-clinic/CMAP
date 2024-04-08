@@ -31,6 +31,16 @@ from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 
+sweep_config = {
+    "method": "bayes",
+    "metric": {"goal": "maximize", "name": "jaccard_index"},
+    "parameters": {
+        "BATCH_SIZE": {"values": [16, 32, 64]},
+        "COLOR_BRIGHT": {"values": [0.2, 0.3, 0.4]},
+        "COLOR_CONTRST": {"values": [0.2, 0.3, 0.4]},
+    },
+}
+
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
     description="Train a segmentation model to predict stormwater storage "
@@ -82,6 +92,7 @@ device = (
 
 
 def arg_parsing():
+    sweep_id = None
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
@@ -92,9 +103,15 @@ def arg_parsing():
     split = float(int(args.split) / 100)
     if split is None:
         split = 0.80
+
     # tuning with wandb
     wandb_tune = args.tune
-    return exp_name, aug_type, split, wandb_tune
+    if wandb_tune:
+        print("wandb tuning")
+        wandb.login(key=config.WANDB_API)
+        sweep_id = wandb.sweep(sweep_config, project="cmap_train")
+
+    return exp_name, aug_type, split, wandb_tune, sweep_id
 
 
 def data_prep(exp_name):
@@ -173,6 +190,7 @@ def create_model():
         num_classes=config.NUM_CLASSES,
         weights=config.WEIGHTS,
     ).model.to(device)
+    print(model.in_channels)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
@@ -307,7 +325,7 @@ def copy_first_entry(a_list: list) -> list:
     return a_list
 
 
-def normalize(model):
+def normalize_func(model):
     mean = config.DATASET_MEAN
     std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
@@ -366,7 +384,6 @@ def train_setup(
     aug_type: str,
     wandb_tune: bool,
     train_images_root,
-    scale,
     config=config,
 ) -> Tuple[torch.Tensor]:
     """
@@ -393,6 +410,8 @@ def train_setup(
     samp_image = sample["image"]
     samp_mask = sample["mask"]
     model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+
+    normalize, scale = normalize_func(model)
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
@@ -405,13 +424,6 @@ def train_setup(
 
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
     X = scale(X)
-
-    if wandb_tune:
-        print("wandb tuning")
-        wandb.login(key=config.WANDB_API)
-        wandb.init(config=config)
-        config = wandb.config
-        print(config.PATIENCE)
 
     # augment img and mask with same augmentations
     if aug_type == "color":
@@ -488,7 +500,7 @@ def train(
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         X, y = train_setup(
-            sample, epoch, batch, aug_type, wandb_tune, train_images_root, scale
+            sample, epoch, batch, aug_type, wandb_tune, train_images_root
         )
 
         # compute prediction error
@@ -515,6 +527,7 @@ def train(
     writer.add_scalar("Loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info(f"Jaccard Index: {final_jaccard}")
+    return final_jaccard
 
 
 def test(
@@ -568,6 +581,7 @@ def test(
                     samp_image = add_extra_channel(samp_image)
                     samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
+            normalize, scale = normalize_func(model)
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
@@ -645,9 +659,14 @@ def train_epoch(
     # How long it's been plateauing
     plateau_count = 0
 
+    if wandb_tune:
+        wandb.init(config=wandb.config)
+
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        train(train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1)
+        final_jaccard = train(
+            train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1
+        )
         test_loss = test(
             test_dataloader,
             model,
@@ -673,15 +692,22 @@ def train_epoch(
                     f"Loss Plateau: {t} epochs, reached patience of {patience}"
                 )
                 break
+
+        if wandb_tune:
+            wandb.log({"jaccard_index": final_jaccard}, step=t)
     print("Done!")
     writer.close()
 
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
+    if wandb_tune:
+        wandb.finish()
+        wandb.agent(sweep_id, train_epoch, count=20)
+
 
 # executing everything
-exp_name, aug_type, split, wandb_tune = arg_parsing()
+exp_name, aug_type, split, wandb_tune, sweep_id = arg_parsing()
 
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 train_dataloader, test_dataloader = build_dataset(split)
@@ -692,7 +718,7 @@ train_dataloader, test_dataloader = build_dataset(split)
     test_jaccard,
     optimizer,
 ) = create_model()
-norm_func, scale = normalize(model)
+norm_func, scale = normalize_func(model)
 train_epoch(
     writer,
     train_dataloader,
