@@ -58,7 +58,7 @@ def create_mask(
             out_img_unique = np.where(out_img != 0, labels[label], out_img)
             output = np.maximum(output, out_img_unique)
 
-   # transpose mask to match image dimensions
+    # transpose mask to match image dimensions
     msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
         "uint8"
     )
@@ -167,7 +167,9 @@ def create_separate_masks(
         crs = src.crs
 
         # extract intersecting shapes
-        shapes = get_intersecting_shapes(bbox, crs, gdf, label_col, set(labels.keys()))
+        shapes = get_intersecting_shapes(
+            bbox, crs, gdf, label_col, set(labels.keys())
+        )
 
         # create mask for each label
         for label in shapes:

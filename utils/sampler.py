@@ -95,12 +95,18 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                     or bounds.maxy - bounds.miny >= self.size[0]
                 ):
                     # Choose random bounding box within that tile
-                    bounds = get_random_bounding_box(bounds, self.size, self.res)
-                
+                    bounds = get_random_bounding_box(
+                        bounds, self.size, self.res
+                    )
+
                 # process the bounding box if it is small or out of bound
-                minx, maxx, miny, maxy = get_bounding_box(bounds, self.size, self.roi)
+                minx, maxx, miny, maxy = get_bounding_box(
+                    bounds, self.size, self.roi
+                )
                 batch.append(
-                    BoundingBox(minx, maxx, miny, maxy, bounds.mint, bounds.maxt)
+                    BoundingBox(
+                        minx, maxx, miny, maxy, bounds.mint, bounds.maxt
+                    )
                 )
 
             yield batch
@@ -198,11 +204,16 @@ class BalancedGridGeoSampler(GeoSampler):
                         minx = bounds.minx + j * self.stride[1]
                         maxx = minx + self.size[1]
                         if maxx > self.roi.maxx:
-                            minx, maxx = self.roi.maxx - self.size[1], self.roi.maxx
+                            minx, maxx = (
+                                self.roi.maxx - self.size[1], 
+                                self.roi.maxx
+                            )
 
                         yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
             else:
-                minx, maxx, miny, maxy = get_bounding_box(bounds, self.size, self.roi)
+                minx, maxx, miny, maxy = get_bounding_box(
+                    bounds, self.size, self.roi
+                )
                 yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
 
     def __len__(self) -> int:

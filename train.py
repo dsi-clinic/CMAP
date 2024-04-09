@@ -28,7 +28,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
-from utils.sampler import BalancedRandomBatchGeoSampler, BalancedGridGeoSampler
+from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
