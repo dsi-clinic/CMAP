@@ -92,7 +92,6 @@ device = (
 
 
 def arg_parsing():
-    sweep_id = None
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
@@ -109,9 +108,8 @@ def arg_parsing():
     if wandb_tune:
         print("wandb tuning")
         wandb.login(key=config.WANDB_API)
-        sweep_id = wandb.sweep(sweep_config, project="cmap_train")
 
-    return exp_name, aug_type, split, wandb_tune, sweep_id
+    return exp_name, aug_type, split, wandb_tune
 
 
 def data_prep(exp_name):
@@ -425,8 +423,7 @@ def train_setup(
     X = scale(X)
 
     # augment img and mask with same augmentations
-    if aug_type == "color":
-        aug = aug_color(config.COLOR_BRIGHT, config.COLOR_CONTRST)
+    aug = get_aug(aug_type)
 
     X_aug, y_aug = aug(X, y)
 
@@ -648,6 +645,7 @@ def train_epoch(
     optimizer,
     test_dataloader,
     test_image_root,
+    config=config,
 ):
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
@@ -661,8 +659,11 @@ def train_epoch(
     # How long it's been plateauing
     plateau_count = 0
 
+    sweep_id = None
     if wandb_tune:
-        wandb.init(config=wandb.config)
+        wandb.init()
+        sweep_id = wandb.sweep(sweep_config, project="cmap_train")
+        config = wandb.config
 
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
@@ -705,16 +706,16 @@ def train_epoch(
 
     if wandb_tune:
         wandb.finish()
-        wandb.agent(sweep_id, train_epoch, count=20)
+    return sweep_id
 
 
 # executing everything
-exp_name, aug_type, split, wandb_tune, sweep_id = arg_parsing()
+exp_name, aug_type, split, wandb_tune = arg_parsing()
 
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 train_dataloader, test_dataloader = build_dataset(split)
 model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
-train_epoch(
+sweep_id = train_epoch(
     writer,
     train_dataloader,
     model,
@@ -726,3 +727,5 @@ train_epoch(
     test_dataloader,
     test_image_root,
 )
+if wandb_tune:
+    wandb.agent(sweep_id, train_epoch, count=20)
