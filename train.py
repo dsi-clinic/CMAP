@@ -190,7 +190,6 @@ def create_model():
         num_classes=config.NUM_CLASSES,
         weights=config.WEIGHTS,
     ).model.to(device)
-    print(model.in_channels)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
@@ -384,6 +383,7 @@ def train_setup(
     aug_type: str,
     wandb_tune: bool,
     train_images_root,
+    model,
     config=config,
 ) -> Tuple[torch.Tensor]:
     """
@@ -409,7 +409,6 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
     normalize, scale = normalize_func(model)
     # add extra channel(s) to the images and masks
@@ -460,7 +459,10 @@ def train_setup(
                 sample["bbox"][i],
             )
 
-    return normalize(X_aug), y_squeezed
+    return (
+        normalize(X_aug),
+        y_squeezed,
+    )
 
 
 def train(
@@ -500,7 +502,7 @@ def train(
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         X, y = train_setup(
-            sample, epoch, batch, aug_type, wandb_tune, train_images_root
+            sample, epoch, batch, aug_type, wandb_tune, train_images_root, model
         )
 
         # compute prediction error
@@ -711,14 +713,7 @@ exp_name, aug_type, split, wandb_tune, sweep_id = arg_parsing()
 
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 train_dataloader, test_dataloader = build_dataset(split)
-(
-    model,
-    loss_fn,
-    train_jaccard,
-    test_jaccard,
-    optimizer,
-) = create_model()
-norm_func, scale = normalize_func(model)
+model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 train_epoch(
     writer,
     train_dataloader,
