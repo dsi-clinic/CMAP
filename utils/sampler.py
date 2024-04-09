@@ -6,7 +6,7 @@ import torch
 from torchgeo.datasets import BoundingBox, GeoDataset
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
-from torchgeo.samplers.utils import _to_tuple, tile_to_chips, get_random_bounding_box
+from torchgeo.samplers.utils import _to_tuple, get_random_bounding_box, tile_to_chips
 
 
 class BalancedRandomBatchGeoSampler(BatchGeoSampler):
@@ -31,16 +31,18 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         Args:
             dataset: dataset to index from
             size: dimensions of each patch, can either be:
-                * a single ``float`` - in which case the same value is used for the height and
-                width dimension
-                * a ``tuple`` of two floats - in which case, the first *float* is used for the
-                height dimension, and the second *float* for the width dimension
+                * a single ``float`` - in which case the same value is used for
+                  the height andwidth dimension
+                * a ``tuple`` of two floats - in which case, the first *float*
+                  is used for the height dimension, and the second *float* for
+                  the width dimension
             batch_size: number of samples per batch
             length: number of samples per epoch
                 (defaults to approximately the maximal number of non-overlapping
                 chips of size ``size`` that could be sampled from
                 the dataset)
-            roi: region of interest to sample from (minx, maxx, miny, maxy, mint, maxt)
+            roi: region of interest to sample from 
+                (minx, maxx, miny, maxy, mint, maxt)
                 (defaults to the bounds of ``dataset.index``)
             units: defines if ``size`` is in pixel or CRS units
         """
@@ -142,12 +144,14 @@ class BalancedGridGeoSampler(GeoSampler):
         Args:
             dataset: dataset to index from
             size: dimensions of each patch, can either be:
-                * a single ``float`` - in which case the same value is used for the height and
-                width dimension
-                * a ``tuple`` of two floats - in which case, the first *float* is used for the
-                height dimension, and the second *float* for the width dimension
+                * a single ``float`` - in which case the same value is used for
+                  the height andwidth dimension
+                * a ``tuple`` of two floats - in which case, the first *float*
+                  is used for the height dimension, and the second *float* for
+                  the width dimension
             stride: distance to skip between each patch
-            roi: region of interest to sample from (minx, maxx, miny, maxy, mint, maxt)
+            roi: region of interest to sample from 
+                (minx, maxx, miny, maxy, mint, maxt)
                 (defaults to the bounds of ``dataset.index``)
             units: defines if ``size`` and ``stride`` are in pixel or CRS units
         """
@@ -205,8 +209,8 @@ class BalancedGridGeoSampler(GeoSampler):
                         maxx = minx + self.size[1]
                         if maxx > self.roi.maxx:
                             minx, maxx = (
-                                self.roi.maxx - self.size[1], 
-                                self.roi.maxx
+                                self.roi.maxx - self.size[1],
+                                self.roi.maxx,
                             )
 
                         yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
