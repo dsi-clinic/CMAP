@@ -104,9 +104,10 @@ logging.basicConfig(
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_MASK_ROOT)
-dataset = naip & kc
 
-train_dataset, test_dataset = random_bbox_assignment(dataset, [split, 1 - split])
+train_portion, test_portion = random_bbox_assignment(naip, [split, 1 - split])
+train_dataset = train_portion & kc
+test_dataset = test_portion & kc
 
 train_sampler = BalancedRandomBatchGeoSampler(
     train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE

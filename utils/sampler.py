@@ -6,7 +6,7 @@ import torch
 from torchgeo.datasets import BoundingBox, GeoDataset
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
-from torchgeo.samplers.utils import _to_tuple, tile_to_chips
+from torchgeo.samplers.utils import _to_tuple, tile_to_chips, get_random_bounding_box
 
 
 class BalancedRandomBatchGeoSampler(BatchGeoSampler):
@@ -87,9 +87,17 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         for _ in range(len(self)):
             batch = []
             for _ in range(self.batch_size):
-                # Choose a random item and get a bounding box for it
+                # Choose a random item
                 sample = random.choice(items)
                 bounds = BoundingBox(*sample.bounds)
+                if (
+                    bounds.maxx - bounds.minx >= self.size[1]
+                    or bounds.maxy - bounds.miny >= self.size[0]
+                ):
+                    # Choose random bounding box within that tile
+                    bounds = get_random_bounding_box(bounds, self.size, self.res)
+                
+                # process the bounding box if it is small or out of bound
                 minx, maxx, miny, maxy = get_bounding_box(bounds, self.size, self.roi)
                 batch.append(
                     BoundingBox(minx, maxx, miny, maxy, bounds.mint, bounds.maxt)
