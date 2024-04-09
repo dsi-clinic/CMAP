@@ -41,7 +41,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                 (defaults to approximately the maximal number of non-overlapping
                 chips of size ``size`` that could be sampled from
                 the dataset)
-            roi: region of interest to sample from 
+            roi: region of interest to sample from
                 (minx, maxx, miny, maxy, mint, maxt)
                 (defaults to the bounds of ``dataset.index``)
             units: defines if ``size`` is in pixel or CRS units
@@ -150,7 +150,7 @@ class BalancedGridGeoSampler(GeoSampler):
                   is used for the height dimension, and the second *float* for
                   the width dimension
             stride: distance to skip between each patch
-            roi: region of interest to sample from 
+            roi: region of interest to sample from
                 (minx, maxx, miny, maxy, mint, maxt)
                 (defaults to the bounds of ``dataset.index``)
             units: defines if ``size`` and ``stride`` are in pixel or CRS units
