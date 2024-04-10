@@ -28,7 +28,7 @@ def create_kane_county_masks() -> None:
     of KC_StormwaterDataJan2024.gdb.zip)
     """
     shape_fpath = os.path.join(
-        config.KC_SHAPE_DIR, "KC_StormwaterDataJan2024.gdb.zip"
+        config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip"
     )
     layer = 4
     gdf = gpd.read_file(shape_fpath, layer=layer)
@@ -39,13 +39,12 @@ def create_kane_county_masks() -> None:
         "DRY BOTTOM - MESIC PRAIRIE": 4,
     }
 
-    img_root = config.KC_IMAGE_DIR
-
+    img_root = config.KC_IMAGE_ROOT
     for img_fname in os.listdir(img_root):
         try:
             img_fpath = os.path.join(img_root, img_fname)
             create_mask(
-                img_fpath, gdf, config.KC_MASK_DIR, "BasinType", labels=labels
+                img_fpath, gdf, config.KC_MASK_ROOT, "BasinType", labels=labels
             )
         except Exception:
             continue
@@ -58,8 +57,8 @@ def get_kane_county_images() -> None:
     KC_StormwaterDataJan2024.gdb.zip)
     """
     data_fpath = os.path.join(
-        config.KC_SHAPE_DIR, "KC_StormwaterDataJan2024.gdb.zip"
+        config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip"
     )
     layer = 4
-    save_dir = config.KC_IMAGE_DIR
+    save_dir = config.KC_IMAGE_ROOT
     get_images("image", data_fpath, save_dir, layer)
