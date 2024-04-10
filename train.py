@@ -27,6 +27,7 @@ from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kc import KaneCounty
+from data.dem import KaneDEM
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 
@@ -104,7 +105,8 @@ logging.basicConfig(
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_MASK_ROOT)
-dataset = naip & kc
+dem = KaneDEM(config.KC_DEM_ROOT)
+dataset = naip & kc & dem
 
 train_dataset, test_dataset = random_bbox_splitting(dataset, [split, 1 - split])
 
