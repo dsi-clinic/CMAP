@@ -6,11 +6,7 @@ import torch
 from torchgeo.datasets import BoundingBox, GeoDataset
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
-from torchgeo.samplers.utils import (
-    _to_tuple,
-    get_random_bounding_box,
-    tile_to_chips,
-)
+from torchgeo.samplers.utils import _to_tuple, get_random_bounding_box, tile_to_chips
 
 
 class BalancedRandomBatchGeoSampler(BatchGeoSampler):
