@@ -216,6 +216,26 @@ all_aug = AugmentationSequential(
     keepdim=True,
 )
 
+
+# testing - both modified from Gaussian
+test_color = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.ColorJitter(0.5, 0.5),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
+
+test_blur = AugmentationSequential(
+    K.RandomHorizontalFlip(p=0.5),
+    K.RandomVerticalFlip(p=0.5),
+    K.RandomBoxBlur(keepdim=True),
+    K.RandomRotation(degrees=360, align_corners=True),
+    data_keys=["image", "mask"],
+    keepdim=True,
+)
+
 # Choose the proper augmentation format
 if aug_type == "plasma":
     aug = plasma_aug
@@ -223,6 +243,10 @@ elif aug_type == "gauss":
     aug = gauss_aug
 elif aug_type == "all":
     aug = all_aug
+elif aug_type == "color":
+    aug = test_color
+elif aug_type == "blur":
+    aug = test_blur
 else:
     aug = default_aug
 

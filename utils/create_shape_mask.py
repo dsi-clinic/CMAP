@@ -5,7 +5,6 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import shapely
-from einops import rearrange
 from rasterio.mask import mask
 from shapely.geometry import box
 
@@ -58,17 +57,13 @@ def create_mask(
             out_img_unique = np.where(out_img != 0, labels[label], out_img)
             output = np.maximum(output, out_img_unique)
 
-    # transpose mask to match image dimensions
-    msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
-        "uint8"
-    )
-    msk = rearrange[msk, "h w c -> c h w"]
+    # take one layer because all layers are the same
+    msk = np.array([output[0]]).astype("uint8")
 
     # set output filename and metadata
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     out_tif = os.path.join(save_dir, f"mask_{os.path.basename(img_fpath)}")
-
     out_meta.update(
         {
             "driver": "GTiff",
@@ -76,7 +71,7 @@ def create_mask(
             "height": output.shape[1],
             "width": output.shape[2],
             "transform": out_transform,
-            "count": 4,
+            "count": 1,
             "crs": crs,
         }
     )
