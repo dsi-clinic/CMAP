@@ -35,7 +35,7 @@ sweep_config = {
     "method": "bayes",
     "metric": {"goal": "maximize", "name": "jaccard_index"},
     "parameters": {
-        "BATCH_SIZE": {"values": [16, 32, 64]},
+        # "BATCH_SIZE": {"values": [16, 32, 64]},
         "COLOR_BRIGHT": {"values": [0.2, 0.3, 0.4]},
         "COLOR_CONTRST": {"values": [0.2, 0.3, 0.4]},
     },
@@ -379,7 +379,6 @@ def train_setup(
     epoch: int,
     batch: int,
     aug_type: str,
-    wandb_tune: bool,
     train_images_root,
     model,
     config=config,
@@ -407,7 +406,6 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-
     normalize, scale = normalize_func(model)
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
@@ -462,7 +460,7 @@ def train_setup(
     )
 
 
-def train(
+def train_epoch(
     dataloader: DataLoader,
     model: Module,
     loss_fn: Module,
@@ -499,7 +497,7 @@ def train(
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         X, y = train_setup(
-            sample, epoch, batch, aug_type, wandb_tune, train_images_root, model
+            sample, epoch, batch, aug_type, train_images_root, model
         )
 
         # compute prediction error
@@ -634,18 +632,18 @@ def test(
     return test_loss
 
 
-def train_epoch(
-    writer,
-    train_dataloader,
-    model,
-    test_jaccard,
-    out_root,
-    loss_fn,
-    train_jaccard,
-    optimizer,
-    test_dataloader,
-    test_image_root,
-    config=config,
+def train(
+    # writer,
+    # train_dataloader,
+    # model,
+    # test_jaccard,
+    # out_root,
+    # loss_fn,
+    # train_jaccard,
+    # optimizer,
+    # test_dataloader,
+    # test_image_root,
+    # config=config,
 ):
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
@@ -659,15 +657,9 @@ def train_epoch(
     # How long it's been plateauing
     plateau_count = 0
 
-    sweep_id = None
-    if wandb_tune:
-        wandb.init()
-        sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-        config = wandb.config
-
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        final_jaccard = train(
+        final_jaccard = train_epoch(
             train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1
         )
         test_loss = test(
@@ -706,7 +698,6 @@ def train_epoch(
 
     if wandb_tune:
         wandb.finish()
-    return sweep_id
 
 
 # executing everything
@@ -715,17 +706,24 @@ exp_name, aug_type, split, wandb_tune = arg_parsing()
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 train_dataloader, test_dataloader = build_dataset(split)
 model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
-sweep_id = train_epoch(
-    writer,
-    train_dataloader,
-    model,
-    test_jaccard,
-    out_root,
-    loss_fn,
-    train_jaccard,
-    optimizer,
-    test_dataloader,
-    test_image_root,
-)
+
 if wandb_tune:
-    wandb.agent(sweep_id, train_epoch, count=20)
+    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
+    print("wandb taken over config")
+    run = wandb.init()
+    vars(args).update(run.config)
+    wandb.agent(sweep_id, train, count=20)
+
+else:
+    train(
+        # writer,
+        # train_dataloader,
+        # model,
+        # test_jaccard,
+        # out_root,
+        # loss_fn,
+        # train_jaccard,
+        # optimizer,
+        # test_dataloader,
+        # test_image_root,
+    )
