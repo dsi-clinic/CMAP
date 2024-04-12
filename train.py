@@ -20,8 +20,9 @@ from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
+
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_splitting, stack_samples
+from torchgeo.datasets import NAIP, random_bbox_splitting, stack_samples, IntersectionDataset, GeoDataset
 from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
@@ -106,7 +107,27 @@ logging.basicConfig(
 naip = NAIP(config.KC_IMAGE_ROOT)
 kc = KaneCounty(config.KC_MASK_ROOT)
 dem = KaneDEM(config.KC_DEM_ROOT)
-dataset = naip & kc & dem
+
+# Instantiate IntersectionDataset
+intersection_dataset = kc & dem
+
+# Extract relevant data from IntersectionDataset
+raster_paths = intersection_dataset.raster_paths
+vector_paths = intersection_dataset.vector_paths
+
+# Create a new GeoDataset
+kc_dem_merged = GeoDataset(raster_paths=raster_paths, vector_paths=vector_paths)
+
+dataset = naip & kc_dem_merged
+
+"""
+# Check bands of dataset
+sample = dataset[0]  # Access the first sample in the dataset (errored on line)
+raster_data = sample['image']  # Access the raster data
+# Get the number of bands
+num_bands = raster_data.shape[0]  # Assuming bands are in the first dimension
+print("Number of bands:", num_bands)
+"""
 
 train_dataset, test_dataset = random_bbox_splitting(dataset, [split, 1 - split])
 
