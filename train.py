@@ -9,6 +9,7 @@ import datetime
 import importlib.util
 import logging
 import os
+import random
 import shutil
 import sys
 from pathlib import Path
@@ -114,8 +115,12 @@ def arg_parsing():
 
 def data_prep(exp_name):
     # set output path and exit run if path already exists
-    out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
-    os.makedirs(out_root, exist_ok=False)
+    out_root = os.path.join(config.OUTPUT_ROOT, exp_name, str(random.random))
+    print(out_root)
+    if wandb_tune:
+        os.makedirs(out_root, exist_ok=True)
+    else:
+        os.makedirs(out_root, exist_ok=False)
 
     # create directory for output images
     train_images_root = os.path.join(out_root, "train-images")
@@ -689,7 +694,8 @@ def train(
                 break
 
         if wandb_tune:
-            wandb.log({"jaccard_index": final_jaccard}, step=t)
+            final_jaccard = 0.5
+            run.log({"jaccard_index": final_jaccard}, step=t)
     print("Done!")
     writer.close()
 
@@ -713,6 +719,7 @@ if wandb_tune:
     run = wandb.init()
     vars(args).update(run.config)
     wandb.agent(sweep_id, train, count=20)
+
 
 else:
     train(
