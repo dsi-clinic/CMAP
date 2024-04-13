@@ -9,7 +9,6 @@ import datetime
 import importlib.util
 import logging
 import os
-import random
 import shutil
 import sys
 from pathlib import Path
@@ -96,7 +95,7 @@ def arg_parsing():
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
-        exp_name = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+        exp_name = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
     aug_type = args.aug_type
     if aug_type is None:
         aug_type = "default"
@@ -115,7 +114,7 @@ def arg_parsing():
 
 def data_prep(exp_name):
     # set output path and exit run if path already exists
-    out_root = os.path.join(config.OUTPUT_ROOT, exp_name, str(random.random))
+    out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
     print(out_root)
     if wandb_tune:
         os.makedirs(out_root, exist_ok=True)
@@ -438,8 +437,17 @@ def train_setup(
 
     # plot first batch
     if batch == 0:
-        save_dir = os.path.join(train_images_root, f"epoch-{epoch}")
-        os.mkdir(save_dir)
+        save_dir = os.path.join(
+            train_images_root,
+            f"-{(config.COLOR_BRIGHT), config.COLOR_CONTRST}-epoch-{epoch}",
+        )
+        try:
+            os.mkdir(save_dir)
+        except FileExistsError:
+            # Directory already exists, remove it recursively
+            shutil.rmtree(save_dir)
+            os.mkdir(save_dir)
+
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
                 "image": X[i].cpu(),
@@ -662,6 +670,11 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
+    if wandb_tune:
+        run = wandb.init(project="cmap_train")
+        vars(args).update(run.config)
+        print("wandb taken over config")
+
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         final_jaccard = train_epoch(
@@ -693,9 +706,8 @@ def train(
                 )
                 break
 
-        if wandb_tune:
-            final_jaccard = 0.5
-            run.log({"jaccard_index": final_jaccard}, step=t)
+    if wandb_tune:
+        run.log({"jaccard_index": final_jaccard}, step=t)
     print("Done!")
     writer.close()
 
@@ -715,22 +727,8 @@ model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    print("wandb taken over config")
-    run = wandb.init()
-    vars(args).update(run.config)
     wandb.agent(sweep_id, train, count=20)
 
 
 else:
-    train(
-        # writer,
-        # train_dataloader,
-        # model,
-        # test_jaccard,
-        # out_root,
-        # loss_fn,
-        # train_jaccard,
-        # optimizer,
-        # test_dataloader,
-        # test_image_root,
-    )
+    train()
