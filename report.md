@@ -26,4 +26,5 @@
 * With default: Jaccard index: 0.630060, Avg loss: 0.227179 
 * With all: 9 epoch: Jaccard index: 0.498313, Avg loss: 0.204150 (so far the higheset)
 * with box blur: 10 epoch: Jaccard index: 0.528737, Avg loss: 0.227576
-* with color jitter: 11 epoch: Jaccard index: 0.594752, Avg loss: 0.251863 
+* with color jitter: 11 epoch: Jaccard index: 0.594752, Avg loss: 0.251863
+   * Based on wandb, best Jaccard index at 0.667, when brightness at 0.2 and contrast at 0.4 
