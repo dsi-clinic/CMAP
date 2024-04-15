@@ -706,8 +706,6 @@ def train(
                 )
                 break
 
-    if wandb_tune:
-        run.log({"jaccard_index": final_jaccard}, step=t)
     print("Done!")
     writer.close()
 
@@ -715,6 +713,7 @@ def train(
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
     if wandb_tune:
+        run.log({"jaccard_index": final_jaccard}, step=t)
         wandb.finish()
 
 
@@ -727,8 +726,7 @@ model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    wandb.agent(sweep_id, train, count=20)
-
+    wandb.agent(sweep_id, train, count=10)
 
 else:
     train()
