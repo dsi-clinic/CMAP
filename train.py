@@ -16,6 +16,7 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
+import wandb
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
@@ -26,7 +27,6 @@ from torchgeo.samplers import GridGeoSampler, RandomBatchGeoSampler
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-import wandb
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
