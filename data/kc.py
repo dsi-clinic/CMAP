@@ -2,9 +2,12 @@ from torchgeo.datasets import RasterDataset
 
 
 class KaneCounty(RasterDataset):
-    filename_glob = "mask_m*.tif"
+    filename_glob = "mask_*.tif"
     filename_regex = r"""
-        ^mask_m
+        ^mask
+        _label(?P<label>\d+)
+        _(?P<shape_idx>\d+)
+        _m
         _(?P<quadrangle>\d+)
         _(?P<quarter_quad>[a-z]+)
         _(?P<utm_zone>\d+)
