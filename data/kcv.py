@@ -94,7 +94,7 @@ class KaneCounty(GeoDataset):
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
-        if shapes:
+        if shapes and min((round(height), round(width))) != 0:
             masks = rasterio.features.rasterize(
                 shapes,
                 out_shape=(round(height), round(width)),
