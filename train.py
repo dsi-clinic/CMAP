@@ -25,7 +25,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.kc import KaneCounty
+from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
@@ -103,7 +103,16 @@ logging.basicConfig(
 
 # build dataset
 naip = NAIP(config.KC_IMAGE_ROOT)
-kc = KaneCounty(config.KC_MASK_ROOT)
+
+shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+kc = KaneCounty(
+    shape_path,
+    config.KC_LAYER,
+    config.KC_LABEL_COL,
+    config.KC_LABELS,
+    naip.crs,
+    naip.res,
+)
 
 train_portion, test_portion = random_bbox_assignment(naip, [split, 1 - split])
 train_dataset = train_portion & kc
@@ -368,7 +377,7 @@ def train_setup(
     y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, 0, :, :].squeeze()
+    y_squeezed = y[:, :, :].squeeze()
 
     # plot first batch
     if batch == 0:
@@ -388,8 +397,8 @@ def train_setup(
                 plot_tensors,
                 sample_fname,
                 "grid",
-                KaneCounty.colors,
-                KaneCounty.labels,
+                config.KC_COLORS,
+                config.KC_LABELS_INVERSE,
                 sample["bbox"][i],
             )
 
@@ -513,7 +522,7 @@ def test(
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
-            y_squeezed = y[:, 0, :, :].squeeze()
+            y_squeezed = y[:, :, :].squeeze()
 
             # compute prediction error
             outputs = model(X)
@@ -546,8 +555,8 @@ def test(
                         plot_tensors,
                         sample_fname,
                         "row",
-                        KaneCounty.colors,
-                        KaneCounty.labels,
+                        config.KC_COLORS,
+                        config.KC_LABELS_INVERSE,
                         sample["bbox"][i],
                     )
     test_loss /= num_batches
