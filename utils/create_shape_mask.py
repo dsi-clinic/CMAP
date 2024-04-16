@@ -172,8 +172,6 @@ def create_separate_masks(
                 shape = shapes[label][i]
                 out_img, out_transform = mask(src, [shape], crop=True)
                 output = np.where(out_img != 0, labels[label], out_img)
-
-                # take one layer because all layers are the same
                 msk = np.array([output[0]]).astype("uint8")
 
                 # set output filename and metadata
