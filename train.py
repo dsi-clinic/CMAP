@@ -16,7 +16,7 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
+import yaml
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
@@ -30,16 +30,6 @@ from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
-
-sweep_config = {
-    "method": "bayes",
-    "metric": {"goal": "maximize", "name": "jaccard_index"},
-    "parameters": {
-        # "BATCH_SIZE": {"values": [16, 32, 64]},
-        "COLOR_BRIGHT": {"values": [0.2, 0.3, 0.4]},
-        "COLOR_CONTRST": {"values": [0.2, 0.3, 0.4]},
-    },
-}
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -79,6 +69,13 @@ parser.add_argument(
     default=False,
 )
 
+parser.add_argument(
+    "--tune_key",
+    type=str,
+    help="Please enter the API key for wandb tuning",
+    default="",
+)
+
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
@@ -107,7 +104,7 @@ def arg_parsing():
     wandb_tune = args.tune
     if wandb_tune:
         print("wandb tuning")
-        wandb.login(key=config.WANDB_API)
+        wandb.login(key=args.tune_key)
 
     return exp_name, aug_type, split, wandb_tune
 
@@ -265,7 +262,7 @@ all_aug = AugmentationSequential(
 
 def aug_color(bright=config.COLOR_BRIGHT, contrast=config.COLOR_CONTRST):
     # testing - both modified from Gaussian
-    test_color = AugmentationSequential(
+    color_jitter = AugmentationSequential(
         K.RandomHorizontalFlip(p=0.5),
         K.RandomVerticalFlip(p=0.5),
         K.ColorJitter(bright, contrast),
@@ -273,10 +270,10 @@ def aug_color(bright=config.COLOR_BRIGHT, contrast=config.COLOR_CONTRST):
         data_keys=["image", "mask"],
         keepdim=True,
     )
-    return test_color
+    return color_jitter
 
 
-test_blur = AugmentationSequential(
+box_blur = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
     K.RandomBoxBlur(keepdim=True),
@@ -297,7 +294,7 @@ def get_aug(aug_type):
     elif aug_type == "color":
         aug = aug_color()
     elif aug_type == "blur":
-        aug = test_blur
+        aug = box_blur
     else:
         aug = default_aug
     return aug
@@ -442,6 +439,7 @@ def train_setup(
         )
         try:
             os.mkdir(save_dir)
+
         except FileExistsError:
             # Directory already exists, remove it recursively
             shutil.rmtree(save_dir)
@@ -676,7 +674,7 @@ def train(
 
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        final_jaccard = train_epoch(
+        epoch_jaccard = train_epoch(
             train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1
         )
         test_loss = test(
@@ -712,7 +710,7 @@ def train(
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
     if wandb_tune:
-        run.log({"jaccard_index": final_jaccard}, step=t)
+        run.log({"jaccard_index": epoch_jaccard}, step=t)
         wandb.finish()
 
 
@@ -724,6 +722,8 @@ train_dataloader, test_dataloader = build_dataset(split)
 model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:
+    with open("configs/sweep_config.yml", "r") as file:
+        sweep_config = yaml.safe_load(file)
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
     wandb.agent(sweep_id, train, count=10)
 
