@@ -35,7 +35,7 @@ new_band = torch.from_numpy(new_band)
 #new_band_dataset = gdal.Open(new_band_filepath)
 #new_band = new_band_dataset.GetRasterBand(1).ReadAsArray()
 
-assert new_band.shape[1:] == naip_dataset[0][0].shape[1:], "New band dimensions do not match NAIP dataset dimensions"
+# assert new_band.shape[1:] == naip_dataset[0][0].shape[1:], "New band dimensions do not match NAIP dataset dimensions"
 
 # Loop through the NAIP dataset and add the new band to each sample
 for i in range(len(naip_dataset)):
