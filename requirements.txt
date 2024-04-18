@@ -28,6 +28,7 @@ torchgeo~=0.5.1
 torchvision~=0.16.2
 torch_utils~=0.1.2
 typing_extensions~=4.7.1
+wandb~=0.13.4
 
 # cluster specific
 submitit~=1.4
