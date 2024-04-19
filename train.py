@@ -16,7 +16,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 import yaml
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
@@ -27,6 +26,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
@@ -146,6 +146,12 @@ def data_prep(exp_name):
 
 
 def build_dataset(split):
+    """
+    Randomly split and load data to be the test and train sets
+
+    Input:
+        split: the percentage of spliting (entered from args)
+    """
     # build dataset
     naip = NAIP(config.KC_IMAGE_ROOT)
     kc = KaneCounty(config.KC_MASK_ROOT)
@@ -182,6 +188,9 @@ def build_dataset(split):
 
 
 def create_model():
+    """
+    Setting up training model, loss function and measuring metrics
+    """
     # create the model
     model = SegmentationModel(
         model=config.MODEL,
@@ -668,26 +677,39 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
+    # randomly spliting data each time of training
+
     if wandb_tune:
         run = wandb.init(project="cmap_train")
         vars(args).update(run.config)
         print("wandb taken over config")
 
-    for t in range(config.EPOCHS):
-        logging.info(f"Epoch {t + 1}\n-------------------------------")
-        epoch_jaccard = train_epoch(
-            train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1
-        )
-        test_loss = test(
-            test_dataloader,
-            model,
-            loss_fn,
-            test_jaccard,
-            t + 1,
-            plateau_count,
-            test_image_root,
-        )
+    for n in range(config.TRIAL):
+        logging.info(f"Trial {n + 1}\n-------------------------------")
+        train_dataloader, test_dataloader = build_dataset(split)
+        trial_train = []
+        trial_test = []
 
+        for t in range(config.EPOCHS):
+            logging.info(f"Epoch {t + 1}\n-------------------------------")
+            epoch_jaccard = train_epoch(
+                train_dataloader,
+                model,
+                loss_fn,
+                train_jaccard,
+                optimizer,
+                t + 1,
+            )
+
+            test_loss = test(
+                test_dataloader,
+                model,
+                loss_fn,
+                test_jaccard,
+                t + 1,
+                plateau_count,
+                test_image_root,
+            )
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss
@@ -703,7 +725,11 @@ def train(
                     f"Loss Plateau: {t} epochs, reached patience of {patience}"
                 )
                 break
-
+        # adding the jaccard index in the last epich
+        trial_train.append(epoch_jaccard)
+        trial_test.append(test_loss)
+    print(f"Train result across trials {trial_train}")
+    print(f"Test result across trials {trial_test}")
     print("Done!")
     writer.close()
 
@@ -711,7 +737,8 @@ def train(
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
     if wandb_tune:
-        run.log({"jaccard_index": epoch_jaccard}, step=t)
+        model_average = sum(trial_train) / len(trial_train)
+        run.log({"jaccard_index": model_average}, step=t)
         wandb.finish()
 
 
@@ -719,7 +746,6 @@ def train(
 exp_name, aug_type, split, wandb_tune = arg_parsing()
 
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
-train_dataloader, test_dataloader = build_dataset(split)
 model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:
