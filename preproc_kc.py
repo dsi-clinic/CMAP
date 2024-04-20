@@ -7,47 +7,15 @@ import argparse
 import importlib.util
 import os
 
-import geopandas as gpd
-
-from utils.create_shape_mask import create_separate_masks
 from utils.get_naip_images import get_images
 
 parser = argparse.ArgumentParser(
-    description="Preprocess Kane County data to generate masks and get "
-    + "corresponding NAIP images"
+    description="Preprocess Kane County data to get corresponding NAIP images"
 )
 parser.add_argument("config", type=str, help="Path to the configuration file")
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
-
-
-def create_kane_county_masks() -> None:
-    """
-    Creates masks for the Kane County stormwater structures dataset (layer 4
-    of KC_StormwaterDataJan2024.gdb.zip)
-    """
-    shape_fpath = os.path.join(
-        config.KC_SHAPE_ROOT, "KC_StormwaterDataJan2024.gdb.zip"
-    )
-    layer = 4
-    gdf = gpd.read_file(shape_fpath, layer=layer)
-    labels = {
-        "POND": 1,
-        "WETLAND": 2,
-        "DRY BOTTOM - TURF": 3,
-        "DRY BOTTOM - MESIC PRAIRIE": 4,
-    }
-
-    img_root = config.KC_IMAGE_ROOT
-    for img_fname in os.listdir(img_root):
-        try:
-            img_fpath = os.path.join(img_root, img_fname)
-            create_separate_masks(
-                img_fpath, gdf, config.KC_MASK_ROOT, "BasinType", labels=labels
-            )
-        except Exception:
-            continue
 
 
 def get_kane_county_images() -> None:
