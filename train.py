@@ -113,6 +113,8 @@ kc = KaneCounty(
     naip.crs,
     naip.res,
 )
+kc_colors = {i: kc.all_colors[i] for i in config.KC_LABELS.values()}
+kc_labels_inverse = {v: k for k, v in config.KC_LABELS.items()}
 
 train_portion, test_portion = random_bbox_assignment(naip, [split, 1 - split])
 train_dataset = train_portion & kc
@@ -397,8 +399,8 @@ def train_setup(
                 plot_tensors,
                 sample_fname,
                 "grid",
-                config.KC_COLORS,
-                config.KC_LABELS_INVERSE,
+                kc_colors,
+                kc_labels_inverse,
                 sample["bbox"][i],
             )
 
@@ -555,8 +557,8 @@ def test(
                         plot_tensors,
                         sample_fname,
                         "row",
-                        config.KC_COLORS,
-                        config.KC_LABELS_INVERSE,
+                        kc_colors,
+                        kc_labels_inverse,
                         sample["bbox"][i],
                     )
     test_loss /= num_batches
