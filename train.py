@@ -27,7 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.kc import KaneCounty
+from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
@@ -145,11 +145,23 @@ def data_prep(exp_name):
     return train_images_root, test_image_root, out_root, writer
 
 
-def build_dataset(split):
-    # build dataset
+def initialize_dataset():
     naip = NAIP(config.KC_IMAGE_ROOT)
-    kc = KaneCounty(config.KC_MASK_ROOT)
 
+    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+    kc = KaneCounty(
+        shape_path,
+        config.KC_LAYER,
+        config.KC_LABEL_COL,
+        config.KC_LABELS,
+        naip.crs,
+        naip.res,
+    )
+    return naip, kc
+
+
+def build_dataset(naip, kc, split):
+    # split the dataset
     train_portion, test_portion = random_bbox_assignment(
         naip, [split, 1 - split]
     )
@@ -430,7 +442,7 @@ def train_setup(
     y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, 0, :, :].squeeze()
+    y_squeezed = y[:, :, :].squeeze()
 
     # plot first batch
     if batch == 0:
@@ -460,8 +472,8 @@ def train_setup(
                 plot_tensors,
                 sample_fname,
                 "grid",
-                KaneCounty.colors,
-                KaneCounty.labels,
+                kc.colors,
+                kc.labels_inverse,
                 sample["bbox"][i],
             )
 
@@ -593,7 +605,7 @@ def test(
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
-            y_squeezed = y[:, 0, :, :].squeeze()
+            y_squeezed = y[:, :, :].squeeze()
 
             # compute prediction error
             outputs = model(X)
@@ -626,8 +638,8 @@ def test(
                         plot_tensors,
                         sample_fname,
                         "row",
-                        KaneCounty.colors,
-                        KaneCounty.labels,
+                        kc.colors,
+                        kc.labels_inverse,
                         sample["bbox"][i],
                     )
     test_loss /= num_batches
@@ -719,7 +731,8 @@ def train(
 exp_name, aug_type, split, wandb_tune = arg_parsing()
 
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
-train_dataloader, test_dataloader = build_dataset(split)
+naip, kc = initialize_dataset()
+train_dataloader, test_dataloader = build_dataset(naip, kc, split)
 model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:

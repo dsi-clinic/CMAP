@@ -37,6 +37,18 @@ LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
 
+# KaneCounty data
+KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
+KC_LAYER = 4
+KC_LABEL_COL = "BasinType"
+KC_LABELS = {
+    "BACKGROUND": 0,
+    "POND": 1,
+    "WETLAND": 2,
+    "DRY BOTTOM - TURF": 3,
+    "DRY BOTTOM - MESIC PRAIRIE": 4,
+}
+
 # for wandb
 WANDB_API = ""
 COLOR_BRIGHT = 0.2
