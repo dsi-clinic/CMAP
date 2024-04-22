@@ -12,7 +12,17 @@ from torchgeo.datasets import RasterDataset
 
 class KaneDEM(RasterDataset):
     filename_glob = "*DEM.tif"
-    is_image = True
-    separate_files = False
-    all_bands = ["elevation"]
 
+    def __init__(self, paths, crs=None, res=None, transforms=None):
+        super().__init__(paths, crs, res, transforms=transforms)
+        self.all_bands = ["elevation"]  # Assuming single band for elevation
+
+    def __getitem__(self, query):
+        # This method loads the DEM data similar to how other raster data is loaded
+        sample = super().__getitem__(query)
+        elevation = sample[
+            "image"
+        ]  # Assuming the elevation data is stored as 'image'
+        return {"elevation": elevation}
+
+    
