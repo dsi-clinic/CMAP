@@ -98,6 +98,8 @@ class KaneCounty(GeoDataset):
 
         self.label_col = label_col
         self.labels = labels
+        self.colors = {i: self.all_colors[i] for i in labels.values()}
+        self.labels_inverse = {v: k for k, v in labels.items()}
         self._crs = dest_crs
         self._res = res
 

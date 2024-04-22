@@ -48,3 +48,8 @@ KC_LABELS = {
     "DRY BOTTOM - TURF": 3,
     "DRY BOTTOM - MESIC PRAIRIE": 4,
 }
+
+# for wandb
+WANDB_API = ""
+COLOR_BRIGHT = 0.2
+COLOR_CONTRST = 0.4
