@@ -1,7 +1,8 @@
 from typing import Dict
-import numpy as np
+
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from matplotlib.colors import ListedColormap
 from torch import Tensor
@@ -99,7 +100,7 @@ def plot_from_tensors(
             # Handle RGB image tensors by ignoring the NIR channel
             img = tensor[0:3, :, :].permute(1, 2, 0)
             ax.imshow(img)
-            
+
         else:
             # Get the unique labels present in the mask
             if len(tensor.shape) == 2:
@@ -151,7 +152,7 @@ def plot_from_tensors(
 
 def determine_dominant_label(ground_truth: Tensor) -> int:
     """
-    Determines the most common label ID from a ground truth mask tensor, ignoring the background label.
+    Determines the most common label ID from a ground truth mask tensor.
 
     Parameters
     ----------
@@ -161,16 +162,22 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     Returns
     -------
     int
-        The ID of the most common label in the ground truth, excluding the background label.
+        The ID of the most common label in the ground truth.
     """
     unique, counts = ground_truth.unique(return_counts=True)
     # Remove the background label '0' from consideration if present
     if 0 in unique:
         background_index = (unique == 0).nonzero(as_tuple=True)[0].item()
-        unique = torch.cat([unique[:background_index], unique[background_index + 1:]])
-        counts = torch.cat([counts[:background_index], counts[background_index + 1:]])
+        unique = torch.cat(
+            [unique[:background_index], unique[background_index + 1 :]]
+        )
+        counts = torch.cat(
+            [counts[:background_index], counts[background_index + 1 :]]
+        )
 
-    if counts.numel() == 0:  # Check if there are no labels other than the background
+    if (
+        counts.numel() == 0
+    ):  # Check if there are no labels other than the background
         return 15  # Return ID for 'UNKNOWN'
 
     most_common_index = counts.argmax()

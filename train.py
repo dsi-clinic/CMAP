@@ -28,7 +28,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
-from utils.plot import plot_from_tensors, determine_dominant_label
+from utils.plot import determine_dominant_label, plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 
 sweep_config = {
@@ -621,8 +621,12 @@ def test(
                         "prediction": preds[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
-                    predominant_label_id = determine_dominant_label(ground_truth)
-                    label_name = KaneCounty.labels.get(predominant_label_id, "UNKNOWN")
+                    predominant_label_id = determine_dominant_label(
+                        ground_truth
+                    )
+                    label_name = KaneCounty.labels.get(
+                        predominant_label_id, "UNKNOWN"
+                    )
                     save_dir = os.path.join(epoch_dir, label_name)
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
