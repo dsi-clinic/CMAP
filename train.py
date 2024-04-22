@@ -12,6 +12,7 @@ import os
 import shutil
 import sys
 from pathlib import Path
+from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
@@ -77,6 +78,13 @@ parser.add_argument(
     default="",
 )
 
+parser.add_argument(
+    "--num_trial",
+    type=str,
+    help="Please enter the number of trial for each train",
+    default="1",
+)
+
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
@@ -103,11 +111,13 @@ def arg_parsing():
 
     # tuning with wandb
     wandb_tune = args.tune
+    num_trial = int(args.num_trial)
+
     if wandb_tune:
         print("wandb tuning")
         wandb.login(key=args.tune_key)
 
-    return exp_name, aug_type, split, wandb_tune
+    return exp_name, aug_type, split, wandb_tune, num_trial
 
 
 def data_prep(exp_name):
@@ -487,6 +497,7 @@ def train_epoch(
     jaccard: Metric,
     optimizer: Optimizer,
     epoch: int,
+    train_images_root,
 ) -> None:
     """
     Executes a training step for the model
@@ -653,17 +664,17 @@ def test(
 
 
 def train(
-    # writer,
-    # train_dataloader,
-    # model,
-    # test_jaccard,
-    # out_root,
-    # loss_fn,
-    # train_jaccard,
-    # optimizer,
-    # test_dataloader,
-    # test_image_root,
-    # config=config,
+    writer,
+    train_dataloader,
+    model,
+    test_jaccard,
+    out_root,
+    loss_fn,
+    train_jaccard,
+    optimizer,
+    test_dataloader,
+    test_image_root,
+    config=config,
 ):
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
@@ -679,37 +690,34 @@ def train(
 
     # randomly spliting data each time of training
 
-    if wandb_tune:
-        run = wandb.init(project="cmap_train")
-        vars(args).update(run.config)
-        print("wandb taken over config")
+    # if wandb_tune:
+    #     run = wandb.init(project="cmap_train")
+    #     vars(args).update(run.config)
+    #     print("wandb taken over config")
 
-    for n in range(config.TRIAL):
-        logging.info(f"Trial {n + 1}\n-------------------------------")
-        train_dataloader, test_dataloader = build_dataset(split)
-        trial_train = []
-        trial_test = []
+    # randomly splitting the data at every trial
+    train_dataloader, test_dataloader = build_dataset(split)
 
-        for t in range(config.EPOCHS):
-            logging.info(f"Epoch {t + 1}\n-------------------------------")
-            epoch_jaccard = train_epoch(
-                train_dataloader,
-                model,
-                loss_fn,
-                train_jaccard,
-                optimizer,
-                t + 1,
-            )
+    for t in range(config.EPOCHS):
+        logging.info(f"Epoch {t + 1}\n-------------------------------")
+        epoch_jaccard = train_epoch(
+            train_dataloader,
+            model,
+            loss_fn,
+            train_jaccard,
+            optimizer,
+            t + 1,
+        )
 
-            test_loss = test(
-                test_dataloader,
-                model,
-                loss_fn,
-                test_jaccard,
-                t + 1,
-                plateau_count,
-                test_image_root,
-            )
+        test_loss = test(
+            test_dataloader,
+            model,
+            loss_fn,
+            test_jaccard,
+            t + 1,
+            plateau_count,
+            test_image_root,
+        )
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss
@@ -725,34 +733,67 @@ def train(
                     f"Loss Plateau: {t} epochs, reached patience of {patience}"
                 )
                 break
-        # adding the jaccard index in the last epich
-        trial_train.append(epoch_jaccard)
-        trial_test.append(test_loss)
-    print(f"Train result across trials {trial_train}")
-    print(f"Test result across trials {trial_test}")
+
     print("Done!")
     writer.close()
 
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
+    return epoch_jaccard, test_loss
+
+
+def run_trials(num_trial=config.TRIAL):
+    train_dataloader, test_dataloader = build_dataset(split)
+    model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+
     if wandb_tune:
-        model_average = sum(trial_train) / len(trial_train)
-        run.log({"jaccard_index": model_average}, step=t)
+        run = wandb.init(project="cmap_train")
+        vars(args).update(run.config)
+        print("wandb taken over config")
+
+    train_ious = []
+    test_ious = []
+    for _ in num_trial:
+        train_iou, test_iou = train(
+            writer,
+            train_dataloader,
+            model,
+            test_jaccard,
+            out_root,
+            loss_fn,
+            train_jaccard,
+            optimizer,
+            test_dataloader,
+            test_image_root,
+        )
+        train_ious.append(train_iou)
+        test_ious.append(test_iou)
+
+    test_average = mean(test_ious)
+    train_average = mean(train_ious)
+    test_std = stdev(test_ious)
+    train_std = stdev(train_ious)
+    print(type(test_average))
+    print(
+        f"Training: average: {train_average}, standard deviation: {train_std}"
+    )
+    print(f"Test: mean: {test_average}, standard deviation:{test_std}")
+
+    if wandb_tune:
+        run.log({"average test jaccard_index": test_average})
         wandb.finish()
 
 
-# executing everything
+# executing
 exp_name, aug_type, split, wandb_tune = arg_parsing()
-
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
-model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
 if wandb_tune:
     with open("configs/sweep_config.yml", "r") as file:
         sweep_config = yaml.safe_load(file)
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    wandb.agent(sweep_id, train, count=10)
+    wandb.agent(sweep_id, run_trials, count=10)
 
 else:
-    train()
+    run_trials()
