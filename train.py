@@ -144,6 +144,7 @@ def data_prep(exp_name):
     )
     return train_images_root, test_image_root, out_root, writer
 
+
 def initialize_dataset():
     naip = NAIP(config.KC_IMAGE_ROOT)
 
@@ -157,6 +158,7 @@ def initialize_dataset():
         naip.res,
     )
     return naip, kc
+
 
 def build_dataset(naip, kc, split):
     # split the dataset
