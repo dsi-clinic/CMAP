@@ -71,7 +71,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>]$SLURM_ARRAY_TASK_ID
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
 
 Or, to run in an interactive session:
@@ -82,7 +82,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>]
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] [--num_trial <num_trial>]
 ```
 
 ## Git Usage
