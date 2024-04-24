@@ -59,6 +59,7 @@ class KaneCounty(GeoDataset):
         layer: int,
         label_col: str,
         labels: dict[int, str],
+        context_size: int,
         dest_crs: Optional[CRS] = None,
         res: float = 0.0001,
     ) -> None:
@@ -70,6 +71,7 @@ class KaneCounty(GeoDataset):
             label_col: name of the dataset property that has the label to be
                 rasterized into the mask
             labels: a dictionary containing a label mapping for masks
+            context_size: the maximum amount of context preserved around shapes
             dest_crs: the coordinate reference system (CRS) to convert to
             res: resolution of the dataset in units of CRS
 
@@ -89,7 +91,14 @@ class KaneCounty(GeoDataset):
         for _, row in gdf.iterrows():
             minx, miny, maxx, maxy = row["geometry"].bounds
             mint, maxt = 0, sys.maxsize
-            coords = (minx, maxx, miny, maxy, mint, maxt)
+            coords = (
+                minx - context_size,
+                maxx + context_size,
+                miny - context_size,
+                maxy + context_size,
+                mint,
+                maxt,
+            )
             self.index.insert(i, coords, row)
             i += 1
         if i == 0:
@@ -100,6 +109,7 @@ class KaneCounty(GeoDataset):
         self.labels = labels
         self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
+        self.context_size = context_size
         self._crs = dest_crs
         self._res = res
 
