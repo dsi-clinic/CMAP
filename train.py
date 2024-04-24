@@ -707,8 +707,7 @@ def train(
     #     vars(args).update(run.config)
     #     print("wandb taken over config")
 
-    # for t in range(config.EPOCHS):
-    for t in range(config.EPOCH):
+    for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
             train_dataloader,
