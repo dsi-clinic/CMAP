@@ -28,10 +28,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-
-
 from data.kcv import KaneCounty
-
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
@@ -789,7 +786,7 @@ def run_trials(num_trial=num_trial):
     train_average = mean(train_ious)
     test_std = stdev(test_ious)
     train_std = stdev(train_ious)
-    print(type(test_average))
+
     print(
         f"Training: average: {train_average}, standard deviation: {train_std}"
     )
@@ -801,7 +798,7 @@ def run_trials(num_trial=num_trial):
 
 
 # executing
-exp_name, aug_type, split, wandb_tune = arg_parsing()
+exp_name, aug_type, split, wandb_tune, num_trial = arg_parsing()
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 
 naip, kc = initialize_dataset()
