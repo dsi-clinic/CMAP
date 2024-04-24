@@ -170,7 +170,7 @@ def initialize_dataset():
     return naip, kc
 
 
-def build_dataset(split):
+def build_dataset(naip, kc, split):
     """
     Randomly split and load data to be the test and train sets
 
@@ -707,11 +707,8 @@ def train(
     #     vars(args).update(run.config)
     #     print("wandb taken over config")
 
-    # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(split)
-
     # for t in range(config.EPOCHS):
-    for t in range(1):
+    for t in range(config.EPOCH):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
             train_dataloader,
@@ -758,7 +755,9 @@ def train(
 
 
 def run_trials():
-    train_dataloader, test_dataloader = build_dataset(split)
+    """
+    Running training for multiple trials
+    """
     model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
     if wandb_tune:
@@ -769,6 +768,8 @@ def run_trials():
     train_ious = []
     test_ious = []
     for num in range(num_trial):
+        # randomly splitting the data at every trial
+        train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         logging.info(f"Trial {num + 1}\n====================================")
         train_iou, test_iou = train(
             writer,
@@ -782,7 +783,7 @@ def run_trials():
             test_dataloader,
             test_image_root,
         )
-        print(train_iou, test_iou)
+
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
 
@@ -805,11 +806,7 @@ def run_trials():
 # executing
 exp_name, aug_type, split, wandb_tune, num_trial = arg_parsing()
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
-
 naip, kc = initialize_dataset()
-train_dataloader, test_dataloader = build_dataset(naip, kc, split)
-model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
-
 
 if wandb_tune:
     with open("configs/sweep_config.yml", "r") as file:
