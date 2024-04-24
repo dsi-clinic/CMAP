@@ -159,7 +159,6 @@ def data_prep(exp_name):
 
 
 def initialize_dataset():
-
     naip = NAIP(config.KC_IMAGE_ROOT)
 
     shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
