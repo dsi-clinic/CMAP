@@ -758,7 +758,7 @@ def train(
     return epoch_jaccard, test_loss
 
 
-def run_trials(num_trial=config.TRIAL):
+def run_trials(num_trial=num_trial):
     train_dataloader, test_dataloader = build_dataset(split)
     model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
