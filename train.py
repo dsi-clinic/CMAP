@@ -698,7 +698,8 @@ def train(
     # randomly splitting the data at every trial
     train_dataloader, test_dataloader = build_dataset(split)
 
-    for t in range(config.EPOCHS):
+    # for t in range(config.EPOCHS):
+    for t in range(1):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
             train_dataloader,
@@ -707,6 +708,7 @@ def train(
             train_jaccard,
             optimizer,
             t + 1,
+            train_images_root,
         )
 
         test_loss = test(
@@ -754,7 +756,8 @@ def run_trials(num_trial=config.TRIAL):
 
     train_ious = []
     test_ious = []
-    for _ in num_trial:
+    for num in range(num_trial):
+        logging.info(f"Trial {num + 1}\n====================================")
         train_iou, test_iou = train(
             writer,
             train_dataloader,
@@ -767,14 +770,16 @@ def run_trials(num_trial=config.TRIAL):
             test_dataloader,
             test_image_root,
         )
-        train_ious.append(train_iou)
-        test_ious.append(test_iou)
+        print(train_iou, test_iou)
+        train_ious.append(float(train_iou))
+        test_ious.append(float(test_iou))
 
+    print(test_ious, type(test_ious[1]))
     test_average = mean(test_ious)
     train_average = mean(train_ious)
     test_std = stdev(test_ious)
     train_std = stdev(train_ious)
-    print(type(test_average))
+
     print(
         f"Training: average: {train_average}, standard deviation: {train_std}"
     )
@@ -786,7 +791,7 @@ def run_trials(num_trial=config.TRIAL):
 
 
 # executing
-exp_name, aug_type, split, wandb_tune = arg_parsing()
+exp_name, aug_type, split, wandb_tune, num_trial = arg_parsing()
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 
 if wandb_tune:
