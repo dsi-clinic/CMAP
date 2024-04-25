@@ -79,7 +79,7 @@ parser.add_argument(
 )
 
 parser.add_argument(
-    "--num_trial",
+    "--num_trials",
     type=str,
     help="Please enter the number of trial for each train",
     default="1",
@@ -111,13 +111,13 @@ def arg_parsing():
 
     # tuning with wandb
     wandb_tune = args.tune
-    num_trial = int(args.num_trial)
+    num_trials = int(args.num_trials)
 
     if wandb_tune:
         print("wandb tuning")
         wandb.login(key=args.tune_key)
 
-    return exp_name, aug_type, split, wandb_tune, num_trial
+    return exp_name, aug_type, split, wandb_tune, num_trials
 
 
 def data_prep(exp_name):
@@ -175,7 +175,7 @@ def build_dataset(naip, kc, split):
     Randomly split and load data to be the test and train sets
 
     Input:
-        split: the percentage of spliting (entered from args)
+        split: the percentage of splitting (entered from args)
     """
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -766,7 +766,7 @@ def run_trials():
 
     train_ious = []
     test_ious = []
-    for num in range(num_trial):
+    for num in range(num_trials):
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         logging.info(f"Trial {num + 1}\n====================================")
@@ -792,9 +792,9 @@ def run_trials():
     train_std = stdev(train_ious)
 
     print(
-        f"Training: average: {train_average}, standard deviation: {train_std}"
+        f"Training: average: {train_average:.2f}, standard deviation: {train_std:.2f}"
     )
-    print(f"Test: mean: {test_average}, standard deviation:{test_std}")
+    print(f"Test: mean: {test_average:.2f}, standard deviation:{test_std:.2f}")
 
     if wandb_tune:
         run.log({"average_test_jaccard_index": test_average})
@@ -802,7 +802,7 @@ def run_trials():
 
 
 # executing
-exp_name, aug_type, split, wandb_tune, num_trial = arg_parsing()
+exp_name, aug_type, split, wandb_tune, num_trials = arg_parsing()
 train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 naip, kc = initialize_dataset()
 

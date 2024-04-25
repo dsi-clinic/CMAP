@@ -32,7 +32,6 @@ NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 30
-TRIAL = 2
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
