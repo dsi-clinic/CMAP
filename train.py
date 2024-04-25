@@ -17,7 +17,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 import yaml
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
@@ -28,6 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
@@ -700,13 +700,6 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    # randomly spliting data each time of training
-
-    # if wandb_tune:
-    #     run = wandb.init(project="cmap_train")
-    #     vars(args).update(run.config)
-    #     print("wandb taken over config")
-
     for t in range(config.EPOCHS):
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
@@ -719,7 +712,7 @@ def train(
             train_images_root,
         )
 
-        test_loss, test_jaccard = test(
+        test_loss, t_jaccard = test(
             test_dataloader,
             model,
             loss_fn,
@@ -750,7 +743,7 @@ def train(
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
-    return epoch_jaccard, test_jaccard
+    return epoch_jaccard, t_jaccard
 
 
 def run_trials():
