@@ -23,14 +23,18 @@ from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
+from torchgeo.datasets import NAIP, random_bbox_assignment
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
-from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from utils.sampler import (
+    BalancedGridGeoSampler,
+    BalancedRandomBatchGeoSampler,
+    collate_samples,
+)
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -154,6 +158,7 @@ def initialize_dataset():
         config.KC_LAYER,
         config.KC_LABEL_COL,
         config.KC_LABELS,
+        config.CONTEXT_SIZE,
         naip.crs,
         naip.res,
     )
@@ -179,14 +184,18 @@ def build_dataset(naip, kc, split):
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
-        collate_fn=stack_samples,
+        collate_fn=lambda samples: collate_samples(
+            samples, size=config.PATCH_SIZE
+        ),
         num_workers=config.NUM_WORKERS,
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
         batch_size=config.BATCH_SIZE,
         sampler=test_sampler,
-        collate_fn=stack_samples,
+        collate_fn=lambda samples: collate_samples(
+            samples, size=config.PATCH_SIZE
+        ),
         num_workers=config.NUM_WORKERS,
     )
     logging.info(f"Using {device} device")
