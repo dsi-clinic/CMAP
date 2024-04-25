@@ -17,7 +17,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 import yaml
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
@@ -28,6 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
@@ -672,7 +672,7 @@ def test(
     )
 
     # Now returns test_loss such that it can be compared against previous losses
-    return test_loss
+    return test_loss, final_jaccard
 
 
 def train(
@@ -719,7 +719,7 @@ def train(
             train_images_root,
         )
 
-        test_loss = test(
+        test_loss, test_jaccard = test(
             test_dataloader,
             model,
             loss_fn,
@@ -750,7 +750,7 @@ def train(
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
-    return epoch_jaccard, test_loss
+    return epoch_jaccard, test_jaccard
 
 
 def run_trials():
@@ -786,7 +786,6 @@ def run_trials():
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
 
-    print(test_ious, type(test_ious[1]))
     test_average = mean(test_ious)
     train_average = mean(train_ious)
     test_std = stdev(test_ious)
@@ -798,7 +797,7 @@ def run_trials():
     print(f"Test: mean: {test_average}, standard deviation:{test_std}")
 
     if wandb_tune:
-        run.log({"average test jaccard_index": test_average})
+        run.log({"average_test_jaccard_index": test_average})
         wandb.finish()
 
 
