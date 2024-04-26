@@ -17,7 +17,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 import yaml
 from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
@@ -28,6 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
@@ -710,6 +710,18 @@ def train(
     plateau_count = 0
 
     for t in range(config.EPOCHS):
+        if t == 0:
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
+                loss_fn,
+                test_jaccard,
+                t + 1,
+                plateau_count,
+                test_image_root,
+            )
+            print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
+
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
             train_dataloader,
@@ -759,7 +771,6 @@ def run_trials():
     """
     Running training for multiple trials
     """
-    model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
     if wandb_tune:
         run = wandb.init(project="cmap_train")
@@ -771,6 +782,7 @@ def run_trials():
     for num in range(num_trials):
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
+        model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
         logging.info(f"Trial {num + 1}\n====================================")
         train_iou, test_iou = train(
             writer,
