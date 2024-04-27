@@ -124,9 +124,10 @@ def arg_parsing():
     return exp_name, aug_type, split, wandb_tune, num_trials
 
 
-def data_prep(exp_name):
+def writer_prep(exp_name, trial_num):
     # set output path and exit run if path already exists
-    out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
+    exp_trial_name = f"{exp_name}_trial{trial_num}"
+    out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
     print(out_root)
     if wandb_tune:
         os.makedirs(out_root, exist_ok=True)
@@ -519,6 +520,7 @@ def train_epoch(
     optimizer: Optimizer,
     epoch: int,
     train_images_root,
+    writer,
 ) -> None:
     """
     Executes a training step for the model
@@ -587,6 +589,7 @@ def test(
     epoch: int,
     plateau_count: int,
     test_image_root,
+    writer,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -695,6 +698,7 @@ def train(
     optimizer,
     test_dataloader,
     test_image_root,
+    train_images_root,
     config=config,
 ):
     # How much the loss needs to drop to reset a plateau
@@ -710,6 +714,19 @@ def train(
     plateau_count = 0
 
     for t in range(config.EPOCHS):
+        if t == 0:
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
+                loss_fn,
+                test_jaccard,
+                t + 1,
+                plateau_count,
+                test_image_root,
+                writer,
+            )
+            print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
+
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
             train_dataloader,
@@ -719,6 +736,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
+            writer,
         )
 
         test_loss, t_jaccard = test(
@@ -729,6 +747,7 @@ def train(
             t + 1,
             plateau_count,
             test_image_root,
+            writer,
         )
         # Checks for plateau
         if best_loss is None:
@@ -759,7 +778,6 @@ def run_trials():
     """
     Running training for multiple trials
     """
-    model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
 
     if wandb_tune:
         run = wandb.init(project="cmap_train")
@@ -769,8 +787,12 @@ def run_trials():
     train_ious = []
     test_ious = []
     for num in range(num_trials):
+        train_images_root, test_image_root, out_root, writer = writer_prep(
+            exp_name, num
+        )
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
+        model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
         logging.info(f"Trial {num + 1}\n====================================")
         train_iou, test_iou = train(
             writer,
@@ -783,6 +805,7 @@ def run_trials():
             optimizer,
             test_dataloader,
             test_image_root,
+            train_images_root,
         )
 
         train_ious.append(float(train_iou))
@@ -805,7 +828,6 @@ def run_trials():
 
 # executing
 exp_name, aug_type, split, wandb_tune, num_trials = arg_parsing()
-train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
 naip, kc = initialize_dataset()
 
 if wandb_tune:
