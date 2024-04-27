@@ -4,9 +4,9 @@ import os
 DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = os.path.join(DATA_ROOT, "kane-county-data")
 KC_IMAGE_ROOT = os.path.join(DATA_ROOT, "KC-images")
-KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/top-structures-masks")
 KC_DEM_DIR = os.path.join(KC_SHAPE_ROOT, "KC_DEM_2017")
-OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
+KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
+OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
@@ -37,3 +37,8 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+
+# for wandb
+WANDB_API = ""
+COLOR_BRIGHT = 0.2
+COLOR_CONTRST = 0.4

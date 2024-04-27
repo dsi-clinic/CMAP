@@ -5,7 +5,6 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import shapely
-from einops import rearrange
 from rasterio.mask import mask
 from shapely.geometry import box
 
@@ -58,17 +57,13 @@ def create_mask(
             out_img_unique = np.where(out_img != 0, labels[label], out_img)
             output = np.maximum(output, out_img_unique)
 
-    # transpose mask to match image dimensions
-    msk = np.dstack((output[0], output[1], output[2], output[3])).astype(
-        "uint8"
-    )
-    msk = rearrange[msk, "h w c -> c h w"]
+    # take one layer because all layers are the same
+    msk = np.array([output[0]]).astype("uint8")
 
     # set output filename and metadata
     if not os.path.exists(save_dir):
         os.makedirs(save_dir)
     out_tif = os.path.join(save_dir, f"mask_{os.path.basename(img_fpath)}")
-
     out_meta.update(
         {
             "driver": "GTiff",
@@ -76,7 +71,7 @@ def create_mask(
             "height": output.shape[1],
             "width": output.shape[2],
             "transform": out_transform,
-            "count": 4,
+            "count": 1,
             "crs": crs,
         }
     )
@@ -131,3 +126,76 @@ def get_intersecting_shapes(
                 shapes[row[label_col]] = [row["geometry"]]
 
     return shapes
+
+
+def create_separate_masks(
+    img_fpath: str,
+    gdf: gpd.GeoDataFrame,
+    save_dir: str,
+    label_col: str,
+    labels: Dict[str, int],
+) -> None:
+    """
+    Creates masks separately for each shape that intersects with a given image.
+
+    Parameters
+    ----------
+    img_fpath : str
+        Path to image
+
+    gdf : geopandas.GeoDataFrame
+        A geopandas dataframe containing geometries
+
+    save_dir : str
+        Path to save directory
+
+    label_col : str
+        The column containing the labels of the shapes
+
+    labels : Dict[str, int]
+        A dict containing the labels of the shapes and their corresponding values
+    """
+
+    # open image and get bounding box
+    with rasterio.open(img_fpath) as src:
+        bbox = box(*src.bounds)
+        crs = src.crs
+
+        # extract intersecting shapes
+        shapes = get_intersecting_shapes(
+            bbox, crs, gdf, label_col, set(labels.keys())
+        )
+
+        # create mask for each label
+        for label in shapes:
+            for i in range(len(shapes[label])):
+                shape = shapes[label][i]
+                out_img, out_transform = mask(src, [shape], crop=True)
+                output = np.where(out_img != 0, labels[label], out_img)
+                msk = np.array([output[0]]).astype("uint8")
+
+                # set output filename and metadata
+                if not os.path.exists(save_dir):
+                    os.makedirs(save_dir)
+                out_tif = os.path.join(
+                    save_dir,
+                    f"mask_label{labels[label]}_{i}_{os.path.basename(img_fpath)}",
+                )
+
+                # copy metadata from image and update
+                out_meta = src.meta.copy()
+                out_meta.update(
+                    {
+                        "driver": "GTiff",
+                        "dtype": "uint8",
+                        "height": output.shape[1],
+                        "width": output.shape[2],
+                        "transform": out_transform,
+                        "count": 1,
+                        "crs": crs,
+                    }
+                )
+
+                # write mask to file
+                with rasterio.open(out_tif, "w", **out_meta) as dest:
+                    dest.write(msk.astype("uint8"))
