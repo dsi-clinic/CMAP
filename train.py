@@ -13,6 +13,7 @@ import shutil
 import random
 import sys
 from pathlib import Path
+from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
@@ -25,7 +26,7 @@ from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
+from torchgeo.datasets import NAIP, random_bbox_assignment
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
@@ -33,7 +34,11 @@ from data.kc import KaneCounty
 from data.dem import KaneDEM
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
-from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from utils.sampler import (
+    BalancedGridGeoSampler,
+    BalancedRandomBatchGeoSampler,
+    collate_samples,
+)
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -81,6 +86,13 @@ parser.add_argument(
     default="",
 )
 
+parser.add_argument(
+    "--num_trials",
+    type=str,
+    help="Please enter the number of trial for each train",
+    default="1",
+)
+
 args = parser.parse_args()
 spec = importlib.util.spec_from_file_location(args.config)
 config = importlib.import_module(args.config)
@@ -105,16 +117,19 @@ def arg_parsing():
 
     # tuning with wandb
     wandb_tune = args.tune
+    num_trials = int(args.num_trials)
+
     if wandb_tune:
         print("wandb tuning")
         wandb.login(key=args.tune_key)
 
-    return exp_name, aug_type, split, wandb_tune
+    return exp_name, aug_type, split, wandb_tune, num_trials
 
 
-def data_prep(exp_name):
+def writer_prep(exp_name, trial_num):
     # set output path and exit run if path already exists
-    out_root = os.path.join(config.OUTPUT_ROOT, exp_name)
+    exp_trial_name = f"{exp_name}_trial{trial_num}"
+    out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
     print(out_root)
     if wandb_tune:
         os.makedirs(out_root, exist_ok=True)
@@ -147,15 +162,40 @@ def data_prep(exp_name):
     return train_images_root, test_image_root, out_root, writer
 
 
-def build_dataset(split):
-    # build dataset
+def initialize_dataset():
     naip = NAIP(config.KC_IMAGE_ROOT)
-    kc = KaneCounty(config.KC_MASK_ROOT)
-    dem = KaneDEM(config.KC_DEM_ROOT)
 
+    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+    kc = KaneCounty(
+        shape_path,
+        config.KC_LAYER,
+        config.KC_LABEL_COL,
+        config.KC_LABELS,
+        config.CONTEXT_SIZE,
+        naip.crs,
+        naip.res,
+    )
+    if config.KC_DEM_ROOT is not None:
+        dem = KaneDEM(config.KC_DEM_ROOT)
+        naip = naip & dem
+        print("naip and dem loaded")
+        print(naip[0].shape)
+    kc = KaneCounty(config.KC_MASK_ROOT)
+
+    return naip, kc
+
+
+def build_dataset(naip, kc, split):
+    """
+    Randomly split and load data to be the test and train sets
+
+    Input:
+        split: the percentage of splitting (entered from args)
+    """
+    # split the dataset
     train_portion, test_portion = random_bbox_assignment(naip, [split, 1 - split])
-    train_dataset = (train_portion & kc) & dem
-    test_dataset = (test_portion & kc) & dem
+    train_dataset = train_portion & kc
+    test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
         train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE
@@ -168,14 +208,14 @@ def build_dataset(split):
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
-        collate_fn=stack_samples,
+        collate_fn=lambda samples: collate_samples(samples, size=config.PATCH_SIZE),
         num_workers=config.NUM_WORKERS,
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
         batch_size=config.BATCH_SIZE,
         sampler=test_sampler,
-        collate_fn=stack_samples,
+        collate_fn=lambda samples: collate_samples(samples, size=config.PATCH_SIZE),
         num_workers=config.NUM_WORKERS,
     )
     logging.info(f"Using {device} device")
@@ -183,6 +223,9 @@ def build_dataset(split):
 
 
 def create_model():
+    """
+    Setting up training model, loss function and measuring metrics
+    """
     # create the model
     model = SegmentationModel(
         model=config.MODEL,
@@ -429,7 +472,7 @@ def train_setup(
     y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, 0, :, :].squeeze()
+    y_squeezed = y[:, :, :].squeeze()
 
     # plot first batch
     if batch == 0:
@@ -457,8 +500,8 @@ def train_setup(
                 plot_tensors,
                 sample_fname,
                 "grid",
-                KaneCounty.colors,
-                KaneCounty.labels,
+                kc.colors,
+                kc.labels_inverse,
                 sample["bbox"][i],
             )
 
@@ -475,6 +518,8 @@ def train_epoch(
     jaccard: Metric,
     optimizer: Optimizer,
     epoch: int,
+    train_images_root,
+    writer,
 ) -> None:
     """
     Executes a training step for the model
@@ -541,6 +586,7 @@ def test(
     epoch: int,
     plateau_count: int,
     test_image_root,
+    writer,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -588,7 +634,7 @@ def test(
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
-            y_squeezed = y[:, 0, :, :].squeeze()
+            y_squeezed = y[:, :, :].squeeze()
 
             # compute prediction error
             outputs = model(X)
@@ -619,8 +665,8 @@ def test(
                         plot_tensors,
                         sample_fname,
                         "row",
-                        KaneCounty.colors,
-                        KaneCounty.labels,
+                        kc.colors,
+                        kc.labels_inverse,
                         sample["bbox"][i],
                     )
     test_loss /= num_batches
@@ -633,21 +679,22 @@ def test(
     )
 
     # Now returns test_loss such that it can be compared against previous losses
-    return test_loss
+    return test_loss, final_jaccard
 
 
 def train(
-    # writer,
-    # train_dataloader,
-    # model,
-    # test_jaccard,
-    # out_root,
-    # loss_fn,
-    # train_jaccard,
-    # optimizer,
-    # test_dataloader,
-    # test_image_root,
-    # config=config,
+    writer,
+    train_dataloader,
+    model,
+    test_jaccard,
+    out_root,
+    loss_fn,
+    train_jaccard,
+    optimizer,
+    test_dataloader,
+    test_image_root,
+    train_images_root,
+    config=config,
 ):
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
@@ -661,17 +708,33 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    if wandb_tune:
-        run = wandb.init(project="cmap_train")
-        vars(args).update(run.config)
-        print("wandb taken over config")
-
     for t in range(config.EPOCHS):
+        if t == 0:
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
+                loss_fn,
+                test_jaccard,
+                t + 1,
+                plateau_count,
+                test_image_root,
+                writer,
+            )
+            print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
+
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
-            train_dataloader, model, loss_fn, train_jaccard, optimizer, t + 1
+            train_dataloader,
+            model,
+            loss_fn,
+            train_jaccard,
+            optimizer,
+            t + 1,
+            train_images_root,
+            writer,
         )
-        test_loss = test(
+
+        test_loss, t_jaccard = test(
             test_dataloader,
             model,
             loss_fn,
@@ -679,8 +742,8 @@ def train(
             t + 1,
             plateau_count,
             test_image_root,
+            writer,
         )
-
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss
@@ -703,23 +766,70 @@ def train(
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
 
+    return epoch_jaccard, t_jaccard
+
+
+def run_trials():
+    """
+    Running training for multiple trials
+    """
+
     if wandb_tune:
-        run.log({"jaccard_index": epoch_jaccard}, step=t)
+        run = wandb.init(project="cmap_train")
+        vars(args).update(run.config)
+        print("wandb taken over config")
+
+    train_ious = []
+    test_ious = []
+    for num in range(num_trials):
+        train_images_root, test_image_root, out_root, writer = writer_prep(
+            exp_name, num
+        )
+        # randomly splitting the data at every trial
+        train_dataloader, test_dataloader = build_dataset(naip, kc, split)
+        model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+        logging.info(f"Trial {num + 1}\n====================================")
+        train_iou, test_iou = train(
+            writer,
+            train_dataloader,
+            model,
+            test_jaccard,
+            out_root,
+            loss_fn,
+            train_jaccard,
+            optimizer,
+            test_dataloader,
+            test_image_root,
+            train_images_root,
+        )
+
+        train_ious.append(float(train_iou))
+        test_ious.append(float(test_iou))
+
+    test_average = mean(test_ious)
+    train_average = mean(train_ious)
+    test_std = stdev(test_ious)
+    train_std = stdev(train_ious)
+
+    print(
+        f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
+    )
+    print(f"Test: mean: {test_average:.3f}, standard deviation:{test_std:.3f}")
+
+    if wandb_tune:
+        run.log({"average_test_jaccard_index": test_average})
         wandb.finish()
 
 
-# executing everything
-exp_name, aug_type, split, wandb_tune = arg_parsing()
-
-train_images_root, test_image_root, out_root, writer = data_prep(exp_name)
-train_dataloader, test_dataloader = build_dataset(split)
-model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+# executing
+exp_name, aug_type, split, wandb_tune, num_trials = arg_parsing()
+naip, kc = initialize_dataset()
 
 if wandb_tune:
     with open("configs/sweep_config.yml", "r") as file:
         sweep_config = yaml.safe_load(file)
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    wandb.agent(sweep_id, train, count=10)
+    wandb.agent(sweep_id, run_trials, count=10)
 
 else:
-    train()
+    run_trials()

@@ -7,7 +7,7 @@ No comprehensive inventory of stormwater storage and green infrastructure (GI) a
 The Chicago Metropolitan Agency for Planning (CMAP) is interested in using deep learning to map and identify locations of stormwater storage and other related geographic features throughout Chicago and the surrounding area.
 To begin the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to be used to create a predictive deep learning model.
 The code in this repo does a few things:
-1. Creates masks of geographic features across Kane County.
+1. Get images corresponding to geographic features across Kane County.
 2. Will train and test various predictive deep learning models on surrounding geographies.
 3. Will apply Kane County data to identify stormwater basins in other Illinois counties.
 
@@ -20,7 +20,7 @@ There are several tasks associated with this project:
 3. Train a model to identify different types of locations (for example, wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
 This will be accomplished within the following pipeline structure:
-1. Masks of shape data are created for Kane County stormwater structures (`preproc_kc.py`) and if necessary, original NAIP images are downloaded (`utils/get_naip_images.py`).
+1. Kane County stormwater structures shape data is preprocessed (`preproc_kc.py`) to get corresponding NAIP images (`utils/get_naip_images.py`).
 2. A training loop (`train.py`) takes in configurations (`configs/dsi.py`) and is assigned to the cluster (.job), utilizing the model defined `utils/model.py` and the custom Raster Dataset defined in `utils/kc.py`.
 
 ## Usage
@@ -71,7 +71,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>]$SLURM_ARRAY_TASK_ID
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
 
 Or, to run in an interactive session:
@@ -82,7 +82,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>]
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] [--num_trial <num_trial>]
 ```
 
 ## Git Usage

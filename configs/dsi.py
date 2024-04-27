@@ -29,6 +29,7 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
+CONTEXT_SIZE = 64
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
@@ -37,6 +38,18 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+
+# KaneCounty data
+KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
+KC_LAYER = 4
+KC_LABEL_COL = "BasinType"
+KC_LABELS = {
+    "BACKGROUND": 0,
+    "POND": 1,
+    "WETLAND": 2,
+    "DRY BOTTOM - TURF": 3,
+    "DRY BOTTOM - MESIC PRAIRIE": 4,
+}
 
 # for wandb
 WANDB_API = ""
