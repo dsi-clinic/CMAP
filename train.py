@@ -100,7 +100,6 @@ device = (
     else "cpu"
 )
 
-
 def arg_parsing():
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
@@ -521,6 +520,7 @@ def train_epoch(
     epoch: int,
     train_images_root,
     writer,
+    num_classes: int
 ) -> None:
     """
     Executes a training step for the model
@@ -549,6 +549,7 @@ def train_epoch(
     model.train()
     jaccard.reset()
     train_loss = 0
+    
     for batch, sample in enumerate(dataloader):
         X, y = train_setup(
             sample, epoch, batch, aug_type, train_images_root, model
@@ -574,12 +575,38 @@ def train_epoch(
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
-    # Need to rename scalars?
     writer.add_scalar("Loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info(f"Jaccard Index: {final_jaccard}")
     return final_jaccard
 
+def nanmean(x):
+    """Computes the arithmetic mean ignoring any NaNs."""
+    return torch.mean(x[x == x])
+
+def _fast_hist(true, pred, num_classes):
+    mask = (true >= 0) & (true < num_classes)
+    hist = torch.bincount(
+        num_classes * true[mask] + pred[mask],
+        minlength=num_classes ** 2,
+    ).reshape(num_classes, num_classes).float()
+    return hist
+
+def jaccard_index(hist):
+    """Computes the Jaccard index, a.k.a the Intersection over Union (IoU).
+
+    Args:
+        hist: confusion matrix.
+
+    Returns:
+        avg_jacc: the average per-class jaccard index.
+    """
+    A_inter_B = torch.diag(hist)
+    A = hist.sum(dim=1)
+    B = hist.sum(dim=0)
+    jaccard = A_inter_B / (A + B - A_inter_B + 1e-10)
+    avg_jacc = nanmean(jaccard)
+    return avg_jacc
 
 def test(
     dataloader: DataLoader,
@@ -590,6 +617,7 @@ def test(
     plateau_count: int,
     test_image_root,
     writer,
+    num_classes
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -614,6 +642,9 @@ def test(
     plateau_count : int
         The number of epochs the loss has been plateauing
 
+    num_classes : int
+        The number of labels to predict
+
     Returns
     -------
     float
@@ -623,6 +654,8 @@ def test(
     model.eval()
     jaccard.reset()
     test_loss = 0
+    # class_iou = torch.zeros(num_classes)  # Initialize a tensor to store IoU per class
+    # class_count = torch.zeros(num_classes)  # Count the number of pixels per class
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
@@ -646,6 +679,41 @@ def test(
             # update metric
             preds = outputs.argmax(dim=1)
             jaccard.update(preds, y_squeezed)
+
+            # calculate Jaccard per index using helper functions
+            # need to change formatting to make it readable
+            hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
+            logging.info(
+                f"{jaccard_index(hist)} \n"
+            )
+
+            """
+            # returns error that sizes of class_iou and iou_per_class don't match, seen below
+            # RuntimeError: The size of tensor a (5) must match the size of tensor b (16) at non-singleton dimension 0
+            intersection = torch.logical_and(preds, y_squeezed).float().sum(dim=(1, 2))
+            union = torch.logical_or(preds, y_squeezed).float().sum(dim=(1, 2))
+            iou_per_class = torch.where(union != 0, intersection / union, torch.zeros_like(intersection))
+            class_iou += iou_per_class
+            class_count += torch.sum(y_squeezed, dim=(1, 2))
+            """
+            """
+            # class_iou[present_classes] += iou_per_class
+            # RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)
+            # Code to only consider classes present in the batch for IoU calculation
+            present_classes = torch.unique(torch.cat((preds.view(-1), y_squeezed.view(-1))))
+            intersection = torch.zeros_like(present_classes, dtype=torch.float)
+            union = torch.zeros_like(present_classes, dtype=torch.float)
+
+            for i, class_id in enumerate(present_classes):
+                class_mask = (y_squeezed == class_id)
+                pred_mask = (preds == class_id)
+                intersection[i] = torch.logical_and(class_mask, pred_mask).float().sum()
+                union[i] = torch.logical_or(class_mask, pred_mask).float().sum()
+
+            iou_per_class = torch.where(union != 0, intersection / union, torch.zeros_like(intersection))
+            class_iou[present_classes] += iou_per_class
+            class_count[present_classes] += torch.sum(y_squeezed, dim=(1, 2))
+            """
 
             # add test loss to rolling total
             test_loss += loss.item()
@@ -678,6 +746,15 @@ def test(
     final_jaccard = jaccard.compute()
     writer.add_scalar("Loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
+    """
+    class_iou /= class_count
+    for i in range(num_classes):
+        if class_count[i] > 0:
+            writer.add_scalar(f"IoU/class_{i}", class_iou[i], epoch)
+            logging.info(
+                f"IoU for class {i}: {class_iou[i]:>7f} \n"
+            )
+    """
     logging.info(
         f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
         + f"Avg loss: {test_loss:>7f} \n"
@@ -707,6 +784,9 @@ def train(
     # How many epochs loss needs to plateau before terminating
     patience = config.PATIENCE
 
+    # How many classes we're predicting
+    num_classes = config.NUM_CLASSES
+
     # Beginning loss
     best_loss = None
 
@@ -724,6 +804,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
+                num_classes
             )
             print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
 
@@ -737,6 +818,7 @@ def train(
             t + 1,
             train_images_root,
             writer,
+            num_classes
         )
 
         test_loss, t_jaccard = test(
@@ -748,6 +830,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
+            num_classes
         )
         # Checks for plateau
         if best_loss is None:
