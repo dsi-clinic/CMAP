@@ -416,6 +416,15 @@ def add_extra_channel(
     return augmented_tensor
 
 
+def add_channel_dim(tensor):
+    """Ensure the tensor has a channel dimension."""
+    if tensor.dim() == 2:  # Shape (H, W)
+        return tensor.unsqueeze(0)  # Now shape (1, H, W)
+    elif tensor.dim() == 3 and tensor.size(1) != 1:  # Shape (B, H, W)
+        return tensor.unsqueeze(1)  # Now shape (B, 1, H, W)
+    return tensor  # Already has channel dimension
+
+
 def train_setup(
     sample: DefaultDict[str, Any],
     epoch: int,
@@ -448,12 +457,12 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
+    samp_mask = add_channel_dim(samp_mask)
     normalize, scale = normalize_func(model)
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)
-            samp_mask = add_extra_channel(samp_mask)
 
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
