@@ -1,9 +1,11 @@
 import random
-from collections.abc import Iterator
-from typing import Optional, Union
+from collections.abc import Iterable, Iterator, Sequence
+from typing import Any, Optional, Union
 
 import torch
+from torch.nn import functional as F
 from torchgeo.datasets import BoundingBox, GeoDataset
+from torchgeo.datasets.utils import _list_dict_to_dict_list
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
 from torchgeo.samplers.utils import (
@@ -100,20 +102,22 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                     bounds.maxx - bounds.minx >= self.size[1]
                     or bounds.maxy - bounds.miny >= self.size[0]
                 ):
+                    sample_maxx, sample_maxy = bounds.maxx, bounds.maxy
+
                     # Choose random bounding box within that tile
-                    bounds = get_random_bounding_box(
+                    random_bounds = get_random_bounding_box(
                         bounds, self.size, self.res
                     )
-
-                # process the bounding box if it is small or out of bound
-                minx, maxx, miny, maxy = get_bounding_box(
-                    bounds, self.size, self.roi
-                )
-                batch.append(
-                    BoundingBox(
-                        minx, maxx, miny, maxy, bounds.mint, bounds.maxt
+                    bounds = BoundingBox(
+                        random_bounds.minx,
+                        min(sample_maxx, random_bounds.maxx),
+                        random_bounds.miny,
+                        min(sample_maxy, random_bounds.maxy),
+                        random_bounds.mint,
+                        random_bounds.maxt,
                     )
-                )
+
+                batch.append(bounds)
 
             yield batch
 
@@ -203,26 +207,16 @@ class BalancedGridGeoSampler(GeoSampler):
                 # For each row...
                 for i in range(rows):
                     miny = bounds.miny + i * self.stride[0]
-                    maxy = miny + self.size[0]
-                    if maxy > self.roi.maxy:
-                        miny, maxy = self.roi.maxy - self.size[0], self.roi.maxy
+                    maxy = min(miny + self.size[0], bounds.maxy)
 
                     # For each column...
                     for j in range(cols):
                         minx = bounds.minx + j * self.stride[1]
-                        maxx = minx + self.size[1]
-                        if maxx > self.roi.maxx:
-                            minx, maxx = (
-                                self.roi.maxx - self.size[1],
-                                self.roi.maxx,
-                            )
+                        maxx = min(minx + self.size[1], bounds.maxx)
 
                         yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
             else:
-                minx, maxx, miny, maxy = get_bounding_box(
-                    bounds, self.size, self.roi
-                )
-                yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
+                yield bounds
 
     def __len__(self) -> int:
         """Return the number of samples over the ROI.
@@ -233,31 +227,43 @@ class BalancedGridGeoSampler(GeoSampler):
         return self.length
 
 
-def get_bounding_box(bounds, size, roi):
-    """Compute the bounding box of a patch sampled from a tile which is
-        smaller than the given size.
+def get_padding_size(sample_shape: Sequence[int], size: int):
+    """Get padding size for 2D samples.
+
     Args:
-        bounds: bounding box of tile
-        size: size of output patch
+        sample_shape: list of lengths
+        size: the output size
 
-    Returns: boundaries of x- and y-axis:
-        minx, maxx, miny, maxy
+    Returns:
+        4-elements tuple
     """
-    # compute the center of the tile
-    center_x = (bounds.minx + bounds.maxx) / 2
-    center_y = (bounds.miny + bounds.maxy) / 2
+    left = (size - sample_shape[-1]) // 2
+    right = size - left - sample_shape[-1]
+    top = (size - sample_shape[-2]) // 2
+    bottom = size - top - sample_shape[-2]
+    return (left, right, top, bottom)
 
-    # compute the bounding box around the center with the given size
-    minx = center_x - size[1] / 2
-    maxx = center_x + size[1] / 2
-    if minx < roi.minx:
-        minx, maxx = roi.minx, roi.minx + size[1]
-    elif maxx > roi.maxx:
-        minx, maxx = roi.maxx - size[1], roi.maxx
-    miny = center_y - size[0] / 2
-    maxy = center_y + size[0] / 2
-    if miny < roi.miny:
-        miny, maxy = roi.miny, roi.miny + size[0]
-    elif maxy > roi.maxy:
-        miny, maxy = roi.maxy - size[0], roi.maxy
-    return minx, maxx, miny, maxy
+
+def collate_samples(
+    samples: Iterable[dict[Any, Any]], size: int
+) -> dict[Any, Any]:
+    """Stack a list of samples along a new axis. Samples smaller than the given
+    size are padded with 0.
+
+    Useful for forming a mini-batch of samples to pass to DataLoader.
+
+    Args:
+        samples: list of samples
+
+    Returns:
+        a single sample
+    """
+    collated: dict[Any, Any] = _list_dict_to_dict_list(samples)
+    for key, value in collated.items():
+        if isinstance(value[0], torch.Tensor):
+            value = [
+                F.pad(sample, get_padding_size(sample.shape, size))
+                for sample in value
+            ]
+            collated[key] = torch.stack(value)
+    return collated
