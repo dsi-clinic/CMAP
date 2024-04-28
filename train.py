@@ -30,11 +30,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
-<<<<<<< HEAD
 from utils.plot import determine_dominant_label, plot_from_tensors
-=======
-from utils.plot import plot_from_tensors
->>>>>>> 878ab6d571e5cdd4c64097699353628ea46c4904
 from utils.sampler import (
     BalancedGridGeoSampler,
     BalancedRandomBatchGeoSampler,
