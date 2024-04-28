@@ -29,7 +29,11 @@ from torchmetrics.classification import MulticlassJaccardIndex
 from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import determine_dominant_label, plot_from_tensors
-from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from utils.sampler import (
+    BalancedGridGeoSampler,
+    BalancedRandomBatchGeoSampler,
+    collate_samples,
+)
 
 sweep_config = {
     "method": "bayes",
