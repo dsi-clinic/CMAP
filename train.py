@@ -257,89 +257,72 @@ def create_model():
     return model, loss_fn, train_jaccard, test_jaccard, optimizer
 
 
-# Various augmentation definitions
-default_aug = AugmentationSequential(
+# Define spatial augmentations that apply to both image and mask
+spatial_aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-plasma_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomPlasmaShadow(
-        roughness=(0.1, 0.7),
-        shade_intensity=(-1.0, 0.0),
-        shade_quantity=(0.0, 1.0),
-        keepdim=True,
-    ),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-gauss_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-all_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomPlasmaShadow(
-        roughness=(0.1, 0.7),
-        shade_intensity=(-1.0, 0.0),
-        shade_quantity=(0.0, 1.0),
-        keepdim=True,
-    ),
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
     keepdim=True,
 )
 
 
-def aug_color(bright=config.COLOR_BRIGHT, contrast=config.COLOR_CONTRST):
-    # testing - both modified from Gaussian
-    color_jitter = AugmentationSequential(
-        K.RandomHorizontalFlip(p=0.5),
-        K.RandomVerticalFlip(p=0.5),
-        K.ColorJitter(bright, contrast),
-        K.RandomRotation(degrees=360, align_corners=True),
-        data_keys=["image", "mask"],
+# Define exclusive image augmentations for color-related effects
+def aug_color(bright, contrast):
+    """Generate color-related augmentations that apply only to the image."""
+    return AugmentationSequential(
+        K.ColorJitter(brightness=bright, contrast=contrast),
+        data_keys=["image"],
         keepdim=True,
     )
-    return color_jitter
 
 
-box_blur = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomBoxBlur(keepdim=True),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-
-
+# Add spatial augmentations to the specific color and blur augmentations
 def get_aug(aug_type):
-    # Choose the proper augmentation format
+    """Select augmentation based on type, with appropriate application to
+    image and mask.
+    """
     if aug_type == "plasma":
-        aug = plasma_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomPlasmaShadow(
+                roughness=(0.1, 0.7),
+                shade_intensity=(-1.0, 0.0),
+                shade_quantity=(0.0, 1.0),
+                keepdim=True,
+            ),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "gauss":
-        aug = gauss_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "all":
-        aug = all_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomPlasmaShadow(
+                roughness=(0.1, 0.7),
+                shade_intensity=(-1.0, 0.0),
+                shade_quantity=(0.0, 1.0),
+                keepdim=True,
+            ),
+            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "color":
-        aug = aug_color()
+        return spatial_aug + aug_color(
+            config.COLOR_BRIGHT, config.COLOR_CONTRST
+        )
     elif aug_type == "blur":
-        aug = box_blur
+        return spatial_aug + AugmentationSequential(
+            K.RandomBoxBlur(keepdim=True),
+            data_keys=["image"],
+            keepdim=True,
+        )
     else:
-        aug = default_aug
-    return aug
+        return spatial_aug
 
 
 def copy_first_entry(a_list: list) -> list:
