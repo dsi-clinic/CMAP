@@ -128,7 +128,6 @@ def writer_prep(exp_name, trial_num):
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_name}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
-    print(out_root)
     if wandb_tune:
         os.makedirs(out_root, exist_ok=True)
     else:
@@ -558,9 +557,9 @@ def train_epoch(
     final_jaccard = jaccard.compute()
 
     # Need to rename scalars?
-    writer.add_scalar("Loss/train", train_loss, epoch)
+    writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
-    logging.info(f"Jaccard Index: {final_jaccard}")
+    logging.info(f"Train Jaccard index: {final_jaccard}:.4f")
     return final_jaccard
 
 
@@ -659,11 +658,11 @@ def test(
                     )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
-    writer.add_scalar("Loss/test", test_loss, epoch)
+    writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
-        f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
-        + f"Avg loss: {test_loss:>7f} \n"
+        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
+        + f"Test avg loss: {test_loss:>4f} \n"
     )
 
     # Now returns test_loss such that it can be compared against previous losses
@@ -708,7 +707,7 @@ def train(
                 test_image_root,
                 writer,
             )
-            print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
+            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
