@@ -559,7 +559,7 @@ def train_epoch(
     # Need to rename scalars?
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
-    logging.info(f"Train Jaccard index: {final_jaccard}:.4f")
+    logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
     return final_jaccard
 
 
@@ -649,9 +649,7 @@ def test(
                     predominant_label_id = determine_dominant_label(
                         ground_truth
                     )
-                    label_name = KaneCounty.labels.get(
-                        predominant_label_id, "UNKNOWN"
-                    )
+                    label_name = kc.labels.get(predominant_label_id, "UNKNOWN")
                     save_dir = os.path.join(epoch_dir, label_name)
                     if not os.path.exists(save_dir):
                         os.makedirs(save_dir)
@@ -805,8 +803,11 @@ def run_trials():
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
-    test_std = stdev(test_ious)
-    train_std = stdev(train_ious)
+    test_std = 0
+    train_std = 0
+    if num_trials > 1:
+        test_std = stdev(test_ious)
+        train_std = stdev(train_ious)
 
     print(
         f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
