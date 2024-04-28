@@ -30,7 +30,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
-from utils.plot import plot_from_tensors
+from utils.plot import determine_dominant_label, plot_from_tensors
 from utils.sampler import (
     BalancedGridGeoSampler,
     BalancedRandomBatchGeoSampler,
@@ -636,15 +636,25 @@ def test(
             if batch == 0 or (
                 plateau_count == config.PATIENCE - 1 and batch < 10
             ):
-                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                if not os.path.exists(save_dir):
-                    os.mkdir(save_dir)
+                epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                if not os.path.exists(epoch_dir):
+                    os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
+                    ground_truth = samp_mask[i]
+                    predominant_label_id = determine_dominant_label(
+                        ground_truth
+                    )
+                    label_name = KaneCounty.labels.get(
+                        predominant_label_id, "UNKNOWN"
+                    )
+                    save_dir = os.path.join(epoch_dir, label_name)
+                    if not os.path.exists(save_dir):
+                        os.makedirs(save_dir)
                     sample_fname = os.path.join(
                         save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
                     )
