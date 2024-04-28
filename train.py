@@ -35,16 +35,6 @@ from utils.sampler import (
     collate_samples,
 )
 
-sweep_config = {
-    "method": "bayes",
-    "metric": {"goal": "maximize", "name": "jaccard_index"},
-    "parameters": {
-        # "BATCH_SIZE": {"values": [16, 32, 64]},
-        "COLOR_BRIGHT": {"values": [0.2, 0.3, 0.4]},
-        "COLOR_CONTRST": {"values": [0.2, 0.3, 0.4]},
-    },
-}
-
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
     description="Train a segmentation model to predict stormwater storage "
