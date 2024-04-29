@@ -66,11 +66,11 @@ AUG_PARAMS = {
     "gaussian_noise_prob": 0.2,
     "gaussian_noise_std": 0.05,
     "gaussian_blur_sigma": (0.1, 2.0),
-    "plasma_roughness": (0.1, 0.3),
-    "saturation_limit": 0.2,
-    "shadow_intensity": (-0.1, 0.0),
-    "shade_quantity": (0.0, 0.1),
-    "gamma": (0.5, 1.5),
+    "plasma_roughness": (0.0, 0.2),
+    "saturation_limit": 0.1,
+    "shadow_intensity": (-0.05, 0.0),
+    "shade_quantity": (0.0, 0.05),
+    "gamma": (0.8, 1.2),
 }
 AUG_MODE = "random"  # all or random
 
