@@ -99,7 +99,13 @@ def create_augmentation_pipelines(
 
 
 def apply_augs(
-    spatial_transforms, color_transforms, image, mask, mode, rgb_channels=None
+    spatial_transforms,
+    color_transforms,
+    image,
+    mask,
+    spatial_mode,
+    color_mode,
+    rgb_channels=None,
 ):
     """
     Apply spatial and color augs to an image and its corresponding mask.
@@ -127,15 +133,18 @@ def apply_augs(
     rgb_mask[rgb_channels] = True
 
     # Random mode: pick random number and set of augmentations to apply
-    if mode == "random":
+    if spatial_mode == "random":
         spatial_augmentations = random.sample(
             spatial_transforms, k=random.randint(1, len(spatial_transforms))
         )
+    else:
+        spatial_augmentations = spatial_transforms
+
+    if color_mode == "random":
         color_augmentations = random.sample(
             color_transforms, k=random.randint(1, len(color_transforms))
         )
     else:
-        spatial_augmentations = spatial_transforms
         color_augmentations = color_transforms
 
     # Create a pipeline for spatial augmentations and apply them to the image and mask

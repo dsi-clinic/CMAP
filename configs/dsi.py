@@ -54,10 +54,10 @@ IMAGE_AUG_INDICES = [
     1,  # Brightness
     2,  # Gaussian Noise
     3,  # Gaussian Blur
-    4,  # Plasma Brightness
+    # 4,  # Plasma Brightness
     5,  # Saturation
-    6,  # Channel Shuffle
-    7,  # Gamma
+    # 6,  # Channel Shuffle
+    # 7,  # Gamma
 ]
 AUG_PARAMS = {
     "rotation_degrees": 360,
@@ -72,7 +72,8 @@ AUG_PARAMS = {
     "shade_quantity": (0.0, 0.05),
     "gamma": (0.8, 1.2),
 }
-AUG_MODE = "random"  # all or random
+SPATIAL_AUG_MODE = "all"  # all or random
+COLOR_AUG_MODE = "random"  # all or random
 
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"

@@ -320,7 +320,8 @@ def train_setup(
     sample: DefaultDict[str, Any],
     epoch: int,
     batch: int,
-    aug_mode,
+    spatial_aug_mode,
+    color_aug_mode,
     spatial_augs,
     color_augs,
     train_images_root,
@@ -364,7 +365,9 @@ def train_setup(
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
     X = scale(X)
 
-    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X, y, aug_mode)
+    X_aug, y_aug = apply_augs(
+        spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode
+    )
 
     # denormalize mask to reset to index tensor (req'd for loss func)
     y = y_aug.type(torch.int64)
@@ -422,7 +425,8 @@ def train_epoch(
     writer,
     spatial_augs,
     color_augs,
-    aug_mode,
+    spatial_aug_mode,
+    color_aug_mode,
 ) -> None:
     """
     Executes a training step for the model
@@ -456,7 +460,8 @@ def train_epoch(
             sample,
             epoch,
             batch,
-            aug_mode,
+            spatial_aug_mode,
+            color_aug_mode,
             spatial_augs,
             color_augs,
             train_images_root,
@@ -658,7 +663,8 @@ def train(
             writer,
             spatial_augs,
             color_augs,
-            config.AUG_MODE,
+            config.SPATIAL_AUG_MODE,
+            config.COLOR_AUG_MODE,
         )
 
         test_loss, t_jaccard = test(
