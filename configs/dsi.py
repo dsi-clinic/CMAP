@@ -4,9 +4,9 @@ import os
 DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = os.path.join(DATA_ROOT, "kane-county-data")
 KC_IMAGE_ROOT = os.path.join(DATA_ROOT, "KC-images")
-KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/top-structures-masks")
-KC_DEM_DIR = os.path.join(KC_SHAPE_ROOT, "KC_DEM_2017")
-OUTPUT_ROOT = "/net/projects/cmap/model-outputs"
+KC_DEM_ROOT = os.path.join(KC_SHAPE_ROOT, "KC_DEM_2017")
+KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
+OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
@@ -29,6 +29,7 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
+CONTEXT_SIZE = 64
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
@@ -37,3 +38,20 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+
+# KaneCounty data
+KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
+KC_LAYER = 4
+KC_LABEL_COL = "BasinType"
+KC_LABELS = {
+    "BACKGROUND": 0,
+    "POND": 1,
+    "WETLAND": 2,
+    "DRY BOTTOM - TURF": 3,
+    "DRY BOTTOM - MESIC PRAIRIE": 4,
+}
+
+# for wandb
+WANDB_API = ""
+COLOR_BRIGHT = 0.2
+COLOR_CONTRST = 0.4
