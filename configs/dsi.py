@@ -38,6 +38,42 @@ LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
 
+# data augmentation
+SPATIAL_AUG_INDICES = [
+    0,  # HorizontalFlip
+    1,  # VerticalFlip
+    2,  # Rotate
+    3,  # Affine
+    4,  # Elastic
+    5,  # Perspective
+]
+
+# only applied to images-- not masks
+IMAGE_AUG_INDICES = [
+    0,  # Contrast
+    1,  # Brightness
+    2,  # Gaussian Noise
+    3,  # Gaussian Blur
+    4,  # Plasma Brightness
+    5,  # Saturation
+    6,  # Channel Shuffle
+    7,  # Gamma
+]
+AUG_PARAMS = {
+    "rotation_degrees": 360,
+    "contrast_limit": 0.2,
+    "brightness_limit": 0.2,
+    "gaussian_noise_prob": 0.2,
+    "gaussian_noise_std": 0.05,
+    "gaussian_blur_sigma": (0.1, 2.0),
+    "plasma_roughness": (0.1, 0.3),
+    "saturation_limit": 0.2,
+    "shadow_intensity": (-0.1, 0.0),
+    "shade_quantity": (0.0, 0.1),
+    "gamma": (0.5, 1.5),
+}
+AUG_MODE = "random"  # all or random
+
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
 KC_LAYER = 4
@@ -52,5 +88,3 @@ KC_LABELS = {
 
 # for wandb
 WANDB_API = ""
-COLOR_BRIGHT = 0.2
-COLOR_CONTRST = 0.4
