@@ -557,12 +557,8 @@ def train_epoch(
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
-<<<<<<< HEAD
-    writer.add_scalar("Loss/train", train_loss, epoch)
-=======
     # Need to rename scalars?
     writer.add_scalar("loss/train", train_loss, epoch)
->>>>>>> 57f36772b6cb419aa9df466b020191fc0507ffce
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
     return final_jaccard
