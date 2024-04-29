@@ -17,7 +17,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
@@ -27,6 +26,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import determine_dominant_label, plot_from_tensors
@@ -644,7 +644,7 @@ def train(
                 model,
                 loss_fn,
                 test_jaccard,
-                t + 1,
+                t,
                 plateau_count,
                 test_image_root,
                 writer,
@@ -694,7 +694,6 @@ def train(
                 break
 
     print("Done!")
-    writer.close()
 
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
@@ -745,6 +744,7 @@ def run_trials():
 
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
+        writer.close()
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
