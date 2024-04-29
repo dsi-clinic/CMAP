@@ -30,7 +30,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
-from utils.plot import plot_from_tensors
+from utils.plot import determine_dominant_label, plot_from_tensors
 from utils.sampler import (
     BalancedGridGeoSampler,
     BalancedRandomBatchGeoSampler,
@@ -127,7 +127,6 @@ def writer_prep(exp_name, trial_num):
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_name}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
-    print(out_root)
     if wandb_tune:
         os.makedirs(out_root, exist_ok=True)
     else:
@@ -256,89 +255,72 @@ def create_model():
     return model, loss_fn, train_jaccard, test_jaccard, optimizer
 
 
-# Various augmentation definitions
-default_aug = AugmentationSequential(
+# Define spatial augmentations that apply to both image and mask
+spatial_aug = AugmentationSequential(
     K.RandomHorizontalFlip(p=0.5),
     K.RandomVerticalFlip(p=0.5),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-plasma_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomPlasmaShadow(
-        roughness=(0.1, 0.7),
-        shade_intensity=(-1.0, 0.0),
-        shade_quantity=(0.0, 1.0),
-        keepdim=True,
-    ),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-gauss_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-all_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomPlasmaShadow(
-        roughness=(0.1, 0.7),
-        shade_intensity=(-1.0, 0.0),
-        shade_quantity=(0.0, 1.0),
-        keepdim=True,
-    ),
-    K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
     K.RandomRotation(degrees=360, align_corners=True),
     data_keys=["image", "mask"],
     keepdim=True,
 )
 
 
-def aug_color(bright=config.COLOR_BRIGHT, contrast=config.COLOR_CONTRST):
-    # testing - both modified from Gaussian
-    color_jitter = AugmentationSequential(
-        K.RandomHorizontalFlip(p=0.5),
-        K.RandomVerticalFlip(p=0.5),
-        K.ColorJitter(bright, contrast),
-        K.RandomRotation(degrees=360, align_corners=True),
-        data_keys=["image", "mask"],
+# Define exclusive image augmentations for color-related effects
+def aug_color(bright, contrast):
+    """Generate color-related augmentations that apply only to the image."""
+    return AugmentationSequential(
+        K.ColorJitter(brightness=bright, contrast=contrast),
+        data_keys=["image"],
         keepdim=True,
     )
-    return color_jitter
 
 
-box_blur = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomBoxBlur(keepdim=True),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-
-
+# Add spatial augmentations to the specific color and blur augmentations
 def get_aug(aug_type):
-    # Choose the proper augmentation format
+    """Select augmentation based on type, with appropriate application to
+    image and mask.
+    """
     if aug_type == "plasma":
-        aug = plasma_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomPlasmaShadow(
+                roughness=(0.1, 0.7),
+                shade_intensity=(-1.0, 0.0),
+                shade_quantity=(0.0, 1.0),
+                keepdim=True,
+            ),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "gauss":
-        aug = gauss_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "all":
-        aug = all_aug
+        return spatial_aug + AugmentationSequential(
+            K.RandomPlasmaShadow(
+                roughness=(0.1, 0.7),
+                shade_intensity=(-1.0, 0.0),
+                shade_quantity=(0.0, 1.0),
+                keepdim=True,
+            ),
+            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
+            data_keys=["image"],
+            keepdim=True,
+        )
     elif aug_type == "color":
-        aug = aug_color()
+        return spatial_aug + aug_color(
+            config.COLOR_BRIGHT, config.COLOR_CONTRST
+        )
     elif aug_type == "blur":
-        aug = box_blur
+        return spatial_aug + AugmentationSequential(
+            K.RandomBoxBlur(keepdim=True),
+            data_keys=["image"],
+            keepdim=True,
+        )
     else:
-        aug = default_aug
-    return aug
+        return spatial_aug
 
 
 def copy_first_entry(a_list: list) -> list:
@@ -575,9 +557,14 @@ def train_epoch(
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
+<<<<<<< HEAD
     writer.add_scalar("Loss/train", train_loss, epoch)
+=======
+    # Need to rename scalars?
+    writer.add_scalar("loss/train", train_loss, epoch)
+>>>>>>> 57f36772b6cb419aa9df466b020191fc0507ffce
     writer.add_scalar("IoU/train", final_jaccard, epoch)
-    logging.info(f"Jaccard Index: {final_jaccard}")
+    logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
     return final_jaccard
 
 def nanmean(x):
@@ -722,15 +709,23 @@ def test(
             if batch == 0 or (
                 plateau_count == config.PATIENCE - 1 and batch < 10
             ):
-                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                if not os.path.exists(save_dir):
-                    os.mkdir(save_dir)
+                epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                if not os.path.exists(epoch_dir):
+                    os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
+                    ground_truth = samp_mask[i]
+                    predominant_label_id = determine_dominant_label(
+                        ground_truth
+                    )
+                    label_name = kc.labels.get(predominant_label_id, "UNKNOWN")
+                    save_dir = os.path.join(epoch_dir, label_name)
+                    if not os.path.exists(save_dir):
+                        os.makedirs(save_dir)
                     sample_fname = os.path.join(
                         save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
                     )
@@ -744,7 +739,7 @@ def test(
                     )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
-    writer.add_scalar("Loss/test", test_loss, epoch)
+    writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     """
     class_iou /= class_count
@@ -756,8 +751,8 @@ def test(
             )
     """
     logging.info(
-        f"Test Error: \n Jaccard index: {final_jaccard:>7f}, "
-        + f"Avg loss: {test_loss:>7f} \n"
+        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
+        + f"Test avg loss: {test_loss:>4f} \n"
     )
 
     # Now returns test_loss such that it can be compared against previous losses
@@ -806,7 +801,7 @@ def train(
                 writer,
                 num_classes
             )
-            print(f"default setting loss {test_loss}, jaccard {t_jaccard}")
+            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         epoch_jaccard = train_epoch(
@@ -896,8 +891,11 @@ def run_trials():
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
-    test_std = stdev(test_ious)
-    train_std = stdev(train_ious)
+    test_std = 0
+    train_std = 0
+    if num_trials > 1:
+        test_std = stdev(test_ious)
+        train_std = stdev(train_ious)
 
     print(
         f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
