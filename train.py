@@ -178,7 +178,6 @@ def initialize_dataset():
         dem = KaneDEM(config.KC_DEM_ROOT)
         naip = naip & dem
         print("naip and dem loaded")
-    kc = KaneCounty(config.KC_MASK_ROOT)
 
     return naip, kc
 
