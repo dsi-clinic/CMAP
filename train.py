@@ -30,7 +30,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.kcv import KaneCounty
+from data.kc import KaneCounty
 from data.dem import KaneDEM
 from utils.model import SegmentationModel
 from utils.plot import plot_from_tensors
