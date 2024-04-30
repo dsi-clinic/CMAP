@@ -61,8 +61,8 @@ IMAGE_AUG_INDICES = [
 ]
 AUG_PARAMS = {
     "rotation_degrees": 360,
-    "contrast_limit": 0.2,
-    "brightness_limit": 0.2,
+    "color_contrast": 0.2,
+    "color_brightness": 0.2,
     "gaussian_noise_prob": 0.2,
     "gaussian_noise_std": 0.05,
     "gaussian_blur_sigma": (0.1, 2.0),

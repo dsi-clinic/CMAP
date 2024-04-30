@@ -56,9 +56,9 @@ def create_augmentation_pipelines(
     # Define all possible color augmentations
     # (applied only to the RGB channels of the image)
     all_color_transforms = [
-        K.RandomContrast(contrast=aug_params.get("contrast_limit", 0.2), p=0.5),
+        K.RandomContrast(contrast=aug_params.get("color_contrast", 0.2), p=0.5),
         K.RandomBrightness(
-            brightness=aug_params.get("brightness_limit", 0.2), p=0.5
+            brightness=aug_params.get("color_brightness", 0.2), p=0.5
         ),
         # Introduce a lower bound to the noise to make it softer
         K.RandomGaussianNoise(

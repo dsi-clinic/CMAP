@@ -772,7 +772,8 @@ if wandb_tune:
     with open("configs/sweep_config.yml", "r") as file:
         sweep_config = yaml.safe_load(file)
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    wandb.agent(sweep_id, run_trials, count=10)
+    agents = [wandb.agent(sweep_id, run_trials, count=10) for _ in range(3)]
+
 
 else:
     run_trials()

@@ -3,7 +3,7 @@ metric:
   goal: maximize
   name: average_test_jaccard_index
 parameters:
-  COLOR_BRIGHT:
+  color_contrast:
     values: [0.2, 0.3, 0.4]
-  COLOR_CONTRST:
+  color_brightness:
     values: [0.2, 0.3, 0.4]
