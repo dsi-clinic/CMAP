@@ -607,7 +607,6 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _i in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-                    samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
             normalize, scale = normalize_func(model)
             X_scaled = scale(X)
