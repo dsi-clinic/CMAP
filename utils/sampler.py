@@ -1,4 +1,4 @@
-import random
+import sys
 from collections.abc import Iterable, Iterator, Sequence
 from typing import Any, Optional, Union
 
@@ -28,6 +28,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         dataset: GeoDataset,
         size: Union[tuple[float, float], float],
         batch_size: int,
+        context_size: int,
         length: Optional[int] = None,
         roi: Optional[BoundingBox] = None,
         units: Units = Units.PIXELS,
@@ -43,6 +44,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                   is used for the height dimension, and the second *float* for
                   the width dimension
             batch_size: number of samples per batch
+            context_size: width of the context around polygons
             length: number of samples per epoch
                 (defaults to approximately the maximal number of non-overlapping
                 chips of size ``size`` that could be sampled from
@@ -64,17 +66,38 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         areas = []
         for hit in self.index.intersection(tuple(self.roi), objects=True):
             bounds = BoundingBox(*hit.bounds)
-            if (
-                bounds.maxx - bounds.minx >= self.size[1]
-                or bounds.maxy - bounds.miny >= self.size[0]
+            # TO-DO: add object to intersection dataset index
+            minx, miny, maxx, maxy = hit.object["geometry"].bounds
+            mint, maxt = 0, sys.maxsize
+            polygon_bbox = BoundingBox(minx, maxx, miny, maxy, mint, maxt)
+            try:
+                overlap = (bounds & polygon_bbox).area > 0
+            except ValueError:
+                # bounding box intersection invalid because of no overlap
+                overlap = False
+
+            if overlap and (
+                bounds.maxx - context_size > bounds.minx + context_size
+                and bounds.maxy - context_size > bounds.miny + context_size
             ):
-                if bounds.area > 0:
+                bounds = BoundingBox(
+                    bounds.minx + context_size,
+                    bounds.maxx - context_size,
+                    bounds.miny + context_size,
+                    bounds.maxy - context_size,
+                    bounds.mint,
+                    bounds.maxt,
+                )
+                if (
+                    bounds.maxx - bounds.minx >= self.size[1]
+                    or bounds.maxy - bounds.miny >= self.size[0]
+                ):
                     rows, cols = tile_to_chips(bounds, self.size)
                     self.length += rows * cols
-            else:
-                self.length += 1
-            self.hits.append(hit)
-            areas.append(bounds.area)
+                else:
+                    self.length += 1
+                self.hits.append(hit)
+                areas.append(bounds.area)
         if length is not None:
             self.length = length
 
@@ -89,35 +112,20 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         Returns:
             batch of (minx, maxx, miny, maxy, mint, maxt) coordinates to index a dataset
         """
-        # get a list of all items in the region of interest
-        items = list(self.index.intersection(tuple(self.roi), objects=True))
 
         for _ in range(len(self)):
+            # Choose a random tile, weighted by area
+            idx = torch.multinomial(self.areas, 1)
+            hit = self.hits[idx]
+            bounds = BoundingBox(*hit.bounds)
+
+            # Choose random indices within that tile
             batch = []
             for _ in range(self.batch_size):
-                # Choose a random item
-                sample = random.choice(items)
-                bounds = BoundingBox(*sample.bounds)
-                if (
-                    bounds.maxx - bounds.minx >= self.size[1]
-                    or bounds.maxy - bounds.miny >= self.size[0]
-                ):
-                    sample_maxx, sample_maxy = bounds.maxx, bounds.maxy
-
-                    # Choose random bounding box within that tile
-                    random_bounds = get_random_bounding_box(
-                        bounds, self.size, self.res
-                    )
-                    bounds = BoundingBox(
-                        random_bounds.minx,
-                        min(sample_maxx, random_bounds.maxx),
-                        random_bounds.miny,
-                        min(sample_maxy, random_bounds.maxy),
-                        random_bounds.mint,
-                        random_bounds.maxt,
-                    )
-
-                batch.append(bounds)
+                bounding_box = get_random_bounding_box(
+                    bounds, self.size, self.res
+                )
+                batch.append(bounding_box)
 
             yield batch
 
@@ -173,19 +181,28 @@ class BalancedGridGeoSampler(GeoSampler):
 
         self.hits = []
         for hit in self.index.intersection(tuple(self.roi), objects=True):
-            self.hits.append(hit)
+            bounds = BoundingBox(*hit.bounds)
+
+            minx, miny, maxx, maxy = hit.object["geometry"].bounds
+            mint, maxt = 0, sys.maxsize
+            polygon_bbox = BoundingBox(minx, maxx, miny, maxy, mint, maxt)
+            try:
+                overlap = (bounds & polygon_bbox).area > 0
+            except ValueError:
+                # bounding box intersection invalid because of no overlap
+                overlap = False
+
+            if overlap and (
+                bounds.maxx - bounds.minx >= self.size[1]
+                and bounds.maxy - bounds.miny >= self.size[0]
+            ):
+                self.hits.append(hit)
 
         self.length = 0
         for hit in self.hits:
             bounds = BoundingBox(*hit.bounds)
-            if (
-                bounds.maxx - bounds.minx >= self.size[1]
-                or bounds.maxy - bounds.miny >= self.size[0]
-            ):
-                rows, cols = tile_to_chips(bounds, self.size, self.stride)
-                self.length += rows * cols
-            else:
-                self.length += 1
+            rows, cols = tile_to_chips(bounds, self.size, self.stride)
+            self.length += rows * cols
 
     def __iter__(self) -> Iterator[BoundingBox]:
         """Return the index of a dataset.
@@ -196,27 +213,21 @@ class BalancedGridGeoSampler(GeoSampler):
         # For each tile...
         for hit in self.hits:
             bounds = BoundingBox(*hit.bounds)
+            rows, cols = tile_to_chips(bounds, self.size, self.stride)
             mint = bounds.mint
             maxt = bounds.maxt
-            if (
-                bounds.maxx - bounds.minx >= self.size[1]
-                and bounds.maxy - bounds.miny >= self.size[0]
-            ):
-                rows, cols = tile_to_chips(bounds, self.size, self.stride)
 
-                # For each row...
-                for i in range(rows):
-                    miny = bounds.miny + i * self.stride[0]
-                    maxy = min(miny + self.size[0], bounds.maxy)
+            # For each row...
+            for i in range(rows):
+                miny = bounds.miny + i * self.stride[0]
+                maxy = miny + self.size[0]
 
-                    # For each column...
-                    for j in range(cols):
-                        minx = bounds.minx + j * self.stride[1]
-                        maxx = min(minx + self.size[1], bounds.maxx)
+                # For each column...
+                for j in range(cols):
+                    minx = bounds.minx + j * self.stride[1]
+                    maxx = minx + self.size[1]
 
-                        yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
-            else:
-                yield bounds
+                    yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
 
     def __len__(self) -> int:
         """Return the number of samples over the ROI.

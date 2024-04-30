@@ -28,7 +28,7 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
-CONTEXT_SIZE = 64
+CONTEXT_SIZE = 512  # randomize? [1/2 PATCH_SIZE, PATCH_SIZE]
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8

@@ -176,7 +176,10 @@ def build_dataset(naip, kc, split):
     test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
+        context_size=config.CONTEXT_SIZE,
     )
     test_sampler = BalancedGridGeoSampler(
         dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
