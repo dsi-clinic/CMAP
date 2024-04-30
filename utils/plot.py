@@ -97,6 +97,12 @@ def plot_from_tensors(
         if "image" in name:
             img = tensor[0:3, :, :].permute(1, 2, 0)
             ax.imshow(img)
+        elif "dem" in name:
+            img = tensor[4, :, :].permute(1, 2, 0)
+            ax.imshow(img)
+        elif "nir" in name:
+            img = tensor[3, :, :].permute(1, 2, 0)
+            ax.imshow(img)
         else:
             if len(tensor.shape) == 2:
                 unique = tensor.unique()

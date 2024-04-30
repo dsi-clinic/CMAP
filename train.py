@@ -483,8 +483,12 @@ def train_setup(
             plot_tensors = {
                 "image": X[i].cpu(),
                 "mask": samp_mask[i],
+                "dem": X[i].cpu(),
+                "nir": X[i].cpu(),
                 "augmented_image": X_aug[i].cpu(),
                 "augmented_mask": y[i].cpu(),
+                "augmented_dem": X_aug[i].cpu(),
+                "augmented_nir": X_aug[i].cpu()
             }
             sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
             plot_from_tensors(
