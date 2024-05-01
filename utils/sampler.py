@@ -1,11 +1,9 @@
-import sys
-from collections.abc import Iterable, Iterator, Sequence
-from typing import Any, Optional, Union
+import math
+from collections.abc import Iterator
+from typing import Optional, Union
 
 import torch
-from torch.nn import functional as F
 from torchgeo.datasets import BoundingBox, GeoDataset
-from torchgeo.datasets.utils import _list_dict_to_dict_list
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
 from torchgeo.samplers.utils import (
@@ -28,7 +26,6 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         dataset: GeoDataset,
         size: Union[tuple[float, float], float],
         batch_size: int,
-        context_size: int,
         length: Optional[int] = None,
         roi: Optional[BoundingBox] = None,
         units: Units = Units.PIXELS,
@@ -44,7 +41,6 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                   is used for the height dimension, and the second *float* for
                   the width dimension
             batch_size: number of samples per batch
-            context_size: width of the context around polygons
             length: number of samples per epoch
                 (defaults to approximately the maximal number of non-overlapping
                 chips of size ``size`` that could be sampled from
@@ -64,44 +60,36 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         self.length = 0
         self.hits = []
         areas = []
+        context_x = self.size[1] / 2
+        context_y = self.size[0] / 2
         for hit in self.index.intersection(tuple(self.roi), objects=True):
             bounds = BoundingBox(*hit.bounds)
-            # TO-DO: add object to intersection dataset index
-            minx, miny, maxx, maxy = hit.object["geometry"].bounds
-            mint, maxt = 0, sys.maxsize
-            polygon_bbox = BoundingBox(minx, maxx, miny, maxy, mint, maxt)
-            try:
-                overlap = (bounds & polygon_bbox).area > 0
-            except ValueError:
-                # bounding box intersection invalid because of no overlap
-                overlap = False
-
-            if overlap and (
-                bounds.maxx - context_size > bounds.minx + context_size
-                and bounds.maxy - context_size > bounds.miny + context_size
+            if (
+                bounds.maxx - bounds.minx >= self.size[1]
+                and bounds.maxy - bounds.miny >= self.size[0]
             ):
-                bounds = BoundingBox(
-                    bounds.minx + context_size,
-                    bounds.maxx - context_size,
-                    bounds.miny + context_size,
-                    bounds.maxy - context_size,
+                # calculate length using shape size without context
+                shape_bounds = BoundingBox(
+                    bounds.minx + context_x,
+                    bounds.maxx - context_x,
+                    bounds.miny + context_y,
+                    bounds.maxy - context_y,
                     bounds.mint,
                     bounds.maxt,
                 )
                 if (
-                    bounds.maxx - bounds.minx >= self.size[1]
-                    or bounds.maxy - bounds.miny >= self.size[0]
+                    shape_bounds.maxx - shape_bounds.minx >= self.size[1]
+                    or shape_bounds.maxy - shape_bounds.miny >= self.size[0]
                 ):
-                    rows, cols = tile_to_chips(bounds, self.size)
+                    rows, cols = tile_to_chips(shape_bounds, self.size)
                     self.length += rows * cols
                 else:
                     self.length += 1
                 self.hits.append(hit)
-                areas.append(bounds.area)
+                areas.append(shape_bounds.area)
         if length is not None:
             self.length = length
 
-        # torch.multinomial requires float probabilities > 0
         self.areas = torch.tensor(areas, dtype=torch.float)
         if torch.sum(self.areas) == 0:
             self.areas += 1
@@ -114,14 +102,14 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         """
 
         for _ in range(len(self)):
-            # Choose a random tile, weighted by area
-            idx = torch.multinomial(self.areas, 1)
-            hit = self.hits[idx]
-            bounds = BoundingBox(*hit.bounds)
-
-            # Choose random indices within that tile
             batch = []
             for _ in range(self.batch_size):
+                # Choose a random tile, weighted by area
+                idx = torch.multinomial(self.areas, 1)
+                hit = self.hits[idx]
+                bounds = BoundingBox(*hit.bounds)
+
+                # Choose random indices within that tile
                 bounding_box = get_random_bounding_box(
                     bounds, self.size, self.res
                 )
@@ -179,29 +167,45 @@ class BalancedGridGeoSampler(GeoSampler):
             self.size = (self.size[0] * self.res, self.size[1] * self.res)
             self.stride = (self.stride[0] * self.res, self.stride[1] * self.res)
 
+        context_x = self.size[1] / 2
+        context_y = self.size[0] / 2
         self.hits = []
+        self.length = 0
         for hit in self.index.intersection(tuple(self.roi), objects=True):
             bounds = BoundingBox(*hit.bounds)
+            minx, maxx = bounds.minx, bounds.maxx
+            miny, maxy = bounds.miny, bounds.maxy
+            mint, maxt = bounds.mint, bounds.maxt
+            rows, cols = 0, 0
+            # get rid of extra context
+            x_diff = maxx - minx
+            if x_diff >= self.size[1] * 2:
+                maxx -= context_x
+                minx += context_x
+                cols = math.ceil((x_diff - self.size[1]) / stride[1]) + 1
+            elif x_diff >= self.size[1]:
+                extra_context = (x_diff - self.size[1]) / 2
+                maxx -= extra_context
+                minx = maxx - self.size[1]
+                cols = 1
+            else:
+                continue
 
-            minx, miny, maxx, maxy = hit.object["geometry"].bounds
-            mint, maxt = 0, sys.maxsize
-            polygon_bbox = BoundingBox(minx, maxx, miny, maxy, mint, maxt)
-            try:
-                overlap = (bounds & polygon_bbox).area > 0
-            except ValueError:
-                # bounding box intersection invalid because of no overlap
-                overlap = False
+            y_diff = maxy - miny
+            if y_diff >= self.size[0] * 2:
+                maxy -= context_y
+                miny += context_y
+                rows = math.ceil((y_diff - self.size[0]) / stride[0]) + 1
+            elif y_diff >= self.size[0]:
+                extra_context = (y_diff - self.size[0]) / 2
+                maxy -= extra_context
+                miny = maxy - self.size[0]
+                rows = 1
+            else:
+                continue
 
-            if overlap and (
-                bounds.maxx - bounds.minx >= self.size[1]
-                and bounds.maxy - bounds.miny >= self.size[0]
-            ):
-                self.hits.append(hit)
-
-        self.length = 0
-        for hit in self.hits:
-            bounds = BoundingBox(*hit.bounds)
-            rows, cols = tile_to_chips(bounds, self.size, self.stride)
+            hit.bounds = BoundingBox(minx, maxx, miny, maxy, mint, maxt)
+            self.hits.append(hit)
             self.length += rows * cols
 
     def __iter__(self) -> Iterator[BoundingBox]:
@@ -213,21 +217,35 @@ class BalancedGridGeoSampler(GeoSampler):
         # For each tile...
         for hit in self.hits:
             bounds = BoundingBox(*hit.bounds)
-            rows, cols = tile_to_chips(bounds, self.size, self.stride)
             mint = bounds.mint
             maxt = bounds.maxt
+            if (
+                bounds.maxx - bounds.minx >= self.size[1]
+                and bounds.maxy - bounds.miny >= self.size[0]
+            ):
+                rows, cols = tile_to_chips(bounds, self.size, self.stride)
+                if bounds.maxy - bounds.miny - self.size[0] < 0.1:
+                    rows = 1
+                if bounds.maxx - bounds.minx - self.size[1] < 0.1:
+                    cols = 1
 
-            # For each row...
-            for i in range(rows):
-                miny = bounds.miny + i * self.stride[0]
-                maxy = miny + self.size[0]
+                # For each row...
+                for i in range(rows):
+                    miny = bounds.miny + i * self.stride[0]
+                    maxy = miny + self.size[0]
+                    if i == rows - 1:
+                        maxy = bounds.maxy
+                        miny = maxy - self.size[0]
 
-                # For each column...
-                for j in range(cols):
-                    minx = bounds.minx + j * self.stride[1]
-                    maxx = minx + self.size[1]
+                    # For each column...
+                    for j in range(cols):
+                        minx = bounds.minx + j * self.stride[1]
+                        maxx = minx + self.size[1]
+                        if j == cols - 1:
+                            maxx = bounds.maxx
+                            minx = maxx - self.size[1]
 
-                    yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
+                        yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
 
     def __len__(self) -> int:
         """Return the number of samples over the ROI.
@@ -236,45 +254,3 @@ class BalancedGridGeoSampler(GeoSampler):
             number of patches that will be sampled
         """
         return self.length
-
-
-def get_padding_size(sample_shape: Sequence[int], size: int):
-    """Get padding size for 2D samples.
-
-    Args:
-        sample_shape: list of lengths
-        size: the output size
-
-    Returns:
-        4-elements tuple
-    """
-    left = (size - sample_shape[-1]) // 2
-    right = size - left - sample_shape[-1]
-    top = (size - sample_shape[-2]) // 2
-    bottom = size - top - sample_shape[-2]
-    return (left, right, top, bottom)
-
-
-def collate_samples(
-    samples: Iterable[dict[Any, Any]], size: int
-) -> dict[Any, Any]:
-    """Stack a list of samples along a new axis. Samples smaller than the given
-    size are padded with 0.
-
-    Useful for forming a mini-batch of samples to pass to DataLoader.
-
-    Args:
-        samples: list of samples
-
-    Returns:
-        a single sample
-    """
-    collated: dict[Any, Any] = _list_dict_to_dict_list(samples)
-    for key, value in collated.items():
-        if isinstance(value[0], torch.Tensor):
-            value = [
-                F.pad(sample, get_padding_size(sample.shape, size))
-                for sample in value
-            ]
-            collated[key] = torch.stack(value)
-    return collated
