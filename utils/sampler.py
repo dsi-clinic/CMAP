@@ -182,7 +182,7 @@ class BalancedGridGeoSampler(GeoSampler):
             if x_diff >= self.size[1] * 2:
                 maxx -= context_x
                 minx += context_x
-                cols = math.ceil((x_diff - self.size[1]) / stride[1]) + 1
+                cols = math.ceil((x_diff - self.size[1]) / self.stride[1]) + 1
             elif x_diff >= self.size[1]:
                 extra_context = (x_diff - self.size[1]) / 2
                 maxx -= extra_context
@@ -195,7 +195,7 @@ class BalancedGridGeoSampler(GeoSampler):
             if y_diff >= self.size[0] * 2:
                 maxy -= context_y
                 miny += context_y
-                rows = math.ceil((y_diff - self.size[0]) / stride[0]) + 1
+                rows = math.ceil((y_diff - self.size[0]) / self.stride[0]) + 1
             elif y_diff >= self.size[0]:
                 extra_context = (y_diff - self.size[0]) / 2
                 maxy -= extra_context
