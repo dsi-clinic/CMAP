@@ -41,10 +41,10 @@ THRESHOLD = 0.01
 SPATIAL_AUG_INDICES = [
     0,  # HorizontalFlip
     1,  # VerticalFlip
-    # 2,  # Rotate
-    # 3,  # Affine
-    # 4,  # Elastic
-    # 5,  # Perspective
+    2,  # Rotate
+    3,  # Affine
+    4,  # Elastic
+    5,  # Perspective
 ]
 
 # only applied to images-- not masks
