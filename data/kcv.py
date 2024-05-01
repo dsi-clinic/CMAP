@@ -1,3 +1,4 @@
+import math
 import sys
 from typing import Any, Optional
 
@@ -59,7 +60,7 @@ class KaneCounty(GeoDataset):
         layer: int,
         label_col: str,
         labels: dict[int, str],
-        context_size: int,
+        patch_size: int,
         dest_crs: Optional[CRS] = None,
         res: float = 0.0001,
     ) -> None:
@@ -71,7 +72,7 @@ class KaneCounty(GeoDataset):
             label_col: name of the dataset property that has the label to be
                 rasterized into the mask
             labels: a dictionary containing a label mapping for masks
-            context_size: the maximum amount of context preserved around shapes
+            patch_size: the patch size used for the model
             dest_crs: the coordinate reference system (CRS) to convert to
             res: resolution of the dataset in units of CRS
 
@@ -85,6 +86,9 @@ class KaneCounty(GeoDataset):
         gdf = gdf[gdf[label_col].isin(labels.keys())]
         gdf = gdf.to_crs(dest_crs)
         self.gdf = gdf
+
+        # preserve context around shapes and ensure small shapes can be sampled
+        context_size = math.ceil(patch_size / 2 * res)
 
         # Populate the dataset index
         i = 0
