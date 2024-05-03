@@ -562,8 +562,6 @@ def test(
     model.eval()
     jaccard.reset()
     test_loss = 0
-    # class_iou = torch.zeros(num_classes)  # Initialize a tensor to store IoU per class
-    # class_count = torch.zeros(num_classes)  # Count the number of pixels per class
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
@@ -589,41 +587,12 @@ def test(
             jaccard.update(preds, y_squeezed)
 
             # calculate Jaccard per index using helper functions
-            # need to change formatting to make it readable
             hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
             jaccard_per_class = jaccard_index(hist)
             for i in range(len(jaccard_per_class)):
                 logging.info(
                 f"IoU for {kc.labels[i]}: {jaccard_per_class[i]} \n"
                 )
-
-            """
-            # returns error that sizes of class_iou and iou_per_class don't match, seen below
-            # RuntimeError: The size of tensor a (5) must match the size of tensor b (16) at non-singleton dimension 0
-            intersection = torch.logical_and(preds, y_squeezed).float().sum(dim=(1, 2))
-            union = torch.logical_or(preds, y_squeezed).float().sum(dim=(1, 2))
-            iou_per_class = torch.where(union != 0, intersection / union, torch.zeros_like(intersection))
-            class_iou += iou_per_class
-            class_count += torch.sum(y_squeezed, dim=(1, 2))
-            """
-            """
-            # class_iou[present_classes] += iou_per_class
-            # RuntimeError: indices should be either on cpu or on the same device as the indexed tensor (cpu)
-            # Code to only consider classes present in the batch for IoU calculation
-            present_classes = torch.unique(torch.cat((preds.view(-1), y_squeezed.view(-1))))
-            intersection = torch.zeros_like(present_classes, dtype=torch.float)
-            union = torch.zeros_like(present_classes, dtype=torch.float)
-
-            for i, class_id in enumerate(present_classes):
-                class_mask = (y_squeezed == class_id)
-                pred_mask = (preds == class_id)
-                intersection[i] = torch.logical_and(class_mask, pred_mask).float().sum()
-                union[i] = torch.logical_or(class_mask, pred_mask).float().sum()
-
-            iou_per_class = torch.where(union != 0, intersection / union, torch.zeros_like(intersection))
-            class_iou[present_classes] += iou_per_class
-            class_count[present_classes] += torch.sum(y_squeezed, dim=(1, 2))
-            """
 
             # add test loss to rolling total
             test_loss += loss.item()
@@ -664,15 +633,7 @@ def test(
     final_jaccard = jaccard.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
-    """
-    class_iou /= class_count
-    for i in range(num_classes):
-        if class_count[i] > 0:
-            writer.add_scalar(f"IoU/class_{i}", class_iou[i], epoch)
-            logging.info(
-                f"IoU for class {i}: {class_iou[i]:>7f} \n"
-            )
-    """
+
     logging.info(
         f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
         + f"Test avg loss: {test_loss:>4f} \n"
