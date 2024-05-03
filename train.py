@@ -591,9 +591,11 @@ def test(
             # calculate Jaccard per index using helper functions
             # need to change formatting to make it readable
             hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
-            logging.info(
-                f"{jaccard_index(hist)} \n"
-            )
+            jaccard_per_class = jaccard_index(hist)
+            for i in range(len(jaccard_per_class)):
+                logging.info(
+                f"IoU for {kc.labels[i]}: {jaccard_per_class[i]} \n"
+                )
 
             """
             # returns error that sizes of class_iou and iou_per_class don't match, seen below
