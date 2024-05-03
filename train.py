@@ -17,7 +17,8 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import yaml
+
+# import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -121,9 +122,17 @@ def writer_prep(exp_name, trial_num):
 
     # create directory for output images
     train_images_root = os.path.join(out_root, "train-images")
-    test_image_root = os.path.join(out_root, "test-images")
-    os.mkdir(train_images_root)
-    os.mkdir(test_image_root)
+    test_images_root = os.path.join(out_root, "test-images")
+
+    try:
+        os.mkdir(train_images_root)
+        os.mkdir(test_images_root)
+
+    except FileExistsError:
+        shutil.rmtree(train_images_root)
+        shutil.rmtree(test_images_root)
+        os.mkdir(train_images_root)
+        os.mkdir(test_images_root)
 
     # open tensorboard writer
     writer = SummaryWriter(out_root)
@@ -142,7 +151,7 @@ def writer_prep(exp_name, trial_num):
             logging.StreamHandler(sys.stdout),
         ],
     )
-    return train_images_root, test_image_root, out_root, writer
+    return train_images_root, test_images_root, out_root, writer
 
 
 def initialize_dataset():
@@ -379,7 +388,7 @@ def train_setup(
     if batch == 0:
         save_dir = os.path.join(
             train_images_root,
-            f"-{config.AUG_PARAMS['contrast_limit']}-{config.AUG_PARAMS['brightness_limit']}-epoch-{epoch}",
+            f"-{config.AUG_PARAMS['color_contrast']}-{config.AUG_PARAMS['color_brightness']}-epoch-{epoch}",
         )
         try:
             os.mkdir(save_dir)
@@ -707,7 +716,6 @@ def run_trials():
     """
 
     if wandb_tune:
-        run = wandb.init(project="cmap_train")
         vars(args).update(run.config)
         print("wandb taken over config")
 
@@ -769,10 +777,12 @@ exp_name, split, wandb_tune, num_trials = arg_parsing()
 naip, kc = initialize_dataset()
 
 if wandb_tune:
-    with open("configs/sweep_config.yml", "r") as file:
-        sweep_config = yaml.safe_load(file)
-    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    agents = [wandb.agent(sweep_id, run_trials, count=10) for _ in range(3)]
+    run = wandb.init(project="cmap_train")
+    # with open("configs/sweep_config.yml", "r") as file:
+    #     sweep_config = yaml.safe_load(file)
+    run_trials()
+    # sweep_id = wandb.sweep(sweep_config, project="cmap_train")
+    # wandb.agent(sweep_id, run_trials, count=10)
 
 
 else:
