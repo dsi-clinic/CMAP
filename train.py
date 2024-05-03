@@ -23,18 +23,14 @@ from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_assignment
+from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import determine_dominant_label, plot_from_tensors
-from utils.sampler import (
-    BalancedGridGeoSampler,
-    BalancedRandomBatchGeoSampler,
-    collate_samples,
-)
+from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 # import config and experiment name from runtime args
@@ -153,7 +149,7 @@ def initialize_dataset():
         config.KC_LAYER,
         config.KC_LABEL_COL,
         config.KC_LABELS,
-        config.CONTEXT_SIZE,
+        config.PATCH_SIZE,
         naip.crs,
         naip.res,
     )
@@ -175,7 +171,9 @@ def build_dataset(naip, kc, split):
     test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
     )
     test_sampler = BalancedGridGeoSampler(
         dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
@@ -185,18 +183,14 @@ def build_dataset(naip, kc, split):
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
-        collate_fn=lambda samples: collate_samples(
-            samples, size=config.PATCH_SIZE
-        ),
+        collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
         batch_size=config.BATCH_SIZE,
         sampler=test_sampler,
-        collate_fn=lambda samples: collate_samples(
-            samples, size=config.PATCH_SIZE
-        ),
+        collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
     logging.info(f"Using {device} device")
