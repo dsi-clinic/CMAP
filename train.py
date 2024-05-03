@@ -20,25 +20,21 @@ import kornia.augmentation as K
 import torch
 import wandb
 import yaml
-from kornia.augmentation.container import AugmentationSequential
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
 
 from torch.utils.tensorboard import SummaryWriter
-from torchgeo.datasets import NAIP, random_bbox_assignment
+from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from data.dem import KaneDEM
 from utils.model import SegmentationModel
-from utils.plot import plot_from_tensors
-from utils.sampler import (
-    BalancedGridGeoSampler,
-    BalancedRandomBatchGeoSampler,
-    collate_samples,
-)
+from utils.plot import determine_dominant_label, plot_from_tensors
+from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from utils.transforms import apply_augs, create_augmentation_pipelines
 
 # import config and experiment name from runtime args
 parser = argparse.ArgumentParser(
@@ -51,17 +47,6 @@ parser.add_argument(
     type=str,
     help="Name of experiment",
     default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
-)
-
-# Current potential aug_type args: "all", "default", "plasma", "gauss"
-aug_types = "'all', 'default', 'plasma', 'gauss'"
-
-# adding arguments
-parser.add_argument(
-    "--aug_type",
-    type=str,
-    help="Type of augmentation; potential inputs are: {aug_types}",
-    default="default",
 )
 
 parser.add_argument(
@@ -108,9 +93,6 @@ def arg_parsing():
     exp_name = args.experiment_name
     if exp_name is None:
         exp_name = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
-    aug_type = args.aug_type
-    if aug_type is None:
-        aug_type = "default"
     split = float(int(args.split) / 100)
     if split is None:
         split = 0.80
@@ -123,7 +105,7 @@ def arg_parsing():
         print("wandb tuning")
         wandb.login(key=args.tune_key)
 
-    return exp_name, aug_type, split, wandb_tune, num_trials
+    return exp_name, split, wandb_tune, num_trials
 
 
 def writer_prep(exp_name, trial_num):
@@ -170,7 +152,7 @@ def initialize_dataset():
         config.KC_LAYER,
         config.KC_LABEL_COL,
         config.KC_LABELS,
-        config.CONTEXT_SIZE,
+        config.PATCH_SIZE,
         naip.crs,
         naip.res,
     )
@@ -197,7 +179,9 @@ def build_dataset(naip, kc, split):
     test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        train_dataset, size=config.PATCH_SIZE, batch_size=config.BATCH_SIZE
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
     )
     test_sampler = BalancedGridGeoSampler(
         dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
@@ -207,14 +191,14 @@ def build_dataset(naip, kc, split):
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
-        collate_fn=lambda samples: collate_samples(samples, size=config.PATCH_SIZE),
+        collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
         batch_size=config.BATCH_SIZE,
         sampler=test_sampler,
-        collate_fn=lambda samples: collate_samples(samples, size=config.PATCH_SIZE),
+        collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
     logging.info(f"Using {device} device")
@@ -257,74 +241,6 @@ def create_model():
     optimizer = AdamW(model.parameters(), lr=config.LR)
 
     return model, loss_fn, train_jaccard, test_jaccard, optimizer
-
-
-# Define spatial augmentations that apply to both image and mask
-spatial_aug = AugmentationSequential(
-    K.RandomHorizontalFlip(p=0.5),
-    K.RandomVerticalFlip(p=0.5),
-    K.RandomRotation(degrees=360, align_corners=True),
-    data_keys=["image", "mask"],
-    keepdim=True,
-)
-
-
-# Define exclusive image augmentations for color-related effects
-def aug_color(bright, contrast):
-    """Generate color-related augmentations that apply only to the image."""
-    return AugmentationSequential(
-        K.ColorJitter(brightness=bright, contrast=contrast),
-        data_keys=["image"],
-        keepdim=True,
-    )
-
-
-# Add spatial augmentations to the specific color and blur augmentations
-def get_aug(aug_type):
-    """Select augmentation based on type, with appropriate application to
-    image and mask.
-    """
-    if aug_type == "plasma":
-        return spatial_aug + AugmentationSequential(
-            K.RandomPlasmaShadow(
-                roughness=(0.1, 0.7),
-                shade_intensity=(-1.0, 0.0),
-                shade_quantity=(0.0, 1.0),
-                keepdim=True,
-            ),
-            data_keys=["image"],
-            keepdim=True,
-        )
-    elif aug_type == "gauss":
-        return spatial_aug + AugmentationSequential(
-            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
-            data_keys=["image"],
-            keepdim=True,
-        )
-    elif aug_type == "all":
-        return spatial_aug + AugmentationSequential(
-            K.RandomPlasmaShadow(
-                roughness=(0.1, 0.7),
-                shade_intensity=(-1.0, 0.0),
-                shade_quantity=(0.0, 1.0),
-                keepdim=True,
-            ),
-            K.RandomGaussianBlur(kernel_size=(3, 3), sigma=(0.1, 2.0), p=0.25),
-            data_keys=["image"],
-            keepdim=True,
-        )
-    elif aug_type == "color":
-        return spatial_aug + aug_color(
-            config.COLOR_BRIGHT, config.COLOR_CONTRST
-        )
-    elif aug_type == "blur":
-        return spatial_aug + AugmentationSequential(
-            K.RandomBoxBlur(keepdim=True),
-            data_keys=["image"],
-            keepdim=True,
-        )
-    else:
-        return spatial_aug
 
 
 def copy_first_entry(a_list: list) -> list:
@@ -412,7 +328,10 @@ def train_setup(
     sample: DefaultDict[str, Any],
     epoch: int,
     batch: int,
-    aug_type: str,
+    spatial_aug_mode,
+    color_aug_mode,
+    spatial_augs,
+    color_augs,
     train_images_root,
     model,
     config=config,
@@ -454,10 +373,9 @@ def train_setup(
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
     X = scale(X)
 
-    # augment img and mask with same augmentations
-    aug = get_aug(aug_type)
-
-    X_aug, y_aug = aug(X, y)
+    X_aug, y_aug = apply_augs(
+        spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode
+    )
 
     # denormalize mask to reset to index tensor (req'd for loss func)
     y = y_aug.type(torch.int64)
@@ -469,7 +387,7 @@ def train_setup(
     if batch == 0:
         save_dir = os.path.join(
             train_images_root,
-            f"-{(config.COLOR_BRIGHT), config.COLOR_CONTRST}-epoch-{epoch}",
+            f"-{config.AUG_PARAMS['contrast_limit']}-{config.AUG_PARAMS['brightness_limit']}-epoch-{epoch}",
         )
         try:
             os.mkdir(save_dir)
@@ -515,6 +433,10 @@ def train_epoch(
     epoch: int,
     train_images_root,
     writer,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
 ) -> None:
     """
     Executes a training step for the model
@@ -544,7 +466,17 @@ def train_epoch(
     jaccard.reset()
     train_loss = 0
     for batch, sample in enumerate(dataloader):
-        X, y = train_setup(sample, epoch, batch, aug_type, train_images_root, model)
+        X, y = train_setup(
+            sample,
+            epoch,
+            batch,
+            spatial_aug_mode,
+            color_aug_mode,
+            spatial_augs,
+            color_augs,
+            train_images_root,
+            model,
+        )
 
         # compute prediction error
         outputs = model(X)
@@ -569,7 +501,7 @@ def train_epoch(
     # Need to rename scalars?
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
-    logging.info(f"Train Jaccard index: {final_jaccard}:.4f")
+    logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
     return final_jaccard
 
 
@@ -643,16 +575,26 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0 or (plateau_count == config.PATIENCE - 1 and batch < 10):
-                save_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                if not os.path.exists(save_dir):
-                    os.mkdir(save_dir)
+            if batch == 0 or (
+                plateau_count == config.PATIENCE - 1 and batch < 10
+            ):
+                epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
+                if not os.path.exists(epoch_dir):
+                    os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
+                    ground_truth = samp_mask[i]
+                    predominant_label_id = determine_dominant_label(
+                        ground_truth
+                    )
+                    label_name = kc.labels.get(predominant_label_id, "UNKNOWN")
+                    save_dir = os.path.join(epoch_dir, label_name)
+                    if not os.path.exists(save_dir):
+                        os.makedirs(save_dir)
                     sample_fname = os.path.join(
                         save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
                     )
@@ -689,6 +631,8 @@ def train(
     test_dataloader,
     test_image_root,
     train_images_root,
+    spatial_augs,
+    color_augs,
     config=config,
 ):
     # How much the loss needs to drop to reset a plateau
@@ -727,6 +671,10 @@ def train(
             t + 1,
             train_images_root,
             writer,
+            spatial_augs,
+            color_augs,
+            config.SPATIAL_AUG_MODE,
+            config.COLOR_AUG_MODE,
         )
 
         test_loss, t_jaccard = test(
@@ -783,6 +731,11 @@ def run_trials():
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+        spatial_augs, color_augs = create_augmentation_pipelines(
+            config.AUG_PARAMS,
+            config.SPATIAL_AUG_INDICES,
+            config.IMAGE_AUG_INDICES,
+        )
         logging.info(f"Trial {num + 1}\n====================================")
         train_iou, test_iou = train(
             writer,
@@ -796,6 +749,8 @@ def run_trials():
             test_dataloader,
             test_image_root,
             train_images_root,
+            spatial_augs,
+            color_augs,
         )
 
         train_ious.append(float(train_iou))
@@ -803,8 +758,11 @@ def run_trials():
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
-    test_std = stdev(test_ious)
-    train_std = stdev(train_ious)
+    test_std = 0
+    train_std = 0
+    if num_trials > 1:
+        test_std = stdev(test_ious)
+        train_std = stdev(train_ious)
 
     print(
         f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
@@ -817,7 +775,7 @@ def run_trials():
 
 
 # executing
-exp_name, aug_type, split, wandb_tune, num_trials = arg_parsing()
+exp_name, split, wandb_tune, num_trials = arg_parsing()
 naip, kc = initialize_dataset()
 
 if wandb_tune:

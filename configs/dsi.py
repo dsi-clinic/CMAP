@@ -29,7 +29,6 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
-CONTEXT_SIZE = 64
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
@@ -38,6 +37,43 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+
+# data augmentation
+SPATIAL_AUG_INDICES = [
+    0,  # HorizontalFlip
+    1,  # VerticalFlip
+    2,  # Rotate
+    3,  # Affine
+    4,  # Elastic
+    5,  # Perspective
+]
+
+# only applied to images-- not masks
+IMAGE_AUG_INDICES = [
+    0,  # Contrast
+    1,  # Brightness
+    2,  # Gaussian Noise
+    3,  # Gaussian Blur
+    # 4,  # Plasma Brightness
+    5,  # Saturation
+    # 6,  # Channel Shuffle
+    # 7,  # Gamma
+]
+AUG_PARAMS = {
+    "rotation_degrees": 360,
+    "contrast_limit": 0.2,
+    "brightness_limit": 0.2,
+    "gaussian_noise_prob": 0.2,
+    "gaussian_noise_std": 0.05,
+    "gaussian_blur_sigma": (0.1, 2.0),
+    "plasma_roughness": (0.0, 0.2),
+    "saturation_limit": 0.1,
+    "shadow_intensity": (-0.05, 0.0),
+    "shade_quantity": (0.0, 0.05),
+    "gamma": (0.8, 1.2),
+}
+SPATIAL_AUG_MODE = "all"  # all or random
+COLOR_AUG_MODE = "random"  # all or random
 
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
@@ -53,5 +89,3 @@ KC_LABELS = {
 
 # for wandb
 WANDB_API = ""
-COLOR_BRIGHT = 0.2
-COLOR_CONTRST = 0.4

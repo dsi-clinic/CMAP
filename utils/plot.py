@@ -2,6 +2,7 @@ from typing import Dict
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from matplotlib.colors import ListedColormap
 from torch import Tensor
@@ -76,25 +77,27 @@ def plot_from_tensors(
     else:
         cmap = "viridis"
 
-    # set the figure dimensions
+    # Set the figure dimensions and create subplots accordingly
     if mode == "grid":
-        fig, axs = plt.subplots(
-            int(round(len(sample.keys()) / 2)), 2, figsize=(8, 8)
-        )
+        n_rows = int(round(len(sample.keys()) / 2))
+        n_cols = 2 if len(sample.keys()) > 1 else 1
+        fig, axs = plt.subplots(n_rows, n_cols, figsize=(8, 8))
+        # Ensure axs is always an array, even if it's 1x1
+        axs = np.array(axs).reshape(-1)
     elif mode == "row":
         fig, axs = plt.subplots(1, len(sample.keys()), figsize=(12, 4))
+        # Ensure axs is always an array, even if it's 1x1
+        axs = np.array(axs).reshape(-1)
     else:
         raise ValueError("Invalid mode")
 
-    # plot each input tensor
+    # Plot each input tensor
     unique_labels = Tensor()
     for i, (name, tensor) in enumerate(sample.items()):
-        if mode == "grid":
-            ax = axs[i // 2][i % 2]
-        else:
-            ax = axs[i]
+        ax = axs[i]
 
         if "image" in name:
+            # Handle RGB image tensors by ignoring the NIR channel
             img = tensor[0:3, :, :].permute(1, 2, 0)
             ax.imshow(img)
         elif "dem" in name:
@@ -104,6 +107,7 @@ def plot_from_tensors(
             img = tensor[3, :, :].permute(1, 2, 0)
             ax.imshow(img)
         else:
+            # Get the unique labels present in the mask
             if len(tensor.shape) == 2:
                 unique = tensor.unique()
                 ax.imshow(
@@ -126,7 +130,7 @@ def plot_from_tensors(
         ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
-    # create the legend if labels were provided
+    # Create the legend if labels were provided
     if labels is not None and colors is not None:
         unique_labels = unique_labels.type(torch.int).tolist()
         patches = []
@@ -142,8 +146,45 @@ def plot_from_tensors(
             borderaxespad=0.0,
         )
 
+    # If bounding box coords were provided, add them to the plot
     if coords is not None:
         fig.text(0, 0, s=coords, fontsize=10, color="gray")
 
+    # Save the figure
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()
+
+
+def determine_dominant_label(ground_truth: Tensor) -> int:
+    """
+    Determines the most common label ID from a ground truth mask tensor.
+
+    Parameters
+    ----------
+    ground_truth : Tensor
+        The ground truth mask tensor, which should contain label indices.
+
+    Returns
+    -------
+    int
+        The ID of the most common label in the ground truth.
+    """
+    unique, counts = ground_truth.unique(return_counts=True)
+    # Remove the background label '0' from consideration if present
+    if 0 in unique:
+        background_index = (unique == 0).nonzero(as_tuple=True)[0].item()
+        unique = torch.cat(
+            [unique[:background_index], unique[background_index + 1 :]]
+        )
+        counts = torch.cat(
+            [counts[:background_index], counts[background_index + 1 :]]
+        )
+
+    if (
+        counts.numel() == 0
+    ):  # Check if there are no labels other than the background
+        return 15  # Return ID for 'UNKNOWN'
+
+    most_common_index = counts.argmax()
+    most_common_label_id = unique[most_common_index].item()
+    return most_common_label_id
