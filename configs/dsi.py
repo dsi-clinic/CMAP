@@ -28,7 +28,6 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
-CONTEXT_SIZE = 64
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
