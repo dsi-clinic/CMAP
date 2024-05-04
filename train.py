@@ -56,17 +56,17 @@ parser.add_argument(
 
 parser.add_argument(
     "--tune",
-    type=str,
+    action="store_true",
     help="Whether to apply hyperparameter tuning with wandb; enter True or False",
     default=False,
 )
 
-parser.add_argument(
-    "--tune_key",
-    type=str,
-    help="Please enter the API key for wandb tuning",
-    default="",
-)
+# parser.add_argument(
+#     "--tune_key",
+#     type=str,
+#     help="Please enter the API key for wandb tuning",
+#     default="",
+# )
 
 parser.add_argument(
     "--num_trials",
@@ -100,9 +100,9 @@ def arg_parsing():
     wandb_tune = args.tune
     num_trials = int(args.num_trials)
 
-    if wandb_tune:
-        print("wandb tuning")
-        wandb.login(key=args.tune_key)
+    # if wandb_tune:
+    #     print("wandb tuning")
+    #     wandb.login(key=args.tune_key)
 
     return exp_name, split, wandb_tune, num_trials
 
