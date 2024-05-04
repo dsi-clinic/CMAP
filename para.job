@@ -1,0 +1,21 @@
+#!/bin/bash
+#
+#SBATCH --output=/home/mli628/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/mli628/slurm/out/%j.%N.stderr
+#SBATCH --partition=general
+#SBATCH --job-name=cmap
+#SBATCH --time=12:00:00
+#SBATCH --mem=64GB
+#SBATCH --cpus-per-task=8
+#SBATCH --tasks-per-node=1
+#SBATCH --gres=gpu:2
+
+export PATH="/home/mli628/miniconda/bin:$PATH"
+which conda
+which python
+
+# conda activate cmap
+source /home/mli628/miniconda3/bin/activate cmap
+
+cd ~/cmap
+bash sweep.sh cmap-2024/cmap/eundnj2o
