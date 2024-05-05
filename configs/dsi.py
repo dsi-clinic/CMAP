@@ -45,6 +45,7 @@ SPATIAL_AUG_INDICES = [
     3,  # Affine
     4,  # Elastic
     5,  # Perspective
+    6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
@@ -63,6 +64,7 @@ IMAGE_AUG_INDICES = [
 ROTATION_DEGREES = 360
 COLOR_CONTRAST = 0.2
 COLOR_BRIGHTNESS = 0.2
+RESIZED_CROP_SIZE = ((PATCH_SIZE, PATCH_SIZE),)
 GAUSSIAN_NOISE_PROB = 0.2
 GAUSSIAN_NOISE_STD = 0.05
 GAUSSIAN_BLUR_SIGMA = (0.1, 2.0)

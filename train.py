@@ -30,7 +30,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
-from utils.plot import determine_dominant_label, plot_from_tensors
+from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
@@ -546,7 +546,7 @@ def test(
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
-                for _i in range(model.in_channels - samp_image.size(1)):
+                for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
                     samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
@@ -581,24 +581,24 @@ def test(
                         "prediction": preds[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
-                    predominant_label_id = determine_dominant_label(
-                        ground_truth
-                    )
-                    label_name = kc.labels.get(predominant_label_id, "UNKNOWN")
-                    save_dir = os.path.join(epoch_dir, label_name)
-                    if not os.path.exists(save_dir):
-                        os.makedirs(save_dir)
-                    sample_fname = os.path.join(
-                        save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
-                    )
-                    plot_from_tensors(
-                        plot_tensors,
-                        sample_fname,
-                        "row",
-                        kc.colors,
-                        kc.labels_inverse,
-                        sample["bbox"][i],
-                    )
+                    label_ids = find_labels_in_ground_truth(ground_truth)
+
+                    for label_id in label_ids:
+                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        save_dir = os.path.join(epoch_dir, label_name)
+                        if not os.path.exists(save_dir):
+                            os.makedirs(save_dir)
+                        sample_fname = os.path.join(
+                            save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
+                        )
+                        plot_from_tensors(
+                            plot_tensors,
+                            sample_fname,
+                            "row",
+                            kc.colors,
+                            kc.labels_inverse,
+                            sample["bbox"][i],
+                        )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
