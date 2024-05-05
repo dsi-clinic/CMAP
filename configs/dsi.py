@@ -46,6 +46,7 @@ SPATIAL_AUG_INDICES = [
     3,  # Affine
     4,  # Elastic
     5,  # Perspective
+    6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
@@ -61,6 +62,7 @@ IMAGE_AUG_INDICES = [
 ]
 AUG_PARAMS = {
     "rotation_degrees": 360,
+    "resized_crop_size": (PATCH_SIZE, PATCH_SIZE),
     "contrast_limit": 0.2,
     "brightness_limit": 0.2,
     "gaussian_noise_prob": 0.2,

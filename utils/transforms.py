@@ -51,6 +51,9 @@ def create_augmentation_pipelines(
             kernel_size=(63, 63), sigma=(32.0, 32.0), alpha=(1.0, 1.0), p=0.5
         ),
         K.RandomPerspective(distortion_scale=0.5, p=0.5),
+        K.RandomResizedCrop(
+            size=aug_params["resized_crop_size"], scale=(0.08, 1.0)
+        ),
     ]
 
     # Define all possible color augmentations
