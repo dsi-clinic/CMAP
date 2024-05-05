@@ -724,6 +724,7 @@ def run_trials():
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
+            config,
             config.SPATIAL_AUG_INDICES,
             config.IMAGE_AUG_INDICES,
         )

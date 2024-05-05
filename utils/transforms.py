@@ -1,10 +1,7 @@
-import importlib
 import random
 
 import kornia.augmentation as K
 import torch
-
-config = importlib.import_module("dsi.py")
 
 
 def separate_channels(image, rgb_indices):
@@ -27,7 +24,9 @@ def combine_channels(rgb, other_channels, rgb_mask, original_shape):
     return combined
 
 
-def create_augmentation_pipelines(spatial_aug_indices, color_aug_indices):
+def create_augmentation_pipelines(
+    config, spatial_aug_indices, color_aug_indices
+):
     """
     Create lists of spatial and color augmentations based on provided indices
     and parameters.
@@ -66,7 +65,7 @@ def create_augmentation_pipelines(spatial_aug_indices, color_aug_indices):
         ),
         K.RandomGaussianBlur(
             kernel_size=(3, 3),
-            sigma=config.GAUSSIAN_NOISE_SIGMA,
+            sigma=config.GAUSSIAN_BLUR_SIGMA,
             p=0.5,
         ),
         K.RandomPlasmaBrightness(roughness=config.PLASMA_BRIGHTESS, p=0.5),
