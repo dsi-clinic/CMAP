@@ -4,9 +4,9 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
-  color_contrast:
+  COLOR_CONTRAST:
     values: [0.2, 0.3, 0.4]
-  color_brightness:
+  COLOR_BRIGHTNESS:
     values: [0.2, 0.3, 0.4]
 command:
 - python
