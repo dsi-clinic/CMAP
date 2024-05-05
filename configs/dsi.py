@@ -58,19 +58,22 @@ IMAGE_AUG_INDICES = [
     # 6,  # Channel Shuffle
     # 7,  # Gamma
 ]
-AUG_PARAMS = {
-    "rotation_degrees": 360,
-    "color_contrast": 0.2,
-    "color_brightness": 0.2,
-    "gaussian_noise_prob": 0.2,
-    "gaussian_noise_std": 0.05,
-    "gaussian_blur_sigma": (0.1, 2.0),
-    "plasma_roughness": (0.0, 0.2),
-    "saturation_limit": 0.1,
-    "shadow_intensity": (-0.05, 0.0),
-    "shade_quantity": (0.0, 0.05),
-    "gamma": (0.8, 1.2),
-}
+
+# Augmentation
+ROTATION_DEGREES = 360
+COLOR_CONTRAST = 0.2
+COLOR_BRIGHTNESS = 0.2
+GAUSSIAN_NOISE_PROB = 0.2
+GAUSSIAN_NOISE_STD = 0.05
+GAUSSIAN_BLUR_SIGMA = (0.1, 2.0)
+PLASMA_ROUGHNESS = (0.0, 0.2)
+PLASMA_BRIGHTESS = (0.1, 0.3)
+SATURATION_LIMIT = 0.1
+SHADOW_INTENSITY = (-0.05, 0.0)
+SHADE_QUANTITY = (0.0, 0.05)
+GAMMA = (0.8, 1.2)
+
+
 SPATIAL_AUG_MODE = "all"  # all or random
 COLOR_AUG_MODE = "random"  # all or random
 

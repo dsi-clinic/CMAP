@@ -2,6 +2,7 @@ method: bayes
 metric:
   goal: maximize
   name: average_test_jaccard_index
+
 parameters:
   color_contrast:
     values: [0.2, 0.3, 0.4]
@@ -12,6 +13,3 @@ command:
 - train.py
 - configs.dsi
 - --tune 
-# - True
-# - --tune_key 
-# - 46825e107e95377f869464bdf74ff7686ae18442

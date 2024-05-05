@@ -382,7 +382,7 @@ def train_setup(
     if batch == 0:
         save_dir = os.path.join(
             train_images_root,
-            f"-{config.AUG_PARAMS['color_contrast']}-{config.AUG_PARAMS['color_brightness']}-epoch-{epoch}",
+            f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
         )
         try:
             os.mkdir(save_dir)
@@ -715,6 +715,7 @@ def run_trials():
 
     train_ious = []
     test_ious = []
+
     for num in range(num_trials):
         train_images_root, test_image_root, out_root, writer = writer_prep(
             exp_name, num
@@ -723,7 +724,6 @@ def run_trials():
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
-            config.AUG_PARAMS,
             config.SPATIAL_AUG_INDICES,
             config.IMAGE_AUG_INDICES,
         )
