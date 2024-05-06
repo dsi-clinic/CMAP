@@ -1,7 +1,7 @@
 #!/bin/bash
 #
-#SBATCH --output=/home/mli628/slurm/out/%j.%N.stdout
-#SBATCH --error=/home/mli628/slurm/out/%j.%N.stderr
+#SBATCH --output=/home/USERNAME/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/USERNAME/slurm/out/%j.%N.stderr
 #SBATCH --partition=general
 #SBATCH --job-name=cmap
 #SBATCH --time=12:00:00
@@ -10,12 +10,10 @@
 #SBATCH --tasks-per-node=1
 #SBATCH --gres=gpu:2
 
-export PATH="/home/mli628/miniconda/bin:$PATH"
-which conda
-which python
+export PATH="~/miniconda/bin:$PATH"
 
 # conda activate cmap
-source /home/mli628/miniconda3/bin/activate cmap
+source ~/miniconda3/bin/activate cmap
 
 cd ~/cmap
 wandb agent cmap-2024/cmap/z1wwd8na --count 5
