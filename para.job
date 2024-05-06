@@ -18,4 +18,4 @@ which python
 source /home/mli628/miniconda3/bin/activate cmap
 
 cd ~/cmap
-wandb agent cmap-2024/cmap/8hnm1pc9 --count 5
+wandb agent cmap-2024/cmap/y87drdk9 --count 5
