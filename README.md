@@ -41,10 +41,28 @@ Before running the repo (see details below) you will need to do the following:
     conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
     pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
-3. If you want to run automatic hyperparameter tuning with wandb, you need to have your own wandb API key and put the following code when you run training. Adjust the hyperparameters you want to experiment with in configs/sweep_config.yml
-```
---tune True--tune_key <your_api_key>
-```
+3. To implement automatic hyperparameter optimizer, you need to have your own wandb API key and follow run para.job.
+   1) **Environment Setup:**
+      * Activate the cmap environment and log in to your WandB account in the terminal:
+       ```
+       source /home/USERNAME/miniconda3/bin/activate cmap
+       wandb login <wandb api key>
+       ```
+   2) **Modify Sweep Parameters:**
+      * Modify the parameters for the sweep in cmap/configs/sweep_config.yml, ensuring that the parameter names match those in dsi.py. After setting up the sweep config, run the following command in that directory:
+      ```
+      wandb sweep sweep_config.yml
+      ```
+   3) **Run Sweep Agent:**
+      * Use wandb_path given in the last output (after "Run  sweep agent with") to update para.job. Specify the number of trials to run wutg --count.
+      ```
+      wandb agent <wandb_path> --count <trial_num>
+      ```
+   4) **Job Submission:**
+      * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallel the optimizing process.
+      ```
+      sbatch para.job
+      ```
 ### Slurm
 
 For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
@@ -71,7 +89,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
 
 Or, to run in an interactive session:
@@ -82,7 +100,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--tune <tune>] [--tune_key <tune_key>] [--num_trial <num_trial>]
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
 ```
 
 ## Git Usage
