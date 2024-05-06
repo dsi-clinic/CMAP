@@ -60,9 +60,9 @@ Before running the repo (see details below) you will need to do the following:
       ```
    4) **Job Submission:**
       * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallel the optimizing process.
-     ```
-     sbatch para.job
-     ```
+      ```
+      sbatch para.job
+      ```
 ### Slurm
 
 For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
