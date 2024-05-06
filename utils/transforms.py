@@ -25,14 +25,13 @@ def combine_channels(rgb, other_channels, rgb_mask, original_shape):
 
 
 def create_augmentation_pipelines(
-    aug_params, spatial_aug_indices, color_aug_indices
+    config, spatial_aug_indices, color_aug_indices
 ):
     """
     Create lists of spatial and color augmentations based on provided indices
     and parameters.
 
     Parameters:
-        aug_params (dict): Dictionary with parameters for each augmentation.
         spatial_aug_indices (list): Indices to select spatial augmentations.
         color_aug_indices (list): Indices to select color augs for RGB channels.
 
@@ -43,7 +42,7 @@ def create_augmentation_pipelines(
     all_spatial_transforms = [
         K.RandomHorizontalFlip(p=0.5),
         K.RandomVerticalFlip(p=0.5),
-        K.RandomRotation(degrees=aug_params["rotation_degrees"], p=0.5),
+        K.RandomRotation(degrees=config.ROTATION_DEGREES, p=0.5),
         K.RandomAffine(
             degrees=45, translate=(0.0625, 0.0625), scale=(0.9, 1.1), p=0.5
         ),
@@ -51,43 +50,35 @@ def create_augmentation_pipelines(
             kernel_size=(63, 63), sigma=(32.0, 32.0), alpha=(1.0, 1.0), p=0.5
         ),
         K.RandomPerspective(distortion_scale=0.5, p=0.5),
-        K.RandomResizedCrop(
-            size=aug_params["resized_crop_size"], scale=(0.08, 1.0)
-        ),
+        K.RandomResizedCrop(size=config.RESIZED_CROP_SIZE),
     ]
 
     # Define all possible color augmentations
     # (applied only to the RGB channels of the image)
     all_color_transforms = [
-        K.RandomContrast(contrast=aug_params.get("contrast_limit", 0.2), p=0.5),
-        K.RandomBrightness(
-            brightness=aug_params.get("brightness_limit", 0.2), p=0.5
-        ),
+        K.RandomContrast(contrast=config.COLOR_CONTRAST, p=0.5),
+        K.RandomBrightness(brightness=config.COLOR_BRIGHTNESS, p=0.5),
         # Introduce a lower bound to the noise to make it softer
         K.RandomGaussianNoise(
             mean=0.0,
-            std=aug_params.get("gaussian_noise_std", 0.1),
-            p=aug_params.get("gaussian_noise_prob", 0.2),
+            std=config.GAUSSIAN_NOISE_STD,
+            p=config.GAUSSIAN_NOISE_PROB,
         ),
         K.RandomGaussianBlur(
             kernel_size=(3, 3),
-            sigma=aug_params.get("gaussian_blur_sigma", (0.1, 2.0)),
+            sigma=config.GAUSSIAN_BLUR_SIGMA,
             p=0.5,
         ),
-        K.RandomPlasmaBrightness(
-            roughness=aug_params.get("plasma_roughness", (0.1, 0.3)), p=0.5
-        ),
+        K.RandomPlasmaBrightness(roughness=config.PLASMA_BRIGHTESS, p=0.5),
         K.RandomPlasmaShadow(
-            roughness=aug_params.get("plasma_roughness", (0.1, 0.3)),
-            shade_intensity=aug_params.get("shadow_intensity", (-0.2, 0.0)),
-            shade_quantity=aug_params.get("shade_quantity", (0.0, 0.2)),
+            roughness=config.PLASMA_ROUGHNESS,
+            shade_intensity=config.SHADOW_INTENSITY,
+            shade_quantity=config.SHADE_QUANTITY,
             p=0.5,
         ),
-        K.RandomSaturation(
-            saturation=aug_params.get("saturation_limit", 0.2), p=0.5
-        ),
+        K.RandomSaturation(saturation=config.SATURATION_LIMIT, p=0.5),
         K.RandomChannelShuffle(p=0.5),
-        K.RandomGamma(gamma=aug_params.get("gamma", (0.5, 1.5)), p=0.5),
+        K.RandomGamma(gamma=config.GAMMA, p=0.5),
     ]
 
     # Select the specific augmentations for this pipeline based on the given indices
