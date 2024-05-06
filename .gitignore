@@ -138,3 +138,6 @@ venv.bak/
 
 # data files
 *.avro
+
+#wandb results
+wandb*
