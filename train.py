@@ -771,11 +771,7 @@ naip, kc = initialize_dataset()
 
 if wandb_tune:
     run = wandb.init(project="cmap_train")
-    # with open("configs/sweep_config.yml", "r") as file:
-    #     sweep_config = yaml.safe_load(file)
     run_trials()
-    # sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    # wandb.agent(sweep_id, run_trials, count=10)
 
 
 else:
