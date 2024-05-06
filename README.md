@@ -59,7 +59,7 @@ Before running the repo (see details below) you will need to do the following:
       wandb agent <wandb_path> --count <trial_num>
       ```
    4) **Job Submission:**
-      * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallel the optimizing process.
+      * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallelize the optimizing process.
       ```
       sbatch para.job
       ```
