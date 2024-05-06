@@ -54,7 +54,7 @@ Before running the repo (see details below) you will need to do the following:
       wandb sweep sweep_config.yml
       ```
    3) **Run Sweep Agent:**
-      * Use wandb_path given in the last output (after "Run  sweep agent with") to update [para.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/para.job). Specify the number of trials to run with --count.
+      * Use wandb_path given in the last output (after "Run  sweep agent with") to update [sweep.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/sweep.job). Specify the number of trials to run with --count.
       ```
       wandb agent <wandb_path> --count <trial_num>
       ```
