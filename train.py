@@ -17,8 +17,8 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
+import wandb
 
-# import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -27,7 +27,6 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
