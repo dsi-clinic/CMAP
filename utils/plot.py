@@ -98,14 +98,17 @@ def plot_from_tensors(
 
         if "image" in name:
             # Handle RGB image tensors by ignoring the NIR channel
-            img = tensor[0:3, :, :].permute(1, 2, 0)
+            img = tensor[0:3, :, :]
+            img = torch.rearrange(img, 'c h w -> h w c')
             ax.imshow(img)
         elif "dem" in name:
-            img = tensor[4, :, :].permute(1, 2, 0)
-            ax.imshow(img)
+            img = tensor[4, :, :]
+            img = torch.rearrange(img, 'c h w -> h w c')
+            ax.imshow(img, cmap='gray')
         elif "nir" in name:
-            img = tensor[3, :, :].permute(1, 2, 0)
-            ax.imshow(img)
+            img = tensor[3, :, :]
+            img = torch.rearrange(img, 'c h w -> h w c')
+            ax.imshow(img, cmap='gray')
         else:
             # Get the unique labels present in the mask
             if len(tensor.shape) == 2:

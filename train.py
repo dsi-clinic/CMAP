@@ -406,6 +406,9 @@ def train_setup(
                 "augmented_dem": X_aug[i].cpu(),
                 "augmented_nir": X_aug[i].cpu()
             }
+            for tensor_name, tensor_data in plot_tensors.items():
+                    logging.info(f"{tensor_name}: {tensor_data.shape}")
+
             sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
             plot_from_tensors(
                 plot_tensors,
@@ -587,6 +590,9 @@ def test(
                         "dem": X_scaled[i].cpu(),
                         "nir": X_scaled[i].cpu()
                     }
+                    for tensor_name, tensor_data in plot_tensors.items():
+                        logging.info(f"{tensor_name}: {tensor_data.shape}")
+
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
