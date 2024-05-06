@@ -26,7 +26,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
-
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
