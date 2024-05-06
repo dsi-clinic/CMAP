@@ -13,3 +13,5 @@ command:
 - train.py
 - configs.dsi
 - --tune 
+- --num_trials
+- 2

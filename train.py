@@ -61,12 +61,6 @@ parser.add_argument(
     default=False,
 )
 
-# parser.add_argument(
-#     "--tune_key",
-#     type=str,
-#     help="Please enter the API key for wandb tuning",
-#     default="",
-# )
 
 parser.add_argument(
     "--num_trials",
@@ -640,7 +634,13 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    for t in range(config.EPOCHS):
+    # reducing number of epoch in hyperparameter tuning
+    if wandb_tune:
+        epoch_config = 10
+    else:
+        epoch_config = config.EPOCHS
+
+    for t in range(epoch_config):
         if t == 0:
             test_loss, t_jaccard = test(
                 test_dataloader,
