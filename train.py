@@ -160,8 +160,6 @@ def initialize_dataset():
         dem = KaneDEM(config.KC_DEM_ROOT)
         naip = naip & dem
         print("naip and dem loaded")
-        print(naip[0].shape)
-    kc = KaneCounty(config.KC_MASK_ROOT)
 
     return naip, kc
 
@@ -586,6 +584,8 @@ def test(
                         "image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
+                        "dem": X_scaled[i].cpu(),
+                        "nir": X_scaled[i].cpu()
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
