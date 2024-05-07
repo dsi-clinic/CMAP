@@ -18,7 +18,6 @@ from typing import Any, DefaultDict, Tuple
 import kornia.augmentation as K
 import torch
 import wandb
-import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -29,7 +28,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
-from utils.plot import determine_dominant_label, plot_from_tensors
+from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
@@ -55,17 +54,11 @@ parser.add_argument(
 
 parser.add_argument(
     "--tune",
-    type=str,
+    action="store_true",
     help="Whether to apply hyperparameter tuning with wandb; enter True or False",
     default=False,
 )
 
-parser.add_argument(
-    "--tune_key",
-    type=str,
-    help="Please enter the API key for wandb tuning",
-    default="",
-)
 
 parser.add_argument(
     "--num_trials",
@@ -98,9 +91,9 @@ def arg_parsing():
     wandb_tune = args.tune
     num_trials = int(args.num_trials)
 
-    if wandb_tune:
-        print("wandb tuning")
-        wandb.login(key=args.tune_key)
+    # if wandb_tune:
+    #     print("wandb tuning")
+    #     wandb.login(key=args.tune_key)
 
     return exp_name, split, wandb_tune, num_trials
 
@@ -116,9 +109,17 @@ def writer_prep(exp_name, trial_num):
 
     # create directory for output images
     train_images_root = os.path.join(out_root, "train-images")
-    test_image_root = os.path.join(out_root, "test-images")
-    os.mkdir(train_images_root)
-    os.mkdir(test_image_root)
+    test_images_root = os.path.join(out_root, "test-images")
+
+    try:
+        os.mkdir(train_images_root)
+        os.mkdir(test_images_root)
+
+    except FileExistsError:
+        shutil.rmtree(train_images_root)
+        shutil.rmtree(test_images_root)
+        os.mkdir(train_images_root)
+        os.mkdir(test_images_root)
 
     # open tensorboard writer
     writer = SummaryWriter(out_root)
@@ -137,7 +138,7 @@ def writer_prep(exp_name, trial_num):
             logging.StreamHandler(sys.stdout),
         ],
     )
-    return train_images_root, test_image_root, out_root, writer
+    return train_images_root, test_images_root, out_root, writer
 
 
 def initialize_dataset():
@@ -372,7 +373,7 @@ def train_setup(
     if batch == 0:
         save_dir = os.path.join(
             train_images_root,
-            f"-{config.AUG_PARAMS['contrast_limit']}-{config.AUG_PARAMS['brightness_limit']}-epoch-{epoch}",
+            f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
         )
         try:
             os.mkdir(save_dir)
@@ -568,7 +569,7 @@ def test(
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
-                for _i in range(model.in_channels - samp_image.size(1)):
+                for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
                     samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
@@ -610,24 +611,24 @@ def test(
                         "prediction": preds[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
-                    predominant_label_id = determine_dominant_label(
-                        ground_truth
-                    )
-                    label_name = kc.labels.get(predominant_label_id, "UNKNOWN")
-                    save_dir = os.path.join(epoch_dir, label_name)
-                    if not os.path.exists(save_dir):
-                        os.makedirs(save_dir)
-                    sample_fname = os.path.join(
-                        save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
-                    )
-                    plot_from_tensors(
-                        plot_tensors,
-                        sample_fname,
-                        "row",
-                        kc.colors,
-                        kc.labels_inverse,
-                        sample["bbox"][i],
-                    )
+                    label_ids = find_labels_in_ground_truth(ground_truth)
+
+                    for label_id in label_ids:
+                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        save_dir = os.path.join(epoch_dir, label_name)
+                        if not os.path.exists(save_dir):
+                            os.makedirs(save_dir)
+                        sample_fname = os.path.join(
+                            save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
+                        )
+                        plot_from_tensors(
+                            plot_tensors,
+                            sample_fname,
+                            "row",
+                            kc.colors,
+                            kc.labels_inverse,
+                            sample["bbox"][i],
+                        )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
@@ -673,14 +674,20 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    for t in range(config.EPOCHS):
+    # reducing number of epoch in hyperparameter tuning
+    if wandb_tune:
+        epoch_config = 10
+    else:
+        epoch_config = config.EPOCHS
+
+    for t in range(epoch_config):
         if t == 0:
             test_loss, t_jaccard = test(
                 test_dataloader,
                 model,
                 loss_fn,
                 test_jaccard,
-                t + 1,
+                t,
                 plateau_count,
                 test_image_root,
                 writer,
@@ -732,7 +739,6 @@ def train(
                 break
 
     print("Done!")
-    writer.close()
 
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
     logging.info(f"Saved PyTorch Model State to {out_root}")
@@ -746,12 +752,12 @@ def run_trials():
     """
 
     if wandb_tune:
-        run = wandb.init(project="cmap_train")
         vars(args).update(run.config)
         print("wandb taken over config")
 
     train_ious = []
     test_ious = []
+
     for num in range(num_trials):
         train_images_root, test_image_root, out_root, writer = writer_prep(
             exp_name, num
@@ -760,7 +766,7 @@ def run_trials():
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
-            config.AUG_PARAMS,
+            config,
             config.SPATIAL_AUG_INDICES,
             config.IMAGE_AUG_INDICES,
         )
@@ -783,6 +789,7 @@ def run_trials():
 
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
+        writer.close()
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
@@ -807,10 +814,9 @@ exp_name, split, wandb_tune, num_trials = arg_parsing()
 naip, kc = initialize_dataset()
 
 if wandb_tune:
-    with open("configs/sweep_config.yml", "r") as file:
-        sweep_config = yaml.safe_load(file)
-    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-    wandb.agent(sweep_id, run_trials, count=10)
+    run = wandb.init(project="cmap_train")
+    run_trials()
+
 
 else:
     run_trials()

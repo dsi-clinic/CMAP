@@ -183,3 +183,25 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     most_common_index = counts.argmax()
     most_common_label_id = unique[most_common_index].item()
     return most_common_label_id
+
+
+def find_labels_in_ground_truth(ground_truth: Tensor):
+    """
+    Finds all unique label IDs from a ground truth mask tensor.
+
+    Parameters
+    ----------
+    ground_truth : Tensor
+        The ground truth mask tensor, which should contain label indices.
+
+    Returns
+    -------
+    List[int]
+        A list of the unique label IDs in the ground truth.
+    """
+    unique = ground_truth.unique()
+    # Remove the background label '0' from consideration if present
+    if 0 in unique:
+        unique = unique[unique != 0]
+
+    return unique.tolist() if unique.numel() > 0 else [15]
