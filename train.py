@@ -350,7 +350,6 @@ def train_setup(
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)
-            samp_mask = add_extra_channel(samp_mask)
 
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
@@ -571,7 +570,7 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-                    samp_mask = add_extra_channel(samp_mask)
+                    
             X = samp_image.to(device)
             normalize, scale = normalize_func(model)
             X_scaled = scale(X)
@@ -590,9 +589,9 @@ def test(
             # calculate Jaccard per index using helper functions
             hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
             jaccard_per_class = jaccard_index(hist)
-            for i, jaccard_value in enumerate(jaccard_per_class):
+            for value in jaccard_per_class:
                 logging.info(
-                    f"IoU for {kc.labels[i]}: {jaccard_value} \n"
+                    f"IoU for {kc.labels[value]}: {value.item()} \n"
                 )
             # add test loss to rolling total
             test_loss += loss.item()
