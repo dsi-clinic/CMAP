@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Callable, List
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
@@ -33,17 +33,36 @@ def build_cmap(colors: Dict[int, tuple]):
     cmap = ListedColormap(cmap_list)
     return cmap
 
+def split_condition(name: str, tensor: Tensor) -> bool:
+    """
+    Split condition function. Splits by non-augmented images and augmented images
 
-def plot_from_tensors(
+    Parameters
+    ----------
+    name : str
+        Image name.
+
+    tensor : Tensor
+        Image tensor.
+
+    Returns
+    -------
+    bool
+        True if the image name contains "aug", False otherwise.
+    """
+    return "aug" in name
+
+def plot_from_tensors_by_group(
     sample: Dict[str, Tensor],
     save_path: str,
+    split_condition: Callable[[str, Tensor], bool],  # Function to split the images into two groups
     mode: str = "row",
     colors: Dict[int, tuple] = None,
     labels: Dict[int, str] = None,
     coords: BoundingBox = None,
 ):
     """
-    Plots a sample from the training dataset and saves to provided file path.
+    Plots a sample from the training dataset and saves to provided file path, splitting images into two groups.
 
     Parameters
     ----------
@@ -54,6 +73,10 @@ def plot_from_tensors(
 
     save_path : str
         The path to save the plot to
+
+    split_condition : callable
+        A function that takes the image name and tensor as input and returns
+        a boolean value indicating which group the image belongs to.
 
     mode : str
         Either 'grid' or 'row' for orientation of images on plot
@@ -72,81 +95,40 @@ def plot_from_tensors(
         The x, y, t coords for the sample taken from a dataloader sample's
         bbox key
     """
-    # create the colormap
+    # Create the colormap
     if colors is not None:
         cmap = build_cmap(colors)
     else:
         cmap = "viridis"
 
+    # Split the sample into two groups
+    group1 = {name: tensor for name, tensor in sample.items() if split_condition(name, tensor)}
+    group2 = {name: tensor for name, tensor in sample.items() if not split_condition(name, tensor)}
+
     # Set the figure dimensions and create subplots accordingly
     if mode == "grid":
-        n_rows = int(round(len(sample.keys()) / 2))
-        n_cols = 2 if len(sample.keys()) > 1 else 1
+        n_rows = max(len(group1), len(group2))
+        n_cols = 2
         fig, axs = plt.subplots(n_rows, n_cols, figsize=(8, 8))
-        # Ensure axs is always an array, even if it's 1x1
         axs = np.array(axs).reshape(-1)
     elif mode == "row":
-        fig, axs = plt.subplots(1, len(sample.keys()), figsize=(12, 4))
-        # Ensure axs is always an array, even if it's 1x1
+        n_cols = max(len(group1), len(group2))
+        fig, axs = plt.subplots(1, n_cols, figsize=(12, 4))
         axs = np.array(axs).reshape(-1)
     else:
         raise ValueError("Invalid mode")
 
-    # Plot each input tensor
-    unique_labels = Tensor()
-    for i, (name, tensor) in enumerate(sample.items()):
-        ax = axs[i]
+    # Plot images from group 1
+    plot_group_images(group1, axs[:len(group1)], cmap, labels)
 
-        if "image" in name:
-            # Handle RGB image tensors by ignoring the NIR channel
-            img = tensor[0:3, :, :]
-            img = rearrange(img, "c h w -> h w c")
-            ax.imshow(img)
-        elif "dem" in name:
-            img = tensor[4, :, :]
-            ax.imshow(img, cmap="gray")
-        elif "nir" in name:
-            img = tensor[3, :, :]
-            ax.imshow(img, cmap="gray")
-        else:
-            # Get the unique labels present in the mask
-            if len(tensor.shape) == 2:
-                unique = tensor.unique()
-                ax.imshow(
-                    tensor,
-                    cmap=cmap,
-                    vmin=0,
-                    vmax=len(cmap.colors) - 1,
-                    interpolation="none",
-                )
-            else:
-                unique = tensor[0].unique()
-                ax.imshow(
-                    tensor[0],
-                    cmap=cmap,
-                    vmin=0,
-                    vmax=len(cmap.colors) - 1,
-                    interpolation="none",
-                )
-            unique_labels = torch.cat((unique, unique_labels)).unique()
-        ax.set_title(name.replace("_", " "))
-        ax.axis("off")
+    # Plot images from group 2
+    plot_group_images(group2, axs[len(group1):], cmap, labels)
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
-        unique_labels = unique_labels.type(torch.int).tolist()
-        patches = []
-        for i in unique_labels:
-            patches.append(
-                mpatches.Patch(color=cmap.colors[i], label=labels[i])
-            )
-
-        fig.legend(
-            handles=patches,
-            bbox_to_anchor=(1.05, 0.5),
-            loc="center left",
-            borderaxespad=0.0,
-        )
+        unique_labels = get_unique_labels(group1, group2)
+        patches = [mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels]
+        fig.legend(handles=patches, bbox_to_anchor=(1.05, 0.5), loc="center left", borderaxespad=0.0)
 
     # If bounding box coords were provided, add them to the plot
     if coords is not None:
@@ -155,6 +137,73 @@ def plot_from_tensors(
     # Save the figure
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()
+
+
+def plot_group_images(group: Dict[str, Tensor], axs: List[plt.Axes], cmap, labels: Dict[int, str] = None):
+    """
+    Plots images from a group.
+
+    Parameters
+    ----------
+    group : dict
+        A group of images and their corresponding tensors.
+
+    axs : list
+        List of matplotlib Axes objects for plotting.
+
+    cmap : str or matplotlib.colors.ListedColormap
+        Colormap for plotting masks.
+
+    labels : Dict[int, str]
+        A dictionary containing a label mapping for masks
+            keys : mask indices
+            values : labels
+    """
+    unique_labels = Tensor()
+    for i, (name, tensor) in enumerate(group.items()):
+        ax = axs[i]
+        if "RGB" in name:
+            img = tensor[0:3, :, :]
+            img = rearrange(img, "c h w -> h w c")
+            ax.imshow(img)
+        elif "DEM" in name:
+            img = tensor[4, :, :]
+            ax.imshow(img, cmap="gray")
+        elif "NIR" in name:
+            img = tensor[3, :, :]
+            ax.imshow(img, cmap="gray")
+        else:
+            if len(tensor.shape) == 2:
+                unique = tensor.unique()
+                ax.imshow(tensor, cmap=cmap, vmin=0, vmax=len(cmap.colors) - 1, interpolation="none")
+            else:
+                unique = tensor[0].unique()
+                ax.imshow(tensor[0], cmap=cmap, vmin=0, vmax=len(cmap.colors) - 1, interpolation="none")
+            unique_labels = torch.cat((unique, unique_labels)).unique()
+        ax.set_title(name.replace("_", " "))
+        ax.axis("off")
+
+
+def get_unique_labels(*groups):
+    """
+    Get unique labels from multiple groups.
+
+    Parameters
+    ----------
+    groups : list
+        List of groups containing image tensors.
+
+    Returns
+    -------
+    list
+        List of unique labels.
+    """
+    unique_labels = set()
+    for group in groups:
+        for tensor in group.values():
+            unique_labels.update(tensor.unique().tolist())
+    return list(unique_labels)
+
 
 
 def determine_dominant_label(ground_truth: Tensor) -> int:

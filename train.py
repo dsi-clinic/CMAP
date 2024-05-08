@@ -31,7 +31,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 from data.kcv import KaneCounty
 from data.dem import KaneDEM
 from utils.model import SegmentationModel
-from utils.plot import find_labels_in_ground_truth, plot_from_tensors
+from utils.plot import find_labels_in_ground_truth, plot_from_tensors_by_group, split_condition
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
@@ -397,22 +397,23 @@ def train_setup(
 
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
-                "image": X[i].cpu(),
-                "mask": samp_mask[i],
-                "dem": X[i].cpu(),
-                "nir": X[i].cpu(),
-                "augmented_image": X_aug[i].cpu(),
-                "augmented_mask": y[i].cpu(),
-                "augmented_dem": X_aug[i].cpu(),
-                "augmented_nir": X_aug[i].cpu()
+                "RGB Image": X[i].cpu(),
+                "Mask": samp_mask[i],
+                "DEM": X[i].cpu(),
+                "NIR": X[i].cpu(),
+                "Augmented_RGBimage": X_aug[i].cpu(),
+                "Augmented_Mask": y[i].cpu(),
+                "Augmented_DEM": X_aug[i].cpu(),
+                "Augmented_NIR": X_aug[i].cpu()
             }
             for tensor_name, tensor_data in plot_tensors.items():
                     logging.info(f"{tensor_name}: {tensor_data.shape}")
 
             sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
-            plot_from_tensors(
+            plot_from_tensors_by_group(
                 plot_tensors,
                 sample_fname,
+                split_condition,
                 "grid",
                 kc.colors,
                 kc.labels_inverse,
@@ -584,11 +585,11 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "image": X_scaled[i].cpu(),
+                        "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
-                        "dem": X_scaled[i].cpu(),
-                        "nir": X_scaled[i].cpu()
+                        "DEM": X_scaled[i].cpu(),
+                        "NIR": X_scaled[i].cpu()
                     }
                     for tensor_name, tensor_data in plot_tensors.items():
                         logging.info(f"{tensor_name}: {tensor_data.shape}")
@@ -604,9 +605,10 @@ def test(
                         sample_fname = os.path.join(
                             save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
                         )
-                        plot_from_tensors(
+                        plot_from_tensors_by_group(
                             plot_tensors,
                             sample_fname,
+                            split_condition,
                             "row",
                             kc.colors,
                             kc.labels_inverse,
