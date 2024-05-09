@@ -9,6 +9,7 @@ import datetime
 import importlib.util
 import logging
 import os
+import random
 import shutil
 import sys
 from pathlib import Path
@@ -165,9 +166,14 @@ def build_dataset(naip, kc, split):
     Input:
         split: the percentage of splitting (entered from args)
     """
+    # record generator seed
+    seed = random.randint(0, sys.maxsize)
+    logging.info(f"Dataset random split seed: {seed}")
+    generator = torch.Generator().manual_seed(seed)
+
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
-        naip, [split, 1 - split]
+        naip, [split, 1 - split], generator
     )
     train_dataset = train_portion & kc
     test_dataset = test_portion & kc
@@ -546,7 +552,10 @@ def test(
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
-            y_squeezed = y[:, :, :].squeeze()
+            if y.size(0) == 1:
+                y_squeezed = y
+            else:
+                y_squeezed = y[:, :, :].squeeze()
 
             # compute prediction error
             outputs = model(X)
