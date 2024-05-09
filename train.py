@@ -589,10 +589,13 @@ def test(
             # calculate Jaccard per index using helper functions
             hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
             jaccard_per_class = jaccard_index(hist)
-            for value in jaccard_per_class:
-                logging.info(
-                    f"IoU for {kc.labels[value]}: {value.item()} \n"
-                )
+            if jaccard_per_class.dim() == 0:  # Check if jaccard_per_class is a scalar tensor
+                logging.warning("jaccard_per_class is a scalar tensor. Value: {}".format(jaccard_per_class.item()))
+            else:
+                for value in jaccard_per_class:
+                    logging.info(
+                        f"IoU for {kc.labels[value]}: {value.item()} \n"
+                    )
             # add test loss to rolling total
             test_loss += loss.item()
 
