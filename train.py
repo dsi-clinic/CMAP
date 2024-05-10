@@ -595,19 +595,22 @@ def test(
             preds = outputs.argmax(dim=1)
             jaccard.update(preds, y_squeezed)
 
-            # Access the first five labels and their names
+            # Access the labels and their names
             _labels = {}
-            for label_id, label_name in kc.labels.items():
+            for label_name, label_id in kc.labels.items():
                 _labels[label_id] = label_name
                 if len(_labels) == num_classes:
                     break
 
             # calculate Jaccard per index using helper functions
-            hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
+            hist = _fast_hist(y, outputs, num_classes=num_classes)
             jaccard_per_class = jaccard_index(hist)
+            logging.info(
+                f"jaccard_per_class tensor: {jaccard_per_class} \n"
+            )
             for i in range(num_classes):
                 logging.info(
-                        f"IoU for {_labels[i]}: {jaccard_per_class.item()} \n"
+                    f"IoU for {_labels[i]}: {jaccard_per_class.item()} \n"
                 )
 
             # add test loss to rolling total
@@ -706,6 +709,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
+                num_classes
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
