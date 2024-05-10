@@ -213,12 +213,12 @@ def regularization_loss(model, reg_type, weight):
     - float: The calculated regularization loss.
     """
     reg_loss = 0.0
-    if reg_type == 'l1':
+    if reg_type == "l1":
         for param in model.parameters():
             reg_loss += torch.sum(torch.abs(param))
-    elif reg_type == 'l2':
+    elif reg_type == "l2":
         for param in model.parameters():
-            reg_loss += torch.sum(param ** 2)
+            reg_loss += torch.sum(param**2)
     return weight * reg_loss
 
 
@@ -230,7 +230,7 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    if reg_type and reg_type != 'None':
+    if reg_type and reg_type != "None":
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
     return base_loss
@@ -269,8 +269,9 @@ def create_model():
         average="micro",
     ).to(device)
 
-    optimizer = AdamW(model.parameters(), lr=config.LR, 
-                      weight_decay=config.WEIGHT_DECAY)
+    optimizer = AdamW(
+        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
+    )
 
     return model, loss_fn, train_jaccard, test_jaccard, optimizer
 
@@ -503,8 +504,14 @@ def train_epoch(
 
         # compute prediction error
         outputs = model(X)
-        loss = compute_loss(model, outputs, y, loss_fn, config.REGULARIZATION_TYPE, 
-                            config.REGULARIZATION_WEIGHT)
+        loss = compute_loss(
+            model,
+            outputs,
+            y,
+            loss_fn,
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
+        )
 
         # update jaccard index
         preds = outputs.argmax(dim=1)
@@ -515,7 +522,9 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.CLIP_VALUE
+            )
 
         optimizer.step()
         optimizer.zero_grad()
