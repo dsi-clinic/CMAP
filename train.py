@@ -81,6 +81,9 @@ device = (
 
 
 def arg_parsing():
+    """
+    Parsing arguments passed in from command line
+    """
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
@@ -101,6 +104,12 @@ def arg_parsing():
 
 
 def writer_prep(exp_name, trial_num):
+    """
+    Preparing writers and logging for each training trial
+    Input:
+        exp_name: experiment name passed in by command line
+        trial_num: current trial number
+    """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_name}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
