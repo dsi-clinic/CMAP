@@ -18,7 +18,6 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
-import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
@@ -27,6 +26,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+import wandb
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
@@ -131,16 +131,20 @@ def writer_prep(exp_name, trial_num):
     shutil.copy(Path(config.__file__).resolve(), out_root)
 
     # Set up logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     log_filename = os.path.join(out_root, "training_log.txt")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_filename),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return train_images_root, test_images_root, out_root, writer
+    file_handler = logging.FileHandler(log_filename)
+    stream_handler = logging.StreamHandler(sys.stdout)
+
+    # log format
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return train_images_root, test_images_root, out_root, writer, logger
 
 
 def initialize_dataset():
@@ -724,9 +728,13 @@ def run_trials():
     test_ious = []
 
     for num in range(num_trials):
-        train_images_root, test_image_root, out_root, writer = writer_prep(
-            exp_name, num
-        )
+        (
+            train_images_root,
+            test_image_root,
+            out_root,
+            writer,
+            logger,
+        ) = writer_prep(exp_name, num)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
@@ -755,6 +763,7 @@ def run_trials():
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
         writer.close()
+        logger.handlers.clear()
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
