@@ -282,6 +282,7 @@ def normalize_func(model):
     return normalize, scale
 
 
+
 def add_extra_channel(
     image_tensor: torch.Tensor, source_channel: int = 0
 ) -> torch.Tensor:
@@ -316,6 +317,31 @@ def add_extra_channel(
 
     return augmented_tensor
 
+def nanmean(x):
+    """Computes the arithmetic mean ignoring any NaNs."""
+    return torch.mean(x[x == x])
+
+def _fast_hist(true, pred, num_classes):
+    mask = (true >= 0) & (true < num_classes)
+    hist = torch.bincount(
+        num_classes * true[mask] + pred[mask],
+        minlength=num_classes ** 2,
+    ).reshape(num_classes, num_classes).float()
+    return hist
+
+def jaccard_index(hist):
+    """Computes the Jaccard index, a.k.a the Intersection over Union (IoU).
+    Args:
+        hist: confusion matrix.
+    Returns:
+        avg_jacc: the average per-class jaccard index.
+    """
+    A_inter_B = torch.diag(hist)
+    A = hist.sum(dim=1)
+    B = hist.sum(dim=0)
+    jaccard = A_inter_B / (A + B - A_inter_B + 1e-10)
+    avg_jacc = nanmean(jaccard)
+    return avg_jacc
 
 def train_setup(
     sample: DefaultDict[str, Any],
@@ -505,6 +531,7 @@ def test(
     plateau_count: int,
     test_image_root,
     writer,
+    num_classes
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -528,6 +555,9 @@ def test(
 
     plateau_count : int
         The number of epochs the loss has been plateauing
+
+    num_classes : int
+        The number of labels to predict
 
     Returns
     -------
@@ -564,6 +594,21 @@ def test(
             # update metric
             preds = outputs.argmax(dim=1)
             jaccard.update(preds, y_squeezed)
+
+            # Access the first five labels and their names
+            _labels = {}
+            for label_id, label_name in kc.labels.items():
+                _labels[label_id] = label_name
+                if len(_labels) == num_classes:
+                    break
+
+            # calculate Jaccard per index using helper functions
+            hist = _fast_hist(preds, y_squeezed, num_classes=num_classes)
+            jaccard_per_class = jaccard_index(hist)
+            for i in range(num_classes):
+                logging.info(
+                        f"IoU for {_labels[i]}: {jaccard_per_class.item()} \n"
+                )
 
             # add test loss to rolling total
             test_loss += loss.item()
@@ -641,6 +686,9 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
+    # How many classes we're predicting
+    num_classes = config.NUM_CLASSES
+
     # reducing number of epoch in hyperparameter tuning
     if wandb_tune:
         epoch_config = 10
@@ -686,6 +734,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
+            num_classes
         )
         # Checks for plateau
         if best_loss is None:
