@@ -230,7 +230,7 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    if reg_type and reg_type != "None":
+    if reg_type is not None:
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
     return base_loss
