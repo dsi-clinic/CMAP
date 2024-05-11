@@ -1,19 +1,22 @@
 #!/bin/bash
 #
-#SBATCH --output=/home/USERNAME/slurm/out/%j.%N.stdout
-#SBATCH --error=/home/USERNAME/slurm/out/%j.%N.stderr
+#SBATCH --mail-user=mli628@cs.uchicago.edu
+#SBATCH --mail-type=ALL
+#SBATCH --output=/home/mli628/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/mli628/slurm/out/%j.%N.stderr
+#SBATCH --chdir=/home/mli628/slurm
 #SBATCH --partition=general
 #SBATCH --job-name=cmap
 #SBATCH --time=12:00:00
-#SBATCH --mem=64GB
+#SBATCH --mem=128GB
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
-#SBATCH --tasks-per-node=1
-#SBATCH --gres=gpu:2
+source /home/mli628/miniconda3/bin/activate cmap
 
-export PATH="~/miniconda/bin:$PATH"
+export PATH="/home/mli628/miniconda/bin:$PATH"
 
 # conda activate cmap
 source ~/miniconda3/bin/activate cmap
 
 cd ~/cmap
-wandb agent cmap-2024/cmap/z1wwd8na --count 5
+wandb agent cmap-2024/cmap/g6sp2g69 --count 7

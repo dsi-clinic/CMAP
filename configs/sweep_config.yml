@@ -4,10 +4,12 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
-  COLOR_CONTRAST:
-    values: [0.2, 0.3, 0.4]
-  COLOR_BRIGHTNESS:
-    values: [0.2, 0.3, 0.4]
+  GAUSSIAN_NOISE_PROB:
+    values: [0.2, 0.3, 0.4, 0.5]
+  GAUSSIAN_NOISE_STD:
+    values: [0.05, 0.1, 0.2, 0.3]
+  SATURATION_LIMIT:
+    values: [0.1,0.2,0.3]
 command:
 - python
 - train.py
