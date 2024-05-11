@@ -81,6 +81,9 @@ device = (
 
 
 def arg_parsing():
+    """
+    Parsing arguments passed in from command line
+    """
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
@@ -101,6 +104,12 @@ def arg_parsing():
 
 
 def writer_prep(exp_name, trial_num):
+    """
+    Preparing writers and logging for each training trial
+    Input:
+        exp_name: experiment name passed in by command line
+        trial_num: current trial number
+    """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_name}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
@@ -131,16 +140,20 @@ def writer_prep(exp_name, trial_num):
     shutil.copy(Path(config.__file__).resolve(), out_root)
 
     # Set up logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     log_filename = os.path.join(out_root, "training_log.txt")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_filename),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return train_images_root, test_images_root, out_root, writer
+    file_handler = logging.FileHandler(log_filename)
+    stream_handler = logging.StreamHandler(sys.stdout)
+
+    # log format
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return train_images_root, test_images_root, out_root, writer, logger
 
 
 def initialize_dataset():
@@ -771,9 +784,13 @@ def run_trials():
     test_ious = []
 
     for num in range(num_trials):
-        train_images_root, test_image_root, out_root, writer = writer_prep(
-            exp_name, num
-        )
+        (
+            train_images_root,
+            test_image_root,
+            out_root,
+            writer,
+            logger,
+        ) = writer_prep(exp_name, num)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
@@ -802,6 +819,7 @@ def run_trials():
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
         writer.close()
+        logger.handlers.clear()
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
