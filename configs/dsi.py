@@ -36,6 +36,11 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+WEIGHT_DECAY = 0
+REGULARIZATION_TYPE = None
+REGULARIZATION_WEIGHT = 1.0e-5
+GRADIENT_CLIPPING = False
+CLIP_VALUE = 1.0
 
 # data augmentation
 SPATIAL_AUG_INDICES = [
