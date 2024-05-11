@@ -81,6 +81,9 @@ device = (
 
 
 def arg_parsing():
+    """
+    Parsing arguments passed in from command line
+    """
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
     if exp_name is None:
@@ -101,6 +104,12 @@ def arg_parsing():
 
 
 def writer_prep(exp_name, trial_num):
+    """
+    Preparing writers and logging for each training trial
+    Input:
+        exp_name: experiment name passed in by command line
+        trial_num: current trial number
+    """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_name}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
@@ -131,16 +140,20 @@ def writer_prep(exp_name, trial_num):
     shutil.copy(Path(config.__file__).resolve(), out_root)
 
     # Set up logging
+    logger = logging.getLogger()
+    logger.setLevel(logging.INFO)
     log_filename = os.path.join(out_root, "training_log.txt")
-    logging.basicConfig(
-        level=logging.INFO,
-        format="%(asctime)s [%(levelname)s] %(message)s",
-        handlers=[
-            logging.FileHandler(log_filename),
-            logging.StreamHandler(sys.stdout),
-        ],
-    )
-    return train_images_root, test_images_root, out_root, writer
+    file_handler = logging.FileHandler(log_filename)
+    stream_handler = logging.StreamHandler(sys.stdout)
+
+    # log format
+    formatter = logging.Formatter("%(asctime)s [%(levelname)s] %(message)s")
+    file_handler.setFormatter(formatter)
+    stream_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
+    logger.addHandler(stream_handler)
+
+    return train_images_root, test_images_root, out_root, writer, logger
 
 
 def initialize_dataset():
@@ -205,6 +218,37 @@ def build_dataset(naip, kc, split):
     return train_dataloader, test_dataloader
 
 
+def regularization_loss(model, reg_type, weight):
+    """
+    Calculate the regularization loss for the model parameters.
+
+    Returns:
+    - float: The calculated regularization loss.
+    """
+    reg_loss = 0.0
+    if reg_type == "l1":
+        for param in model.parameters():
+            reg_loss += torch.sum(torch.abs(param))
+    elif reg_type == "l2":
+        for param in model.parameters():
+            reg_loss += torch.sum(param**2)
+    return weight * reg_loss
+
+
+def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
+    """
+    Compute the total loss optionally the regularization loss.
+
+    Returns:
+    - torch.Tensor: The total loss as a PyTorch tensor.
+    """
+    base_loss = loss_fn(mask, y)
+    if reg_type is not None:
+        reg_loss = regularization_loss(model, reg_type, reg_weight)
+        base_loss += reg_loss
+    return base_loss
+
+
 def create_model():
     """
     Setting up training model, loss function and measuring metrics
@@ -238,7 +282,9 @@ def create_model():
         average="micro",
     ).to(device)
 
-    optimizer = AdamW(model.parameters(), lr=config.LR)
+    optimizer = AdamW(
+        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
+    )
 
     return model, loss_fn, train_jaccard, test_jaccard, optimizer
 
@@ -471,7 +517,14 @@ def train_epoch(
 
         # compute prediction error
         outputs = model(X)
-        loss = loss_fn(outputs, y)
+        loss = compute_loss(
+            model,
+            outputs,
+            y,
+            loss_fn,
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
+        )
 
         # update jaccard index
         preds = outputs.argmax(dim=1)
@@ -479,6 +532,13 @@ def train_epoch(
 
         # backpropagation
         loss.backward()
+
+        # Gradient clipping
+        if config.GRADIENT_CLIPPING:
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.CLIP_VALUE
+            )
+
         optimizer.step()
         optimizer.zero_grad()
 
@@ -724,9 +784,13 @@ def run_trials():
     test_ious = []
 
     for num in range(num_trials):
-        train_images_root, test_image_root, out_root, writer = writer_prep(
-            exp_name, num
-        )
+        (
+            train_images_root,
+            test_image_root,
+            out_root,
+            writer,
+            logger,
+        ) = writer_prep(exp_name, num)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
         model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
@@ -755,6 +819,7 @@ def run_trials():
         train_ious.append(float(train_iou))
         test_ious.append(float(test_iou))
         writer.close()
+        logger.handlers.clear()
 
     test_average = mean(test_ious)
     train_average = mean(train_ious)
