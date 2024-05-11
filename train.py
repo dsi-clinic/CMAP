@@ -237,10 +237,14 @@ def create_model():
         ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
-
+    jaccard_per_class = MulticlassJaccardIndex(
+        num_classes=config.NUM_CLASSES,
+        ignore_index=config.IGNORE_INDEX,
+        average=None
+    ).to(device)
     optimizer = AdamW(model.parameters(), lr=config.LR)
 
-    return model, loss_fn, train_jaccard, test_jaccard, optimizer
+    return model, loss_fn, train_jaccard, test_jaccard, jaccard_per_class, optimizer
 
 
 def copy_first_entry(a_list: list) -> list:
@@ -317,31 +321,6 @@ def add_extra_channel(
 
     return augmented_tensor
 
-def nanmean(x):
-    """Computes the arithmetic mean ignoring any NaNs."""
-    return torch.mean(x[x == x])
-
-def _fast_hist(true, pred, num_classes):
-    mask = (true >= 0) & (true < num_classes)
-    hist = torch.bincount(
-        num_classes * true[mask] + pred[mask],
-        minlength=num_classes ** 2,
-    ).reshape(num_classes, num_classes).float()
-    return hist
-
-def jaccard_index(hist):
-    """Computes the Jaccard index, a.k.a the Intersection over Union (IoU).
-    Args:
-        hist: confusion matrix.
-    Returns:
-        avg_jacc: the average per-class jaccard index.
-    """
-    A_inter_B = torch.diag(hist)
-    A = hist.sum(dim=1)
-    B = hist.sum(dim=0)
-    jaccard = A_inter_B / (A + B - A_inter_B + 1e-10)
-    avg_jacc = nanmean(jaccard)
-    return avg_jacc
 
 def train_setup(
     sample: DefaultDict[str, Any],
@@ -531,7 +510,8 @@ def test(
     plateau_count: int,
     test_image_root,
     writer,
-    num_classes
+    num_classes,
+    jaccard_per_class: Metric
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -567,6 +547,7 @@ def test(
     num_batches = len(dataloader)
     model.eval()
     jaccard.reset()
+    jaccard_per_class.reset()
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
@@ -602,15 +583,12 @@ def test(
                 if len(_labels) == num_classes:
                     break
 
-            # calculate Jaccard per index using helper functions
-            hist = _fast_hist(y, outputs, num_classes=num_classes)
-            jaccard_per_class = jaccard_index(hist)
-            logging.info(
-                f"jaccard_per_class tensor: {jaccard_per_class} \n"
-            )
-            for i in range(num_classes):
+            # update Jaccard per class metric
+            jaccard_per_class.forward(preds, y_squeezed)
+            for i, label_name in _labels.items():
+                #iou = jaccard_per_class.item()
                 logging.info(
-                    f"IoU for {_labels[i]}: {jaccard_per_class.item()} \n"
+                    f"IoU for {label_name}: {jaccard_per_class} \n"
                 )
 
             # add test loss to rolling total
@@ -675,6 +653,7 @@ def train(
     train_images_root,
     spatial_augs,
     color_augs,
+    jaccard_per_class,
     config=config,
 ):
     # How much the loss needs to drop to reset a plateau
@@ -709,7 +688,8 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                num_classes
+                num_classes,
+                jaccard_per_class
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -738,7 +718,8 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            num_classes
+            num_classes,
+            jaccard_per_class
         )
         # Checks for plateau
         if best_loss is None:
@@ -782,7 +763,7 @@ def run_trials():
         )
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
-        model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+        model, loss_fn, train_jaccard, test_jaccard, jaccard_per_class, optimizer = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
             config,
             config.SPATIAL_AUG_INDICES,
@@ -803,6 +784,7 @@ def run_trials():
             train_images_root,
             spatial_augs,
             color_augs,
+            jaccard_per_class
         )
 
         train_ious.append(float(train_iou))
