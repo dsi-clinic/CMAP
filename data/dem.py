@@ -11,7 +11,7 @@ input a .gdb file and output a .tif file
 from torchgeo.datasets import RasterDataset
 
 class KaneDEM(RasterDataset):
-    filename_glob = "*DEM.tif"
+    filename_glob = "*2017BE.tif"
 
     def __init__(self, paths, crs=None, res=None, transforms=None):
         super().__init__(paths, crs, res, transforms=transforms)
