@@ -638,20 +638,8 @@ def test(
             preds = outputs.argmax(dim=1)
             jaccard.update(preds, y_squeezed)
 
-            # Access the labels and their names
-            _labels = {}
-            for label_name, label_id in kc.labels.items():
-                _labels[label_id] = label_name
-                if len(_labels) == num_classes:
-                    break
-
             # update Jaccard per class metric
             jaccard_per_class.forward(preds, y_squeezed)
-            for i, label_name in _labels.items():
-                #iou = jaccard_per_class.item()
-                logging.info(
-                    f"IoU for {label_name}: {jaccard_per_class} \n"
-                )
 
             # add test loss to rolling total
             test_loss += loss.item()
@@ -690,12 +678,26 @@ def test(
                         )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
+    final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
         f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
         + f"Test avg loss: {test_loss:>4f} \n"
     )
+
+    # Access the labels and their names
+    _labels = {}
+    for label_name, label_id in kc.labels.items():
+        _labels[label_id] = label_name
+        if len(_labels) == num_classes:
+            break
+    
+    for i, label_name in _labels.items():
+        #iou = jaccard_per_class.item()
+        logging.info(
+            f"IoU for {label_name}: {final_jaccard_per_class[i]} \n"
+        )
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard

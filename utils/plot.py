@@ -7,6 +7,7 @@ import torch
 from matplotlib.colors import ListedColormap
 from torch import Tensor
 from torchgeo.datasets.utils import BoundingBox
+from einops import rearrange
 
 
 def build_cmap(colors: Dict[int, tuple]):
@@ -96,11 +97,16 @@ def plot_from_tensors(
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
 
-        if "image" in name:
-            # Handle RGB image tensors by ignoring the NIR channel
-            img = tensor[0:3, :, :].permute(1, 2, 0)
+        if "RGB" in name:
+            img = tensor[0:3, :, :]
+            img = rearrange(img, "c h w -> h w c")
             ax.imshow(img)
-
+        elif "DEM" in name:
+            img = tensor[4, :, :]
+            ax.imshow(img, cmap="gray")
+        elif "NIR" in name:
+            img = tensor[3, :, :]
+            ax.imshow(img, cmap="gray")
         else:
             # Get the unique labels present in the mask
             if len(tensor.shape) == 2:
