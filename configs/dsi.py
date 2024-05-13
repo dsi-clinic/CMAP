@@ -37,6 +37,11 @@ IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
 THRESHOLD = 0.01
+WEIGHT_DECAY = 0
+REGULARIZATION_TYPE = None
+REGULARIZATION_WEIGHT = 1.0e-5
+GRADIENT_CLIPPING = False
+CLIP_VALUE = 1.0
 
 # data augmentation
 SPATIAL_AUG_INDICES = [
@@ -46,6 +51,7 @@ SPATIAL_AUG_INDICES = [
     3,  # Affine
     4,  # Elastic
     5,  # Perspective
+    6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
@@ -59,19 +65,23 @@ IMAGE_AUG_INDICES = [
     # 6,  # Channel Shuffle
     # 7,  # Gamma
 ]
-AUG_PARAMS = {
-    "rotation_degrees": 360,
-    "contrast_limit": 0.2,
-    "brightness_limit": 0.2,
-    "gaussian_noise_prob": 0.2,
-    "gaussian_noise_std": 0.05,
-    "gaussian_blur_sigma": (0.1, 2.0),
-    "plasma_roughness": (0.0, 0.2),
-    "saturation_limit": 0.1,
-    "shadow_intensity": (-0.05, 0.0),
-    "shade_quantity": (0.0, 0.05),
-    "gamma": (0.8, 1.2),
-}
+
+# Augmentation
+ROTATION_DEGREES = 360
+COLOR_CONTRAST = 0.2
+COLOR_BRIGHTNESS = 0.2
+RESIZED_CROP_SIZE = (PATCH_SIZE, PATCH_SIZE)
+GAUSSIAN_NOISE_PROB = 0.2
+GAUSSIAN_NOISE_STD = 0.05
+GAUSSIAN_BLUR_SIGMA = (0.1, 2.0)
+PLASMA_ROUGHNESS = (0.0, 0.2)
+PLASMA_BRIGHTESS = (0.1, 0.3)
+SATURATION_LIMIT = 0.1
+SHADOW_INTENSITY = (-0.05, 0.0)
+SHADE_QUANTITY = (0.0, 0.05)
+GAMMA = (0.8, 1.2)
+
+
 SPATIAL_AUG_MODE = "all"  # all or random
 COLOR_AUG_MODE = "random"  # all or random
 
