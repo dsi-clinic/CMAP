@@ -19,4 +19,4 @@ export PATH="/home/mli628/miniconda/bin:$PATH"
 source ~/miniconda3/bin/activate cmap
 
 cd ~/cmap
-wandb agent cmap-2024/cmap/g6sp2g69 --count 7
+wandb agent cmap-2024/cmap/z21m6yqf --count 7
