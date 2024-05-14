@@ -31,4 +31,10 @@
 * Plasma Brightness + gaussian: [2,3,4]
    * Training: average: 0.673, standard deviation: 0.018
    * Test: mean: 0.579, standard deviation:0.008
-* random color + gaussian [0,1,2,3,5] [running]
+* random color + gaussian [0,1,2,3,5]:
+   * Training: average: 0.696, standard deviation: 0.004
+   * Test: mean: 0.575, standard deviation:0.052
+* all [0,1,2,3,4,5,6]:
+   * Training: average: 0.614, standard deviation: 0.020
+   * Test: mean: 0.600, standard deviation:0.067
+
