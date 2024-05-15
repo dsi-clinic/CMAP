@@ -9,7 +9,7 @@ OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
-BACKBONE = "resnet50"
+BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
