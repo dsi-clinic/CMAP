@@ -22,19 +22,12 @@
 * Unsharp masking
 
 ### Benchmark -- Accuracy with different augmentation methods
-* only color augmentations [0,1,2,5]: 
-   * Training: average: 0.726, standard deviation: 0.007
-   * Test: mean: 0.545, standard deviation:0.043
-* only gaussian augmentations [2,3]:
-   * Training: average: 0.739, standard deviation: 0.006
-   * Test: mean: 0.594, standard deviation:0.038
-* Plasma Brightness + gaussian: [2,3,4]
-   * Training: average: 0.673, standard deviation: 0.018
-   * Test: mean: 0.579, standard deviation:0.008
-* random color + gaussian [0,1,2,3,5]:
-   * Training: average: 0.696, standard deviation: 0.004
-   * Test: mean: 0.575, standard deviation:0.052
-* all [0,1,2,3,4,5,6]:
-   * Training: average: 0.614, standard deviation: 0.020
-   * Test: mean: 0.600, standard deviation:0.067
+| Augmentation      | Indice | Training Jaccard Mean | Training Standard Dev | Test Jaccard Mean  | Test Standard Mean |
+| -----------       | -----------    |  :----:  |  :----:  |  :----:  |  :----:  |
+| Only Color        | [0,1,2,5]      |  0.726 |  0.007 | 0.545| 0.043|
+| Only Gaussian     | [2,3]          |0.739   |0.006|0.594|0.038|
+|Plasma Brightness + Gaussian|[2,3,4]|0.673   | 0.018| 0.579|0.008|
+|Random Color + Gaussian |[0,1,2,3,5]| 0.696| 0.004| 0.575|0.052|
+|All|[0,1,2,3,4,5,6]| 0.614|0.020|0.600|0.067|
+
 
