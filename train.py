@@ -696,7 +696,7 @@ def test(
     for i, label_name in _labels.items():
         #iou = jaccard_per_class.item()
         logging.info(
-            f"IoU for {label_name}: {final_jaccard_per_class[i]} \n"
+            f"IoU for {label_name}: {final_jaccard_per_class[i]} \n"f
         )
 
     # Now returns test_loss such that it can be compared against previous losses
