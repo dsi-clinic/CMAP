@@ -836,7 +836,7 @@ def run_trials():
     )
     print(
         f"""
-        Test result: {test_ious}, 
+        Test result: {test_ious},
         average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
     )
 
