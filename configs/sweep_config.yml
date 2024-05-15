@@ -4,10 +4,23 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
-  COLOR_CONTRAST:
-    values: [0.2, 0.3, 0.4]
   COLOR_BRIGHTNESS:
-    values: [0.2, 0.3, 0.4]
+    values:
+      - 0.2
+      - 0.3
+      - 0.4
+      - 0.5
+  GAUSSIAN_BLUR_SIGMA:
+    values:
+      - (0.1, 0.2)
+      - (0.3, 0.4)
+      - (0.5, 0.6)
+  GAUSSIAN_BLUR_KERNEL:
+    values:
+      - (3,3)
+      - (5,5)
+      - (7,7)
+
 command:
 - python
 - train.py
@@ -15,3 +28,5 @@ command:
 - --tune 
 - --num_trials
 - 2
+
+

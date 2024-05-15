@@ -65,7 +65,7 @@ def create_augmentation_pipelines(
             p=config.GAUSSIAN_NOISE_PROB,
         ),
         K.RandomGaussianBlur(
-            kernel_size=(3, 3),
+            kernel_size=config.GAUSSIAN_BLUR_KERNEL,
             sigma=config.GAUSSIAN_BLUR_SIGMA,
             p=0.5,
         ),

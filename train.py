@@ -830,9 +830,15 @@ def run_trials():
         train_std = stdev(train_ious)
 
     print(
-        f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
+        f"""
+        Training result: {train_ious},
+        average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
     )
-    print(f"Test: mean: {test_average:.3f}, standard deviation:{test_std:.3f}")
+    print(
+        f"""
+        Test result: {test_ious},
+        average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+    )
 
     if wandb_tune:
         run.log({"average_test_jaccard_index": test_average})
