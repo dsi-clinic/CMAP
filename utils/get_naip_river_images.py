@@ -1,4 +1,5 @@
 import os
+
 import fiona
 import geopandas as gpd
 import planetary_computer
@@ -9,7 +10,7 @@ from shapely.geometry import box
 
 def get_geometry(fpath: str):
     """
-    Read in a shapefile and yield each feature as a dictionary with id and geometry, transformed to EPSG:4326.
+    Read in a shapefile and yield each feature as a dictionary.
 
     Parameters
     ----------
@@ -31,11 +32,11 @@ def get_geometry(fpath: str):
     gdf = gdf.to_crs(epsg=4326)
 
     # Filter by FCODE to only include stream and river
-    gdf = gdf[gdf['FCODE'] == 'STREAM/RIVER']
+    gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
 
     # Yield each feature as a dictionary
     for index, row in gdf.iterrows():
-        yield {'id': index, 'geometry': row.geometry}
+        yield {"id": index, "geometry": row.geometry}
 
 
 def get_catalog() -> pystac_client.Client:
@@ -90,8 +91,14 @@ def split_geometry(geometry, max_size=0.01):
     grid = []
     for i in range(x_divisions):
         for j in range(y_divisions):
-            grid.append(box(minx + i * max_size, miny + j * max_size, 
-                            minx + (i + 1) * max_size, miny + (j + 1) * max_size))
+            grid.append(
+                box(
+                    minx + i * max_size,
+                    miny + j * max_size,
+                    minx + (i + 1) * max_size,
+                    miny + (j + 1) * max_size,
+                )
+            )
 
     # Intersect the grid with the original geometry to create the parts
     parts = [geometry.intersection(b) for b in grid if geometry.intersects(b)]
@@ -102,7 +109,7 @@ def get_image_urls(
     geometry: fiona.model.Geometry,
     catalog: pystac_client.Client,
     date_range: str,
-    img_type: str
+    img_type: str,
 ) -> list:
     """
     Retrieves NAIP image urls corresponding to an area of interest.
@@ -198,9 +205,7 @@ def download_image(
                 f.write(chunk)
 
 
-def get_river_images(
-    img_type: str, data_fpath: str, save_dir: str
-):
+def get_river_images(img_type: str, data_fpath: str, save_dir: str):
     """
     Retrieves NAIP images overlapping the geometries in a shapefile.
 
@@ -229,13 +234,15 @@ def get_river_images(
             url_list = get_image_urls(
                 geometry["geometry"], catalog, "2021-01-01/2024-01-01", "image"
             )
-            urls.update(url_list) # this takes out every single element in the list
-        except Exception as e:
+            urls.update(url_list)
+        except Exception:
             print("Attempting to split geometry and retry...")
             parts = split_geometry(geometry["geometry"])
             for part in parts:
                 try:
-                    part_url_list = get_image_urls(part, catalog, "2021-01-01/2024-01-01", "image")
+                    part_url_list = get_image_urls(
+                        part, catalog, "2021-01-01/2024-01-01", "image"
+                    )
                     urls.update(part_url_list)
                 except Exception as e:
                     print(f"Failed request for part: {str(e)}")
