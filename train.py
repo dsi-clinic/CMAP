@@ -284,15 +284,20 @@ def create_model():
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
-        average=None
+        average=None,
     ).to(device)
     optimizer = AdamW(
-        model.parameters(), 
-        lr=config.LR, 
-        weight_decay=config.WEIGHT_DECAY
+        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
     )
 
-    return model, loss_fn, train_jaccard, test_jaccard, jaccard_per_class, optimizer
+    return (
+        model,
+        loss_fn,
+        train_jaccard,
+        test_jaccard,
+        jaccard_per_class,
+        optimizer,
+    )
 
 
 def copy_first_entry(a_list: list) -> list:
@@ -332,7 +337,6 @@ def normalize_func(model):
     normalize = K.Normalize(mean=mean, std=std)
     scale = K.Normalize(mean=scale_mean, std=scale_std)
     return normalize, scale
-
 
 
 def add_extra_channel(
@@ -573,7 +577,7 @@ def test(
     test_image_root,
     writer,
     num_classes,
-    jaccard_per_class: Metric
+    jaccard_per_class: Metric,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -692,12 +696,10 @@ def test(
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
-    
+
     for i, label_name in _labels.items():
-        #iou = jaccard_per_class.item()
-        logging.info(
-            f"IoU for {label_name}: {final_jaccard_per_class[i]} \n"
-        )
+        # iou = jaccard_per_class.item()
+        logging.info(f"IoU for {label_name}: {final_jaccard_per_class[i]} \n")
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -753,7 +755,7 @@ def train(
                 test_image_root,
                 writer,
                 num_classes,
-                jaccard_per_class
+                jaccard_per_class,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -783,7 +785,7 @@ def train(
             test_image_root,
             writer,
             num_classes,
-            jaccard_per_class
+            jaccard_per_class,
         )
         # Checks for plateau
         if best_loss is None:
@@ -831,7 +833,14 @@ def run_trials():
         ) = writer_prep(exp_name, num)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
-        model, loss_fn, train_jaccard, test_jaccard, jaccard_per_class, optimizer = create_model()
+        (
+            model,
+            loss_fn,
+            train_jaccard,
+            test_jaccard,
+            jaccard_per_class,
+            optimizer,
+        ) = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
             config,
             config.SPATIAL_AUG_INDICES,
@@ -852,7 +861,7 @@ def run_trials():
             train_images_root,
             spatial_augs,
             color_augs,
-            jaccard_per_class
+            jaccard_per_class,
         )
 
         train_ious.append(float(train_iou))
