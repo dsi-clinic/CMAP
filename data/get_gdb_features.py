@@ -9,16 +9,14 @@ import os
 
 from osgeo import ogr
 
-
 parser = argparse.ArgumentParser(
     description="Obtain names of features in .gdb data required for preprocessing"
 )
 args = parser.parse_args()
 config = importlib.import_module(args.config)
 
-gdb_path = os.path.join(
-        config.KC_DEM_DIR, "Kane_DEM.gdb"
-    )
+gdb_path = os.path.join(config.KC_DEM_DIR, "Kane_DEM.gdb")
+
 
 def list_feature_classes(gdb_path):
     """
@@ -37,5 +35,6 @@ def list_feature_classes(gdb_path):
         print(layer.GetName())
 
     gdb = None  # Close the geodatabase
+
 
 list_feature_classes(gdb_path)
