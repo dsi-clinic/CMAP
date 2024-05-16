@@ -9,7 +9,7 @@ OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
-BACKBONE = "resnet50"
+BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
@@ -27,9 +27,9 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 512
+PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-5
+LR = 1e-4
 NUM_WORKERS = 8
 EPOCHS = 30
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
