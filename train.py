@@ -11,7 +11,6 @@ import logging
 import os
 import random
 import shutil
-import random
 import sys
 from pathlib import Path
 from statistics import mean, stdev
@@ -23,14 +22,13 @@ import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW, Optimizer
 from torch.utils.data import DataLoader
-
 from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.kcv import KaneCounty
 from data.dem import KaneDEM
+from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
@@ -78,7 +76,9 @@ config = importlib.import_module(args.config)
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps" if torch.backends.mps.is_available() else "cpu"
+    else "mps"
+    if torch.backends.mps.is_available()
+    else "cpu"
 )
 
 
@@ -356,7 +356,9 @@ def add_extra_channel(
         A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -449,9 +451,11 @@ def train_setup(
                 "Augmented_RGBImage": X_aug[i].cpu(),
                 "Augmented_Mask": y[i].cpu(),
                 "Augmented_DEM": X_aug[i].cpu(),
-                "Augmented_NIR": X_aug[i].cpu()
+                "Augmented_NIR": X_aug[i].cpu(),
             }
-            sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
             plot_from_tensors(
                 plot_tensors,
                 sample_fname,
@@ -646,7 +650,7 @@ def test(
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                         "DEM": X_scaled[i].cpu(),
-                        "NIR": X_scaled[i].cpu()
+                        "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
