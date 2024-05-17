@@ -25,6 +25,8 @@ This will be accomplished within the following pipeline structure:
 
 ## Usage
 
+### Environment Set Up 
+
 Before running the repo (see details below) you will need to do the following:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
@@ -41,31 +43,22 @@ Before running the repo (see details below) you will need to do the following:
     conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
     pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
-3. To implement automatic hyperparameter optimizer, you need to have your own wandb API key and follow run para.job.
-   1) **Environment Setup:**
-      * Activate the cmap environment and log in to your WandB account in the terminal:
-       ```
-       source /home/USERNAME/miniconda3/bin/activate cmap
-       wandb login <wandb api key>
-       ```
-   2) **Modify Sweep Parameters:**
-      * Modify the parameters for the sweep in cmap/configs/sweep_config.yml, ensuring that the parameter names match those in dsi.py. After setting up the sweep config, run the following command in that directory:
-      ```
-      wandb sweep sweep_config.yml
-      ```
-   3) **Run Sweep Agent:**
-      * Use wandb_path given in the last output (after "Run  sweep agent with") to update [sweep.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/sweep.job). Specify the number of trials to run with --count.
-      ```
-      wandb agent <wandb_path> --count <trial_num>
-      ```
-   4) **Job Submission:**
-      * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallelize the optimizing process.
-      ```
-      sbatch para.job
-      ```
-### Slurm
+### Example of Training in Command Line
+Next, you can train the model in an interactive session
 
-For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
+```
+srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
+
+conda activate cmap
+
+cd /home/YOUR_USERNAME/2024-winter-cmap
+
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+```
+
+### Example of Training with Slurm
+
+If you have access to Slurm, you can also train model with it. For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
 To run this repo on the Slurm cluster after setting up your conda environment, you can use the following submit script to run a training loop:
 ```
@@ -91,17 +84,29 @@ cd /home/YOUR_USERNAME/2024-winter-cmap
 
 python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
-
-Or, to run in an interactive session:
-```
-srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
-
-conda activate cmap
-
-cd /home/YOUR_USERNAME/2024-winter-cmap
-
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
-```
+### Tuning instruction
+You can use Wandb to tune the model automaically. To implement automatic hyperparameter optimizer, you need to have your own wandb API key and follow run para.job.
+1) **Environment Setup:**
+   * Activate the cmap environment and log in to your WandB account in the terminal:
+      ```
+      source /home/USERNAME/miniconda3/bin/activate cmap
+      wandb login <wandb api key>
+      ```
+2) **Modify Sweep Parameters:**
+   * Modify the parameters for the sweep in cmap/configs/sweep_config.yml, ensuring that the parameter names match those in dsi.py. After setting up the sweep config, run the following command in that directory:
+   ```
+   wandb sweep sweep_config.yml
+   ```
+3) **Run Sweep Agent:**
+   * Use wandb_path given in the last output (after "Run  sweep agent with") to update [sweep.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/sweep.job). Specify the number of trials to run with --count.
+   ```
+   wandb agent <wandb_path> --count <trial_num>
+   ```
+4) **Job Submission:**
+   * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallelize the optimizing process.
+   ```
+   sbatch para.job
+   ```
 
 ## Git Usage
 
@@ -138,16 +143,7 @@ The below results were obtained with these specifications:
 * Number of workers: 8
 * Epochs: 30 (maximum; early termination feature has been turned on)
 
-| Model | Backbone | Weights | Final IoU | Final Loss |
-| ----------- | ----------- | ----------- | ----------- | ----------- | 
-| deeplabv3+ | resnet50 | imagenet | 0.631 | 0.246 |
-| deeplabv3+ | resnet50 | ssl | 0.548 | 0.232 |
-| deeplabv3+ | resnet50 | swsl | 0.558 | 0.233 |
-| unet | resnet50 | imagenet | 0.515 | 0.226 |
-| unet | resnet50 | ssl | 0.560 | 0.209 |
-| unet | resnet50 | swsl | 0.590 | 0.226 |
-| unet | resnet18 | LANDSAT_ETM_SR_SIMCLR | 0.530 | 0.264 |
-| unet | resnet18 | LANDSAT_ETM_SR_MOCO | 0.519 | 0.227 |
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md)
 
 ### example outputs
 The model can detect ponds fairly accurately:
