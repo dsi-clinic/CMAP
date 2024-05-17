@@ -100,7 +100,6 @@ def plot_from_tensors(
             # Handle RGB image tensors by ignoring the NIR channel
             img = tensor[0:3, :, :].permute(1, 2, 0)
             ax.imshow(img)
-
         else:
             # Get the unique labels present in the mask
             if len(tensor.shape) == 2:
