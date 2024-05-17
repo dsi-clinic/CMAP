@@ -22,9 +22,14 @@
 * Unsharp masking
 
 ### Benchmark -- Accuracy with different augmentation methods
-* With plasma: epoch 15:  Jaccard index: 0.535157, Avg loss: 0.209104
-* With default: Jaccard index: 0.630060, Avg loss: 0.227179 
-* With all: 9 epoch: Jaccard index: 0.498313, Avg loss: 0.204150 (so far the higheset)
-* with box blur: 10 epoch: Jaccard index: 0.528737, Avg loss: 0.227576
-* with color jitter: 11 epoch: Jaccard index: 0.594752, Avg loss: 0.251863
-   * Based on wandb, best Jaccard index at 0.667, when brightness at 0.2 and contrast at 0.4 
+| Augmentation      | Indice | Training Jaccard Mean | Training Standard Dev | Test Jaccard Mean  | Test Standard Mean |
+| -----------       | -----------    |  :----:  |  :----:  |  :----:  |  :----:  |
+| Only Color        | [0,1,2,5]      |  0.726 |  0.007 | 0.545| 0.043|
+| Only Gaussian     | [2,3]          |0.739   |0.006|0.594|0.038|
+|Plasma Brightness + Gaussian|[2,3,4]|0.673   | 0.018| 0.579|0.008|
+|Random Color + Gaussian |[0,1,2,3,5]| 0.696| 0.004| 0.575|0.052|
+|Current |[0,1,2,3,5] |0.685|0.012|0.549|0.012|
+|Without Plasma | [0,1,2,3,5,6,7] | 0.692|0.030|0.555|0.015|
+|All|[0,1,2,3,4,5,6,7]| 0.614|0.020|0.600|0.067|
+
+

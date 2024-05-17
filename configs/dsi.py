@@ -5,12 +5,13 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = os.path.join(DATA_ROOT, "kane-county-data")
 KC_IMAGE_ROOT = os.path.join(DATA_ROOT, "KC-images")
 KC_RIVER_ROOT = os.path.join(DATA_ROOT, "KC-river-images")
+KC_DEM_ROOT = os.path.join(KC_SHAPE_ROOT, "KC_DEM_2017")
 KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
 OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
-BACKBONE = "resnet50"
+BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
@@ -28,9 +29,9 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 512
+PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-5
+LR = 1e-4
 NUM_WORKERS = 8
 EPOCHS = 30
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
@@ -59,31 +60,32 @@ IMAGE_AUG_INDICES = [
     0,  # Contrast
     1,  # Brightness
     2,  # Gaussian Noise
-    3,  # Gaussian Blur
+    3,  # Gaussian Blur0
     # 4,  # Plasma Brightness
     5,  # Saturation
-    # 6,  # Channel Shuffle
-    # 7,  # Gamma
+    6,  # Channel Shuffle
+    7,  # Gamma
 ]
 
 # Augmentation
 ROTATION_DEGREES = 360
-COLOR_CONTRAST = 0.2
-COLOR_BRIGHTNESS = 0.2
+COLOR_CONTRAST = 0.3  # tuned
+COLOR_BRIGHTNESS = 0.3  # tuned
 RESIZED_CROP_SIZE = (PATCH_SIZE, PATCH_SIZE)
-GAUSSIAN_NOISE_PROB = 0.2
-GAUSSIAN_NOISE_STD = 0.05
-GAUSSIAN_BLUR_SIGMA = (0.1, 2.0)
+GAUSSIAN_NOISE_PROB = 0.5  # tuned
+GAUSSIAN_NOISE_STD = 0.1  # tuned
+GAUSSIAN_BLUR_SIGMA = (0.3, 0.4)  # tuned
+GAUSSIAN_BLUR_KERNEL = (7, 7)  # tuned
 PLASMA_ROUGHNESS = (0.0, 0.2)
 PLASMA_BRIGHTESS = (0.1, 0.3)
-SATURATION_LIMIT = 0.1
+SATURATION_LIMIT = 0.3  # tuned
 SHADOW_INTENSITY = (-0.05, 0.0)
 SHADE_QUANTITY = (0.0, 0.05)
 GAMMA = (0.8, 1.2)
 
 
 SPATIAL_AUG_MODE = "all"  # all or random
-COLOR_AUG_MODE = "random"  # all or random
+COLOR_AUG_MODE = "all"  # all or random
 
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"

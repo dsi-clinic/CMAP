@@ -27,6 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+from data.dem import KaneDEM
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
@@ -52,6 +53,7 @@ parser.add_argument(
     help="Ratio of split; enter the size of the train split as an int out of 100",
     default="80",
 )
+
 
 parser.add_argument(
     "--tune",
@@ -169,6 +171,11 @@ def initialize_dataset():
         naip.crs,
         naip.res,
     )
+    if config.KC_DEM_ROOT is not None:
+        dem = KaneDEM(config.KC_DEM_ROOT)
+        naip = naip & dem
+        print("naip and dem loaded")
+
     return naip, kc
 
 
@@ -281,12 +288,23 @@ def create_model():
         ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
-
+    jaccard_per_class = MulticlassJaccardIndex(
+        num_classes=config.NUM_CLASSES,
+        ignore_index=config.IGNORE_INDEX,
+        average=None,
+    ).to(device)
     optimizer = AdamW(
         model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
     )
 
-    return model, loss_fn, train_jaccard, test_jaccard, optimizer
+    return (
+        model,
+        loss_fn,
+        train_jaccard,
+        test_jaccard,
+        jaccard_per_class,
+        optimizer,
+    )
 
 
 def copy_first_entry(a_list: list) -> list:
@@ -403,7 +421,6 @@ def train_setup(
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)
-            samp_mask = add_extra_channel(samp_mask)
 
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
@@ -438,10 +455,14 @@ def train_setup(
 
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
-                "image": X[i].cpu(),
-                "mask": samp_mask[i],
-                "augmented_image": X_aug[i].cpu(),
-                "augmented_mask": y[i].cpu(),
+                "RGB Image": X[i].cpu(),
+                "Mask": samp_mask[i],
+                "DEM": X[i].cpu(),
+                "NIR": X[i].cpu(),
+                "Augmented_RGBImage": X_aug[i].cpu(),
+                "Augmented_Mask": y[i].cpu(),
+                "Augmented_DEM": X_aug[i].cpu(),
+                "Augmented_NIR": X_aug[i].cpu(),
             }
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
@@ -565,6 +586,8 @@ def test(
     plateau_count: int,
     test_image_root,
     writer,
+    num_classes,
+    jaccard_per_class: Metric,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -589,6 +612,9 @@ def test(
     plateau_count : int
         The number of epochs the loss has been plateauing
 
+    num_classes : int
+        The number of labels to predict
+
     Returns
     -------
     float
@@ -597,6 +623,7 @@ def test(
     num_batches = len(dataloader)
     model.eval()
     jaccard.reset()
+    jaccard_per_class.reset()
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
@@ -606,7 +633,6 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-                    samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
             normalize, scale = normalize_func(model)
             X_scaled = scale(X)
@@ -625,6 +651,9 @@ def test(
             preds = outputs.argmax(dim=1)
             jaccard.update(preds, y_squeezed)
 
+            # update Jaccard per class metric
+            jaccard_per_class.forward(preds, y_squeezed)
+
             # add test loss to rolling total
             test_loss += loss.item()
 
@@ -637,9 +666,11 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "image": X_scaled[i].cpu(),
+                        "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
+                        "DEM": X_scaled[i].cpu(),
+                        "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
@@ -662,12 +693,24 @@ def test(
                         )
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
+    final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
         f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
         + f"Test avg loss: {test_loss:>4f} \n"
     )
+
+    # Access the labels and their names
+    _labels = {}
+    for label_name, label_id in kc.labels.items():
+        _labels[label_id] = label_name
+        if len(_labels) == num_classes:
+            break
+
+    for i, label_name in _labels.items():
+        # iou = jaccard_per_class.item()
+        logging.info(f"IoU for {label_name}: {final_jaccard_per_class[i]} \n")
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -687,6 +730,7 @@ def train(
     train_images_root,
     spatial_augs,
     color_augs,
+    jaccard_per_class,
     config=config,
 ):
     # How much the loss needs to drop to reset a plateau
@@ -700,6 +744,9 @@ def train(
 
     # How long it's been plateauing
     plateau_count = 0
+
+    # How many classes we're predicting
+    num_classes = config.NUM_CLASSES
 
     # reducing number of epoch in hyperparameter tuning
     if wandb_tune:
@@ -718,6 +765,8 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
+                num_classes,
+                jaccard_per_class,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -746,6 +795,8 @@ def train(
             plateau_count,
             test_image_root,
             writer,
+            num_classes,
+            jaccard_per_class,
         )
         # Checks for plateau
         if best_loss is None:
@@ -793,7 +844,14 @@ def run_trials():
         ) = writer_prep(exp_name, num)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset(naip, kc, split)
-        model, loss_fn, train_jaccard, test_jaccard, optimizer = create_model()
+        (
+            model,
+            loss_fn,
+            train_jaccard,
+            test_jaccard,
+            jaccard_per_class,
+            optimizer,
+        ) = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
             config,
             config.SPATIAL_AUG_INDICES,
@@ -814,6 +872,7 @@ def run_trials():
             train_images_root,
             spatial_augs,
             color_augs,
+            jaccard_per_class,
         )
 
         train_ious.append(float(train_iou))
@@ -830,9 +889,15 @@ def run_trials():
         train_std = stdev(train_ious)
 
     print(
-        f"Training: average: {train_average:.3f}, standard deviation: {train_std:.3f}"
+        f"""
+        Training result: {train_ious},
+        average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
     )
-    print(f"Test: mean: {test_average:.3f}, standard deviation:{test_std:.3f}")
+    print(
+        f"""
+        Test result: {test_ious},
+        average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+    )
 
     if wandb_tune:
         run.log({"average_test_jaccard_index": test_average})
