@@ -14,7 +14,7 @@ class SegmentationModel:
         self,
         model: str = "unet",
         backbone: str = "resnet50",
-        in_channels: int = 4,
+        in_channels: int = 5,
         num_classes: int = None,
         num_filters: int = 3,
         weights: Union[WeightsEnum, str, bool] = True,
@@ -37,6 +37,7 @@ class SegmentationModel:
         in_channels : int
             The number of input channels, i.e. the depth of the input image. For NAIP
             data, this is 4.
+            When adding DEM data, this will be 5.
             When using TorchGeo's pretrained weights, change appropriately and add
             channels to data.
 

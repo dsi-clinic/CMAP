@@ -27,6 +27,7 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
+from data.dem import KaneDEM
 from data.kcv import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
@@ -52,6 +53,7 @@ parser.add_argument(
     help="Ratio of split; enter the size of the train split as an int out of 100",
     default="80",
 )
+
 
 parser.add_argument(
     "--tune",
@@ -169,6 +171,11 @@ def initialize_dataset():
         naip.crs,
         naip.res,
     )
+    if config.KC_DEM_ROOT is not None:
+        dem = KaneDEM(config.KC_DEM_ROOT)
+        naip = naip & dem
+        print("naip and dem loaded")
+
     return naip, kc
 
 
@@ -414,7 +421,6 @@ def train_setup(
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
             samp_image = add_extra_channel(samp_image)
-            samp_mask = add_extra_channel(samp_mask)
 
     # send img and mask to device; convert y to float tensor for augmentation
     X = samp_image.to(device)
@@ -449,10 +455,14 @@ def train_setup(
 
         for i in range(config.BATCH_SIZE):
             plot_tensors = {
-                "image": X[i].cpu(),
-                "mask": samp_mask[i],
-                "augmented_image": X_aug[i].cpu(),
-                "augmented_mask": y[i].cpu(),
+                "RGB Image": X[i].cpu(),
+                "Mask": samp_mask[i],
+                "DEM": X[i].cpu(),
+                "NIR": X[i].cpu(),
+                "Augmented_RGBImage": X_aug[i].cpu(),
+                "Augmented_Mask": y[i].cpu(),
+                "Augmented_DEM": X_aug[i].cpu(),
+                "Augmented_NIR": X_aug[i].cpu(),
             }
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
@@ -623,7 +633,6 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-                    samp_mask = add_extra_channel(samp_mask)
             X = samp_image.to(device)
             normalize, scale = normalize_func(model)
             X_scaled = scale(X)
@@ -657,9 +666,11 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "image": X_scaled[i].cpu(),
+                        "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
+                        "DEM": X_scaled[i].cpu(),
+                        "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
