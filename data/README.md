@@ -14,10 +14,10 @@ Retrieved using the [Planetary Computer API](https://planetarycomputer.microsoft
 
 OCM Partners, 2024: NAIP Digital Ortho Photo Image, https://www.fisheries.noaa.gov/inport/item/49502
 
-#### Kane County Raster Dataset (`kc.py`)
-
-This class defines a custom Raster Dataset for Kane County. It specifies file patterns and regex for file naming conventions and defines bands, colormap, and labels for different features present in the raster data. The dataset is designed to be used with TorchGeo for processing and analysis tasks related to Kane County's geospatial data. See TorchGeo's docs for the difference between a raster and vector dataset.
-
-#### Kane County Vector Dataset (`kcv.py`)
+#### Kane County Vector Dataset (`kc.py`)
 
 This class defines a custom Vector Dataset for Kane County. It specifies file patterns and regex for file naming conventions, and defines colormap and labels for different features present in the vector data. The dataset is designed to be used with TorchGeo for processing and analysis tasks related to Kane County's geospatial data. See TorchGeo's docs for the difference between a raster and vector dataset.
+
+#### Kane County DEM Dataset (`dem.py`)
+
+This class defines the Digital Elevation Model data for Kane County. It specifies the regex for the file containing the DEM data, assuming that it is a single band file. Instructions for how to convert a geodatabase file into a tif file can be found at the top of the file. The conversion process requires the installation of gdal and is run on the command line.
