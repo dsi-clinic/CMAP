@@ -3,7 +3,7 @@ default_stages: [commit]
 
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.1.0
+    rev: v4.6.0
     hooks:
       - id: trailing-whitespace
         types: [python]
@@ -14,19 +14,19 @@ repos:
         args: ['--maxkb=25000']
 
   - repo: https://github.com/psf/black
-    rev: 23.11.0
+    rev: 24.4.0
     hooks:
       - id: black
         args: ["--line-length=80"]
 
   - repo: https://github.com/PyCQA/isort
-    rev: 5.12.0
+    rev: 5.13.2
     hooks:
       - id: isort
         args: ["--settings-path=setup.cfg"]
 
   - repo: https://github.com/PyCQA/flake8
-    rev: 6.1.0
+    rev: 7.0.0
     hooks:
       - id: flake8
         args: ["--config=setup.cfg"]
