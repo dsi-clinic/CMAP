@@ -160,12 +160,16 @@ def initialize_dataset():
     """
     Initialize the dataset by loading NAIP and KaneCounty data.
 
-    This function loads NAIP (National Agriculture Imagery Program) data and KaneCounty shapefile data.
-    Optionally, if DEM (Digital Elevation Model) data is provided, it is also loaded and merged with NAIP data.
+    This function loads NAIP (National Agriculture Imagery Program)
+    data and KaneCounty shapefile data. Optionally, if DEM
+    (Digital Elevation Model) data is provided, it is also loaded
+    and merged with NAIP data.
 
     Returns:
-        tuple: A tuple containing the loaded NAIP and KaneCounty datasets.
-               The first element is the NAIP dataset, and the second element is the KaneCounty dataset.
+        tuple: A tuple containing the loaded NAIP and KaneCounty
+            datasets.
+            The first element is the NAIP dataset, and the
+            second element is the KaneCounty dataset.
     """
     naip = NAIP(config.KC_IMAGE_ROOT)
 
@@ -341,17 +345,19 @@ def normalize_func(model):
     """
     Create normalization functions for input data to a given model.
 
-    This function generates normalization functions based on the mean and standard deviation
-    specified in the configuration. If the number of channels in the model input does not match
-    the length of the mean and standard deviation lists, it replicates the first entry of each list
-    to match the number of input channels.
+    This function generates normalization functions based on the mean
+    and standard deviation specified in the configuration. If the
+    number of channels in the model input does not match the length of
+    the mean and standard deviation lists, it replicates the first entry
+    of each list to match the number of input channels.
 
     Args:
         model: The model for which the normalization functions are created.
 
     Returns:
         tuple: A tuple containing two normalization functions.
-               The first function normalizes input data using the specified mean and standard deviation.
+               The first function normalizes input data using the specified
+               mean and standard deviation.
                The second function scales input data to a range between 0 and 255.
     """
     mean = config.DATASET_MEAN
@@ -778,7 +784,8 @@ def train(
         config: Configuration parameters for training (default: global config).
 
     Returns:
-        tuple: A tuple containing the Jaccard index for the last epoch of training and for the test dataset.
+        tuple: A tuple containing the Jaccard index for the last epoch of
+        training and for the test dataset.
 
     """
 
