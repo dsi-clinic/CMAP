@@ -4,7 +4,7 @@
 
 This dataset contains geodatabase files with geospatial geometry data, including coordinates, shapes, and types for stormwater infrastructure.
 
-Provided by Kane County via CMAP box; to access this data in the future, contact [Rob Linke](linkerobert@KaneCountyIL.gov) directly, or through [Holly Hudson](HHudson@cmap.illinois.gov)
+Provided by Kane County via CMAP box; to access this data, contact [Rob Linke](linkerobert@KaneCountyIL.gov) directly, or through [Holly Hudson](HHudson@cmap.illinois.gov)
 
 #### National Agricultural Imagery Program (NAIP) Data
 
