@@ -96,7 +96,7 @@ def plot_from_tensors(
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
 
-        if "image" in name:
+        if "image" in name.lower():
             # Handle RGB image tensors by ignoring the NIR channel
             img = tensor[0:3, :, :].permute(1, 2, 0)
             ax.imshow(img)
