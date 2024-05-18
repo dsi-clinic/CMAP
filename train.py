@@ -365,7 +365,9 @@ def add_extra_channel(
         A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -460,7 +462,9 @@ def train_setup(
                 # "Augmented_DEM": X_aug[i].cpu(),
                 # "Augmented_NIR": X_aug[i].cpu(),
             }
-            sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
             plot_from_tensors(
                 plot_tensors,
                 sample_fname,
@@ -550,7 +554,9 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.CLIP_VALUE
+            )
 
         optimizer.step()
         optimizer.zero_grad()
@@ -650,7 +656,9 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0 or (plateau_count == config.PATIENCE - 1 and batch < 10):
+            if batch == 0 or (
+                plateau_count == config.PATIENCE - 1 and batch < 10
+            ):
                 epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
