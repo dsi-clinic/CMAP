@@ -16,8 +16,10 @@ class KaneDEM(RasterDataset):
     A dataset class for handling Kane County Digital Elevation Model (DEM) data.
 
     Attributes:
-        filename_glob (str): A string representing the pattern for matching DEM file names.
+        filename_glob (str): A string representing the pattern
+        for matching DEM file names.
     """
+
     filename_glob = "*2017BE.tif"
 
     def __init__(self, paths, crs=None, res=None, transforms=None):
@@ -28,7 +30,7 @@ class KaneDEM(RasterDataset):
             paths (str or List[str]): Path(s) to the DEM data.
             crs (Optional[str]): Coordinate reference system (CRS) of the DEM data.
             res (Optional[float]): Spatial resolution of the DEM data.
-            transforms (Optional[callable]): A function/transform to apply to the DEM data.
+            transforms (Optional[callable]): function/transform to apply to DEM data.
 
         Returns:
             None
