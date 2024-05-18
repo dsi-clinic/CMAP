@@ -435,7 +435,7 @@ def train_setup(
     y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, :, :].squeeze()
+    y_squeezed = y.squeeze()
 
     # plot first batch
     if batch == 0:
@@ -455,12 +455,12 @@ def train_setup(
             plot_tensors = {
                 "RGB Image": X[i].cpu(),
                 "Mask": samp_mask[i],
-                "DEM": X[i].cpu(),
-                "NIR": X[i].cpu(),
+                # "DEM": X[i].cpu(),
+                # "NIR": X[i].cpu(),
                 "Augmented_RGBImage": X_aug[i].cpu(),
                 "Augmented_Mask": y[i].cpu(),
-                "Augmented_DEM": X_aug[i].cpu(),
-                "Augmented_NIR": X_aug[i].cpu(),
+                # "Augmented_DEM": X_aug[i].cpu(),
+                # "Augmented_NIR": X_aug[i].cpu(),
             }
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
@@ -667,8 +667,8 @@ def test(
                         "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
-                        "DEM": X_scaled[i].cpu(),
-                        "NIR": X_scaled[i].cpu(),
+                        # "DEM": X_scaled[i].cpu(),
+                        # "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
