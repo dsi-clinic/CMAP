@@ -94,15 +94,19 @@ def plot_from_tensors(
     # Plot each input tensor
     unique_labels = Tensor()
     for i, (name, tensor) in enumerate(sample.items()):
+        print("name =", name)
         ax = axs[i]
 
-        if "image" in name:
+        if "image" in name.lower():
             # Handle RGB image tensors by ignoring the NIR channel
             img = tensor[0:3, :, :].permute(1, 2, 0)
+            print("plotting image ", img.shape)
             ax.imshow(img)
         else:
+            print("not image ")
             # Get the unique labels present in the mask
             if len(tensor.shape) == 2:
+                print("tensor shape ", tensor.shape)
                 unique = tensor.unique()
                 ax.imshow(
                     tensor,
@@ -113,6 +117,7 @@ def plot_from_tensors(
                 )
             else:
                 unique = tensor[0].unique()
+                print("tensor 0 shape ", tensor[0].shape)
                 ax.imshow(
                     tensor[0],
                     cmap=cmap,
@@ -129,9 +134,7 @@ def plot_from_tensors(
         unique_labels = unique_labels.type(torch.int).tolist()
         patches = []
         for i in unique_labels:
-            patches.append(
-                mpatches.Patch(color=cmap.colors[i], label=labels[i])
-            )
+            patches.append(mpatches.Patch(color=cmap.colors[i], label=labels[i]))
 
         fig.legend(
             handles=patches,
@@ -167,16 +170,10 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     # Remove the background label '0' from consideration if present
     if 0 in unique:
         background_index = (unique == 0).nonzero(as_tuple=True)[0].item()
-        unique = torch.cat(
-            [unique[:background_index], unique[background_index + 1 :]]
-        )
-        counts = torch.cat(
-            [counts[:background_index], counts[background_index + 1 :]]
-        )
+        unique = torch.cat([unique[:background_index], unique[background_index + 1 :]])
+        counts = torch.cat([counts[:background_index], counts[background_index + 1 :]])
 
-    if (
-        counts.numel() == 0
-    ):  # Check if there are no labels other than the background
+    if counts.numel() == 0:  # Check if there are no labels other than the background
         return 15  # Return ID for 'UNKNOWN'
 
     most_common_index = counts.argmax()
