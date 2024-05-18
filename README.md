@@ -1,40 +1,38 @@
 # 2024-winter-cmap
 
 ## Project Background
+A comprehensive inventory of stormwater storage and green infrastructure (GI) assets is lacking across northeastern Illinois. Understanding the location of these assets is crucial for ensuring proper maintenance and gaining insights into potential impacts on water quality and stormwater management. An inventory could assist county and municipal stormwater engineers, public works officials, and others in ensuring proper maintenance and inform the development of watershed-based plans and resilience plans.
 
-No comprehensive inventory of stormwater storage and green infrastructure (GI) assets exists across northeastern Illinois. Understanding the location of these assets is critical to ensuring proper maintenance as well as building a better understanding of the potential impacts to water quality and stormwater management. An inventory could help county and municipal stormwater engineers, public works officials, and others ensure proper maintenance. The data could also inform the development of watershed-based plans and resilience plans.
+The Chicago Metropolitan Agency for Planning (CMAP) aims to utilize deep learning to map and identify locations of stormwater storage and related geographic features throughout Chicago and the surrounding area. To initiate the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to create a predictive deep learning model. This repository contains code to achieve the following objectives:
 
-The Chicago Metropolitan Agency for Planning (CMAP) is interested in using deep learning to map and identify locations of stormwater storage and other related geographic features throughout Chicago and the surrounding area.
-To begin the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to be used to create a predictive deep learning model.
-The code in this repo does a few things:
-1. Get images corresponding to geographic features across Kane County.
-2. Will train and test various predictive deep learning models on surrounding geographies.
-3. Will apply Kane County data to identify stormwater basins in other Illinois counties.
+1. Obtain images corresponding to geographic features across Kane County.
+2. Train and test various predictive deep learning models on surrounding geographies.
+3. Apply Kane County data to identify stormwater basins in other Illinois counties.
 
 ## Project Goals
 
-There are several tasks associated with this project:
+Several tasks are associated with this project:
 
-1. Improve climate resiliency in northeastern Illinois with deep learning for mapping stormwater and green infrastructure from aerial data.
-2. Develop deep learning models for aerial imaging data, targeting green infrastructure and stormwater areas.
-3. Train a model to identify different types of locations (for example, wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
+1. Improve climate resiliency in northeastern Illinois by utilizing deep learning to map stormwater and green infrastructure from aerial data.
+2. Develop deep learning models for aerial imaging data, focusing on green infrastructure and stormwater areas.
+3. Train a model to identify different types of locations (e.g., wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
-This will be accomplished within the following pipeline structure:
-1. Kane County stormwater structures shape data is preprocessed (`preproc_kc.py`) to get corresponding NAIP images (`utils/get_naip_images.py`).
-2. A training loop (`train.py`) takes in configurations (`configs/dsi.py`) and is assigned to the cluster (.job), utilizing the model defined `utils/model.py` and the custom Raster Dataset defined in `utils/kc.py`.
+These goals will be accomplished within the following pipeline structure:
+1. Preprocess Kane County stormwater structures shape data (preproc_kc.py) to obtain corresponding NAIP images (utils/get_naip_images.py).
+2. Utilize a training loop (train.py) with configurations (configs/dsi.py) assigned to the cluster (.job), utilizing the model defined in utils/model.py and the custom Raster Dataset defined in utils/kc.py.
 
 ## Usage
 
-Before running the repo (see details below) you will need to do the following:
+Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
-    1. Install miniconda:
+    1) Install miniconda:
     ```
     mkdir -p ~/miniconda3
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
     bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
     ```
-    2. Create environment:
+    2) Create environment:
     ```
     conda create -y --name cmap python=3.10
     conda activate cmap
@@ -108,6 +106,8 @@ python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <au
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
 
 ## Repository Structure
+### main repository
+
 
 ### utils
 
@@ -118,12 +118,7 @@ Project python code. Contains various utility functions and scripts which suppor
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
 
 ### data
-
-Contains details of acquiring all raw data used in repository. If data is small (<50MB) then it is okay to save it to the repo, making sure to clearly document how to the data is obtained.
-
-If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory. 
-
-Source attribution and descriptions included in the [README](data/README.md) file.
+Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
 
 ### output
 
