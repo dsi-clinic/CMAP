@@ -7,8 +7,7 @@ import argparse
 import importlib.util
 import os
 
-from utils.get_naip_images import get_images
-from utils.get_naip_river_images import get_river_images
+from utils.get_naip_images import get_images, get_river_images
 
 parser = argparse.ArgumentParser(
     description="Preprocess Kane County data to get corresponding NAIP images"
