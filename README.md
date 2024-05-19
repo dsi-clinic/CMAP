@@ -174,6 +174,10 @@ containing config information
 ### utils
 
 Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
+* **get_naip_images.py**
+* **img_params.py** calculating images stats
+* **plot.py** plotting image with labels
+* **transform.py** Creating augmentation pipeline
 
 ### notebooks
 
@@ -181,6 +185,7 @@ Contains short, clean notebooks to demonstrate analysis. Documentation and descr
 
 ### data
 Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
+
 
 ### output
 
