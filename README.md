@@ -1,42 +1,41 @@
 # 2024-winter-cmap
 
 ## Project Background
+A comprehensive inventory of stormwater storage and green infrastructure (GI) assets is lacking across northeastern Illinois. Understanding the location of these assets is crucial for ensuring proper maintenance and gaining insights into potential impacts on water quality and stormwater management. An inventory could assist county and municipal stormwater engineers, public works officials, and others in ensuring proper maintenance and inform the development of watershed-based plans and resilience plans.
 
-No comprehensive inventory of stormwater storage and green infrastructure (GI) assets exists across northeastern Illinois. Understanding the location of these assets is critical to ensuring proper maintenance as well as building a better understanding of the potential impacts to water quality and stormwater management. An inventory could help county and municipal stormwater engineers, public works officials, and others ensure proper maintenance. The data could also inform the development of watershed-based plans and resilience plans.
+The Chicago Metropolitan Agency for Planning (CMAP) aims to utilize deep learning to map and identify locations of stormwater storage and related geographic features throughout Chicago and the surrounding area. To initiate the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to create a predictive deep learning model. This repository contains code to achieve the following objectives:
 
-The Chicago Metropolitan Agency for Planning (CMAP) is interested in using deep learning to map and identify locations of stormwater storage and other related geographic features throughout Chicago and the surrounding area.
-To begin the project, CMAP has provided labeled geographic features in Kane County, Illinois (provided by Kane County), to be used to create a predictive deep learning model.
-The code in this repo does a few things:
-1. Get images corresponding to geographic features across Kane County.
-2. Will train and test various predictive deep learning models on surrounding geographies.
-3. Will apply Kane County data to identify stormwater basins in other Illinois counties.
+1. Obtain images corresponding to geographic features across Kane County.
+2. Train and test various predictive deep learning models on surrounding geographies.
+3. Apply Kane County data to identify stormwater basins in other Illinois counties.
 
 ## Project Goals
 
-There are several tasks associated with this project:
+Several tasks are associated with this project:
 
-1. Improve climate resiliency in northeastern Illinois with deep learning for mapping stormwater and green infrastructure from aerial data.
-2. Develop deep learning models for aerial imaging data, targeting green infrastructure and stormwater areas.
-3. Train a model to identify different types of locations (for example, wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
+1. Improve climate resiliency in northeastern Illinois by utilizing deep learning to map stormwater and green infrastructure from aerial data.
+2. Develop deep learning models for aerial imaging data, focusing on green infrastructure and stormwater areas.
+3. Train a model to identify different types of locations (e.g., wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
-This will be accomplished within the following pipeline structure:
-1. Kane County stormwater structures shape data is preprocessed (`preproc_kc.py`) to get corresponding NAIP images (`utils/get_naip_images.py`).
-2. A training loop (`train.py`) takes in configurations (`configs/dsi.py`) and is assigned to the cluster (.job), utilizing the model defined `utils/model.py` and the custom Raster Dataset defined in `utils/kc.py`.
+These goals will be accomplished within the following pipeline structure:
+1. Preprocess Kane County stormwater structures shape data (preproc_kc.py) to obtain corresponding NAIP images (utils/get_naip_images.py).
+2. Utilize a training loop (train.py) with configurations (configs/dsi.py) assigned to the cluster (.job), utilizing the model defined in utils/model.py and the custom Raster Dataset defined in utils/kc.py.
 
 ## Usage
 
+
 ### Environment Set Up 
 
-Before running the repo (see details below) you will need to do the following:
+Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
-    1. Install miniconda:
+    1) Install miniconda:
     ```
     mkdir -p ~/miniconda3
     wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda3/miniconda.sh
     bash ~/miniconda3/miniconda.sh -b -u -p ~/miniconda3
     ```
-    2. Create environment:
+    2) Create environment:
     ```
     conda create -y --name cmap python=3.10
     conda activate cmap
@@ -84,63 +83,25 @@ cd /home/YOUR_USERNAME/2024-winter-cmap
 
 python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
-### Tuning instruction
-You can use Wandb to tune the model automaically. To implement automatic hyperparameter optimizer, you need to have your own wandb API key and follow run para.job.
-1) **Environment Setup:**
-   * Activate the cmap environment and log in to your WandB account in the terminal:
-      ```
-      source /home/USERNAME/miniconda3/bin/activate cmap
-      wandb login <wandb api key>
-      ```
-2) **Modify Sweep Parameters:**
-   * Modify the parameters for the sweep in cmap/configs/sweep_config.yml, ensuring that the parameter names match those in dsi.py. After setting up the sweep config, run the following command in that directory:
-   ```
-   wandb sweep sweep_config.yml
-   ```
-3) **Run Sweep Agent:**
-   * Use wandb_path given in the last output (after "Run  sweep agent with") to update [sweep.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/sweep.job). Specify the number of trials to run with --count.
-   ```
-   wandb agent <wandb_path> --count <trial_num>
-   ```
-4) **Job Submission:**
-   * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallelize the optimizing process.
-   ```
-   sbatch para.job
-   ```
 
-## Final Result
-The below results were obtained with these specifications:
-* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
-* Batch size: 16
-* Patch size: 512
-* Learning rate: 1E-5
-* Number of workers: 8
-* Epochs: 30 (maximum; early termination feature has been turned on)
-* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
-* Number of trails: 5
+Or, to run in an interactive session:
+```
+srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
 
-Test Jaccard: mean: 0.589, standard deviation:0.075
-Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
+conda activate cmap
 
-### example outputs
-The model can detect ponds fairly accurately:
-![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
-![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
-![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
+cd /home/YOUR_USERNAME/2024-winter-cmap
 
-There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
-![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
-![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
-
-There also needs to be adjustments made to the model to account for false positives:
-![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
-![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+```
 
 ## Git Usage
 
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
 
 ## Repository Structure
+### main repository
+
 * train.py: code for training models
 * model.py: code defining model used for training
 * 
@@ -164,6 +125,67 @@ Source attribution and descriptions included in the [README](data/README.md) fil
 ### output
 
 Contains example model output images.
+
+## Final Results
+The below results were obtained with these specifications:
+* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
+* Batch size: 16
+* Patch size: 512
+* Learning rate: 1E-5
+* Number of workers: 8
+* Epochs: 30 (maximum; early termination feature has been turned on)
+* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
+* Number of trails: 5
+
+Test Jaccard: mean: 0.589, standard deviation:0.075  
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
+
+### example outputs
+The model can detect ponds fairly accurately:
+![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
+![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
+![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
+
+There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
+![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
+![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
+
+There also needs to be adjustments made to the model to account for false positives:
+![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
+![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+
+## Git Usage
+
+Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
+
+## Repository Structure
+### main repository
+* **train.py**: containing code for training models
+* **model.py**: defining the model framework used in training
+* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
+* **sweep.job**: script used to run tuning with Wandb
+* **requirements.txt**: containing required packages' information
+
+### configs
+containing config information
+* **dsi.py**: default config for model training
+* **sweep_config.yml**: config used for wandb sweep
+
+### utils
+
+Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
+
+### notebooks
+
+Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
+
+### data
+Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
+
+### output
+
+Contains example model output images.
+
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
 - Spencer Ellis - sjne@uchicago.edu

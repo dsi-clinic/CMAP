@@ -28,7 +28,7 @@ from torchmetrics import Metric
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
-from data.kcv import KaneCounty
+from data.kc import KaneCounty
 from utils.model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
@@ -76,9 +76,7 @@ config = importlib.import_module(args.config)
 device = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
 
@@ -159,6 +157,20 @@ def writer_prep(exp_name, trial_num):
 
 
 def initialize_dataset():
+    """
+    Initialize the dataset by loading NAIP and KaneCounty data.
+
+    This function loads NAIP (National Agriculture Imagery Program)
+    data and KaneCounty shapefile data. Optionally, if DEM
+    (Digital Elevation Model) data is provided, it is also loaded
+    and merged with NAIP data.
+
+    Returns:
+        tuple: A tuple containing the loaded NAIP and KaneCounty
+            datasets.
+            The first element is the NAIP dataset, and the
+            second element is the KaneCounty dataset.
+    """
     naip = NAIP(config.KC_IMAGE_ROOT)
 
     shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
@@ -330,6 +342,24 @@ def copy_first_entry(a_list: list) -> list:
 
 
 def normalize_func(model):
+    """
+    Create normalization functions for input data to a given model.
+
+    This function generates normalization functions based on the mean
+    and standard deviation specified in the configuration. If the
+    number of channels in the model input does not match the length of
+    the mean and standard deviation lists, it replicates the first entry
+    of each list to match the number of input channels.
+
+    Args:
+        model: The model for which the normalization functions are created.
+
+    Returns:
+        tuple: A tuple containing two normalization functions.
+               The first function normalizes input data using the specified
+               mean and standard deviation.
+               The second function scales input data to a range between 0 and 255.
+    """
     mean = config.DATASET_MEAN
     std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
@@ -437,7 +467,7 @@ def train_setup(
     y = y_aug.type(torch.int64)
 
     # remove channel dim from y (req'd for loss func)
-    y_squeezed = y[:, :, :].squeeze()
+    y_squeezed = y.squeeze()
 
     # plot first batch
     if batch == 0:
@@ -457,12 +487,12 @@ def train_setup(
             plot_tensors = {
                 "RGB Image": X[i].cpu(),
                 "Mask": samp_mask[i],
-                "DEM": X[i].cpu(),
-                "NIR": X[i].cpu(),
+                # "DEM": X[i].cpu(),
+                # "NIR": X[i].cpu(),
                 "Augmented_RGBImage": X_aug[i].cpu(),
                 "Augmented_Mask": y[i].cpu(),
-                "Augmented_DEM": X_aug[i].cpu(),
-                "Augmented_NIR": X_aug[i].cpu(),
+                # "Augmented_DEM": X_aug[i].cpu(),
+                # "Augmented_NIR": X_aug[i].cpu(),
             }
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
@@ -669,8 +699,8 @@ def test(
                         "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
-                        "DEM": X_scaled[i].cpu(),
-                        "NIR": X_scaled[i].cpu(),
+                        # "DEM": X_scaled[i].cpu(),
+                        # "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
@@ -733,6 +763,32 @@ def train(
     jaccard_per_class,
     config=config,
 ):
+    """
+    Train a deep learning model using the specified configuration and parameters.
+
+    Args:
+        writer: The writer object for logging training progress.
+        train_dataloader: DataLoader for training dataset.
+        model: The deep learning model to be trained.
+        test_jaccard: Function to calculate Jaccard index for test dataset.
+        out_root: Root directory for saving the trained model.
+        loss_fn: Loss function used for training.
+        train_jaccard: Function to calculate Jaccard index for training dataset.
+        optimizer: Optimization algorithm used for training.
+        test_dataloader: DataLoader for test dataset.
+        test_image_root: Root directory for test images.
+        train_images_root: Root directory for training images.
+        spatial_augs: Spatial augmentations applied during training.
+        color_augs: Color augmentations applied during training.
+        jaccard_per_class: Flag indicating whether to calculate Jaccard index per class.
+        config: Configuration parameters for training (default: global config).
+
+    Returns:
+        tuple: A tuple containing the Jaccard index for the last epoch of
+        training and for the test dataset.
+
+    """
+
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
 
