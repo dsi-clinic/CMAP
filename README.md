@@ -108,6 +108,34 @@ You can use Wandb to tune the model automaically. To implement automatic hyperpa
    sbatch para.job
    ```
 
+## Final Result
+The below results were obtained with these specifications:
+* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
+* Batch size: 16
+* Patch size: 512
+* Learning rate: 1E-5
+* Number of workers: 8
+* Epochs: 30 (maximum; early termination feature has been turned on)
+* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
+* Number of trails: 5
+
+Test Jaccard: mean: 0.589, standard deviation:0.075
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for experiments result
+
+### example outputs
+The model can detect ponds fairly accurately:
+![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
+![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
+![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
+
+There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
+![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
+![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
+
+There also needs to be adjustments made to the model to account for false positives:
+![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
+![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+
 ## Git Usage
 
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
@@ -133,32 +161,6 @@ Source attribution and descriptions included in the [README](data/README.md) fil
 ### output
 
 Contains example model output images.
-
-## Preliminary Results
-The below results were obtained with these specifications:
-* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
-* Batch size: 16
-* Patch size: 512
-* Learning rate: 1E-5
-* Number of workers: 8
-* Epochs: 30 (maximum; early termination feature has been turned on)
-
-Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md)
-
-### example outputs
-The model can detect ponds fairly accurately:
-![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
-![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
-![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
-
-There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
-![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
-![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
-
-There also needs to be adjustments made to the model to account for false positives:
-![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
-![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
-
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
 - Spencer Ellis - sjne@uchicago.edu
