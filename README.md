@@ -120,7 +120,7 @@ The below results were obtained with these specifications:
 * Number of trails: 5
 
 Test Jaccard: mean: 0.589, standard deviation:0.075
-Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for experiments result
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
 
 ### example outputs
 The model can detect ponds fairly accurately:
@@ -141,6 +141,9 @@ There also needs to be adjustments made to the model to account for false positi
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
 
 ## Repository Structure
+* train.py: code for training models
+* model.py: code defining model used for training
+* 
 
 ### utils
 
