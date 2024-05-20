@@ -475,12 +475,8 @@ def train_setup(
             plot_tensors = {
                 "RGB Image": X[i].cpu(),
                 "Mask": samp_mask[i],
-                # "DEM": X[i].cpu(),
-                # "NIR": X[i].cpu(),
                 "Augmented_RGBImage": X_aug[i].cpu(),
                 "Augmented_Mask": y[i].cpu(),
-                # "Augmented_DEM": X_aug[i].cpu(),
-                # "Augmented_NIR": X_aug[i].cpu(),
             }
             sample_fname = os.path.join(
                 save_dir, f"train_sample-{epoch}.{i}.png"
@@ -591,7 +587,6 @@ def train_epoch(
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
-    # Need to rename scalars?
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
@@ -867,8 +862,6 @@ def train(
         elif test_loss < best_loss - threshold:
             best_loss = test_loss
             plateau_count = 0
-        # Potentially add another if clause to plateau check
-        # such that if test_loss jumps up again, plateau resets?
         else:
             plateau_count += 1
             if plateau_count >= patience:
@@ -976,6 +969,9 @@ def run_trials(
 
 
 def main():
+    """
+    Main function
+    """
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
         description="Train a segmentation model to predict stormwater storage "
