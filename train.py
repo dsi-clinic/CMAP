@@ -552,6 +552,7 @@ def train_epoch(
             color_augs,
             train_images_root,
             model,
+            config,
             device,
             kc,
         )
