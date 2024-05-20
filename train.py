@@ -1,7 +1,7 @@
 """
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
-    [--aug_type <aug>] [--split <split>]
+    [--split <split>] [--tune]  [--num_trials <num>]
 """
 
 import argparse
@@ -29,60 +29,17 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
 from data.kc import KaneCounty
-from utils.model import SegmentationModel
+from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
-from utils.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
-# import config and experiment name from runtime args
-parser = argparse.ArgumentParser(
-    description="Train a segmentation model to predict stormwater storage "
-    + "and green infrastructure."
-)
-parser.add_argument("config", type=str, help="Path to the configuration file")
-parser.add_argument(
-    "--experiment_name",
-    type=str,
-    help="Name of experiment",
-    default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
-)
 
-parser.add_argument(
-    "--split",
-    type=str,
-    help="Ratio of split; enter the size of the train split as an int out of 100",
-    default="80",
-)
-
-
-parser.add_argument(
-    "--tune",
-    action="store_true",
-    help="Whether to apply hyperparameter tuning with wandb; enter True or False",
-    default=False,
-)
-
-
-parser.add_argument(
-    "--num_trials",
-    type=str,
-    help="Please enter the number of trial for each train",
-    default="1",
-)
-
-args = parser.parse_args()
-spec = importlib.util.spec_from_file_location(args.config)
-config = importlib.import_module(args.config)
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps" if torch.backends.mps.is_available() else "cpu"
-)
-
-
-def arg_parsing():
+def arg_parsing(args):
     """
     Parsing arguments passed in from command line
+    Args:
+        args: parsed arguments
     """
     # if no experiment name provided, set to timestamp
     exp_name = args.experiment_name
@@ -96,18 +53,16 @@ def arg_parsing():
     wandb_tune = args.tune
     num_trials = int(args.num_trials)
 
-    # if wandb_tune:
-    #     print("wandb tuning")
-    #     wandb.login(key=args.tune_key)
-
     return exp_name, split, wandb_tune, num_trials
 
 
-def writer_prep(exp_name, trial_num):
+def writer_prep(config, exp_name, wandb_tune, trial_num):
     """
     Preparing writers and logging for each training trial
-    Input:
+    Args:
+        config: settings in the configuration file
         exp_name: experiment name passed in by command line
+        wandb_tune: boolean - tuning with wandb or not
         trial_num: current trial number
     """
     # set output path and exit run if path already exists
@@ -156,7 +111,7 @@ def writer_prep(exp_name, trial_num):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
-def initialize_dataset():
+def initialize_dataset(config):
     """
     Initialize the dataset by loading NAIP and KaneCounty data.
 
@@ -164,6 +119,8 @@ def initialize_dataset():
     data and KaneCounty shapefile data. Optionally, if DEM
     (Digital Elevation Model) data is provided, it is also loaded
     and merged with NAIP data.
+    Args:
+        config: settings in the configuration file
 
     Returns:
         tuple: A tuple containing the loaded NAIP and KaneCounty
@@ -191,11 +148,14 @@ def initialize_dataset():
     return naip, kc
 
 
-def build_dataset(naip, kc, split):
+def build_dataset(config, naip, kc, split):
     """
     Randomly split and load data to be the test and train sets
 
-    Input:
+    Args:
+        config: settings in the configuration file
+        naip: NAIP dataset
+        kc: KaneCounty dataset
         split: the percentage of splitting (entered from args)
     """
     # record generator seed
@@ -233,13 +193,16 @@ def build_dataset(naip, kc, split):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
-    logging.info(f"Using {device} device")
     return train_dataloader, test_dataloader
 
 
 def regularization_loss(model, reg_type, weight):
     """
     Calculate the regularization loss for the model parameters.
+    Args:
+        model: The PyTorch model for which to calculate the regularization loss.
+        reg_type: The type of regularization, either "l1" or "l2".
+        weight: The weight or strength of the regularization term.
 
     Returns:
     - float: The calculated regularization loss.
@@ -258,6 +221,14 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     """
     Compute the total loss optionally the regularization loss.
 
+    Args:
+        model: The PyTorch model for which to compute the loss.
+        mask: The input mask tensor.
+        y: The target tensor.
+        loss_fn: The loss function to use for computing the base loss.
+        reg_type: The type of regularization, either "l1" or "l2".
+        reg_weight: The weight or strength of the regularization term.
+
     Returns:
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
@@ -268,9 +239,21 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     return base_loss
 
 
-def create_model():
+def create_model(config, device):
     """
     Setting up training model, loss function and measuring metrics
+    Args:
+        config: Settings in the configuration file.
+        device: The device (CPU or GPU) to use for the model.
+
+    Returns:
+        tuple: A tuple containing:
+            - model: The PyTorch model instance.
+            - loss_fn: The loss function to use for training.
+            - train_jaccard: The metric to measure Jaccard index on the training set.
+            - test_jaccard: The metric to measure Jaccard index on the test set.
+            - jaccard_per_class: The metric to measure Jaccard index per class.
+            - optimizer: The optimizer for training the model.
     """
     # create the model
     model = SegmentationModel(
@@ -341,7 +324,7 @@ def copy_first_entry(a_list: list) -> list:
     return a_list
 
 
-def normalize_func(model):
+def normalize_func(config, model):
     """
     Create normalization functions for input data to a given model.
 
@@ -352,6 +335,7 @@ def normalize_func(model):
     of each list to match the number of input channels.
 
     Args:
+        config: Settings in the configuration file.
         model: The model for which the normalization functions are created.
 
     Returns:
@@ -421,32 +405,36 @@ def train_setup(
     color_augs,
     train_images_root,
     model,
-    config=config,
+    config,
+    device,
+    kc,
 ) -> Tuple[torch.Tensor]:
     """
     Sets up for the training step by sending images and masks to device,
     applying augmentations, and saving training sample images.
 
-    Parameters
-    ----------
-    sample : DefaultDict[str, Any]
-        A dataloader sample containing image, mask, and bbox data
+    Args:
+        sample: A dataloader sample containing image, mask, and bbox data.
+        epoch: The current epoch.
+        batch: The current batch.
+        spatial_aug_mode: The mode for spatial augmentations.
+        color_aug_mode: The mode for color augmentations.
+        spatial_augs: The sequence of spatial augmentations.
+        color_augs: The sequence of color augmentations.
+        train_images_root: The root path for saving training sample images.
+        model: The PyTorch model instance.
+        config: The configuration settings.
+        device: The device (CPU or GPU) to use for the model.
+        kc: The KaneCounty dataset.
 
-    epoch : int
-        The current epoch
-
-    batch : int
-        The current batch
-
-    Returns
-    -------
-    Tuple[torch.Tensor]
-        Augmented image and mask tensors to be used in the train step
+    Returns:
+        Tuple[torch.Tensor]:
+            Augmented image and mask tensors to be used in the train step
     """
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    normalize, scale = normalize_func(model)
+    normalize, scale = normalize_func(config, model)
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
@@ -525,29 +513,29 @@ def train_epoch(
     color_augs,
     spatial_aug_mode,
     color_aug_mode,
+    config,
+    device,
+    kc,
 ) -> None:
     """
     Executes a training step for the model
 
-    Parameters
-    ----------
-    dataloder : DataLoader
-        Dataloader for the training data
-
-    model : Module
-        A PyTorch model
-
-    loss_fn : Module
-        A PyTorch loss function
-
-    jaccard : Metric
-        The metric to be used for evaluation, specifically the Jaccard Index
-
-    optimizer : Optimizer
-        The optimizer to be used for training
-
-    epoch : int
-        The current epoch
+    Args:
+        dataloader: The data loader containing the training data.
+        model: The PyTorch model to be trained.
+        loss_fn: The loss function to be used for training.
+        jaccard: The metric to measure Jaccard index during training.
+        optimizer: The optimizer to be used for updating model parameters.
+        epoch: The current epoch number.
+        train_images_root: The root directory for saving training sample images.
+        writer: The TensorBoard writer for logging training metrics.
+        spatial_augs: The sequence of spatial augmentations.
+        color_augs: The sequence of color augmentations.
+        spatial_aug_mode: The mode for spatial augmentations.
+        color_aug_mode: The mode for color augmentations.
+        config: The configuration settings.
+        device: The device (CPU or GPU) to use for the model.
+        kc: The KaneCounty dataset.
     """
     num_batches = len(dataloader)
     model.train()
@@ -564,6 +552,8 @@ def train_epoch(
             color_augs,
             train_images_root,
             model,
+            device,
+            kc,
         )
 
         # compute prediction error
@@ -618,6 +608,9 @@ def test(
     writer,
     num_classes,
     jaccard_per_class: Metric,
+    config,
+    device,
+    kc,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -645,6 +638,10 @@ def test(
     num_classes : int
         The number of labels to predict
 
+    config: The configuration settings.
+    device: The device (CPU or GPU) to use for the model.
+    kc: The KaneCounty dataset.
+
     Returns
     -------
     float
@@ -664,7 +661,7 @@ def test(
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
             X = samp_image.to(device)
-            normalize, scale = normalize_func(model)
+            normalize, scale = normalize_func(config, model)
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
@@ -699,8 +696,6 @@ def test(
                         "RGB Image": X_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
-                        # "DEM": X_scaled[i].cpu(),
-                        # "NIR": X_scaled[i].cpu(),
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
@@ -739,7 +734,6 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        # iou = jaccard_per_class.item()
         logging.info(f"IoU for {label_name}: {final_jaccard_per_class[i]} \n")
 
     # Now returns test_loss such that it can be compared against previous losses
@@ -761,7 +755,10 @@ def train(
     spatial_augs,
     color_augs,
     jaccard_per_class,
-    config=config,
+    config,
+    device,
+    kc,
+    wandb_tune,
 ):
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -823,6 +820,9 @@ def train(
                 writer,
                 num_classes,
                 jaccard_per_class,
+                config,
+                device,
+                kc,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -840,6 +840,9 @@ def train(
             color_augs,
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
+            config,
+            device,
+            kc,
         )
 
         test_loss, t_jaccard = test(
@@ -853,6 +856,9 @@ def train(
             writer,
             num_classes,
             jaccard_per_class,
+            config,
+            device,
+            kc,
         )
         # Checks for plateau
         if best_loss is None:
@@ -878,7 +884,9 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def run_trials():
+def run_trials(
+    config, args, wandb_tune, num_trials, run, exp_name, naip, kc, split, device
+):
     """
     Running training for multiple trials
     """
@@ -897,9 +905,11 @@ def run_trials():
             out_root,
             writer,
             logger,
-        ) = writer_prep(exp_name, num)
+        ) = writer_prep(config, exp_name, wandb_tune, num)
         # randomly splitting the data at every trial
-        train_dataloader, test_dataloader = build_dataset(naip, kc, split)
+        train_dataloader, test_dataloader = build_dataset(
+            config, naip, kc, split
+        )
         (
             model,
             loss_fn,
@@ -907,7 +917,7 @@ def run_trials():
             test_jaccard,
             jaccard_per_class,
             optimizer,
-        ) = create_model()
+        ) = create_model(config, device)
         spatial_augs, color_augs = create_augmentation_pipelines(
             config,
             config.SPATIAL_AUG_INDICES,
@@ -929,6 +939,10 @@ def run_trials():
             spatial_augs,
             color_augs,
             jaccard_per_class,
+            config,
+            device,
+            kc,
+            wandb_tune,
         )
 
         train_ious.append(float(train_iou))
@@ -960,14 +974,79 @@ def run_trials():
         wandb.finish()
 
 
-# executing
-exp_name, split, wandb_tune, num_trials = arg_parsing()
-naip, kc = initialize_dataset()
+def main():
+    # import config and experiment name from runtime args
+    parser = argparse.ArgumentParser(
+        description="Train a segmentation model to predict stormwater storage "
+        + "and green infrastructure."
+    )
+    parser.add_argument(
+        "config", type=str, help="Path to the configuration file"
+    )
+    parser.add_argument(
+        "--experiment_name",
+        type=str,
+        help="Name of experiment",
+        default=datetime.datetime.now().strftime("%Y%m%d-%H%M%S"),
+    )
+    parser.add_argument(
+        "--split",
+        type=str,
+        help="Ratio of split; enter the size of the train split as an int out of 100",
+        default="80",
+    )
+    parser.add_argument(
+        "--tune",
+        action="store_true",
+        help="Whether to apply hyperparameter tuning with wandb; enter True or False",
+        default=False,
+    )
+    parser.add_argument(
+        "--num_trials",
+        type=str,
+        help="Please enter the number of trial for each train",
+        default="1",
+    )
 
-if wandb_tune:
-    run = wandb.init(project="cmap_train")
-    run_trials()
+    args = parser.parse_args()
+    config = importlib.import_module(args.config)
+    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    device = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
+    logging.info(f"Using {device} device")
+    naip, kc = initialize_dataset(config)
+
+    if wandb_tune:
+        run = wandb.init(project="cmap_train")
+        run_trials(
+            config,
+            args,
+            wandb_tune,
+            num_trials,
+            run,
+            exp_name,
+            naip,
+            kc,
+            split,
+            device,
+        )
+    else:
+        run_trials(
+            config,
+            args,
+            wandb_tune,
+            num_trials,
+            None,
+            exp_name,
+            naip,
+            kc,
+            split,
+            device,
+        )
 
 
-else:
-    run_trials()
+if __name__ == "__main__":
+    main()
