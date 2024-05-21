@@ -23,6 +23,9 @@ These goals will be accomplished within the following pipeline structure:
 
 ## Usage
 
+
+### Environment Set Up 
+
 Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
 2. Create and initiate a cmap specific conda environment using the following steps:
@@ -39,31 +42,22 @@ Before running the repository (see details below), you need to perform the follo
     conda install pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
     pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
-3. To implement automatic hyperparameter optimizer, you need to have your own wandb API key and follow run para.job.
-   1) **Environment Setup:**
-      * Activate the cmap environment and log in to your WandB account in the terminal:
-       ```
-       source /home/USERNAME/miniconda3/bin/activate cmap
-       wandb login <wandb api key>
-       ```
-   2) **Modify Sweep Parameters:**
-      * Modify the parameters for the sweep in cmap/configs/sweep_config.yml, ensuring that the parameter names match those in dsi.py. After setting up the sweep config, run the following command in that directory:
-      ```
-      wandb sweep sweep_config.yml
-      ```
-   3) **Run Sweep Agent:**
-      * Use wandb_path given in the last output (after "Run  sweep agent with") to update [sweep.job](https://github.com/dsi-clinic/2024-winter-cmap/blob/wandb-multi-agent/sweep.job). Specify the number of trials to run with --count.
-      ```
-      wandb agent <wandb_path> --count <trial_num>
-      ```
-   4) **Job Submission:**
-      * Then submit the job with sbatch. As long as the wandb_path stays the same, you can submit multiple jobs to parallelize the optimizing process.
-      ```
-      sbatch para.job
-      ```
-### Slurm
+### Example of Training in Command Line
+Next, you can train the model in an interactive session
 
-For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
+```
+srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
+
+conda activate cmap
+
+cd /home/YOUR_USERNAME/2024-winter-cmap
+
+python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+```
+
+### Example of Training with Slurm
+
+If you have access to Slurm, you can also train model with it. For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
 To run this repo on the Slurm cluster after setting up your conda environment, you can use the following submit script to run a training loop:
 ```
@@ -108,6 +102,9 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 ## Repository Structure
 ### main repository
 
+* train.py: code for training models
+* model.py: code defining model used for training
+* 
 
 ### utils
 
@@ -118,13 +115,18 @@ Project python code. Contains various utility functions and scripts which suppor
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
 
 ### data
-Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
+
+Contains details of acquiring all raw data used in repository. If data is small (<50MB) then it is okay to save it to the repo, making sure to clearly document how to the data is obtained.
+
+If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory. 
+
+Source attribution and descriptions included in the [README](data/README.md) file.
 
 ### output
 
 Contains example model output images.
 
-## Preliminary Results
+## Final Results
 The below results were obtained with these specifications:
 * Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
 * Batch size: 16
@@ -132,17 +134,11 @@ The below results were obtained with these specifications:
 * Learning rate: 1E-5
 * Number of workers: 8
 * Epochs: 30 (maximum; early termination feature has been turned on)
+* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
+* Number of trails: 5
 
-| Model | Backbone | Weights | Final IoU | Final Loss |
-| ----------- | ----------- | ----------- | ----------- | ----------- | 
-| deeplabv3+ | resnet50 | imagenet | 0.631 | 0.246 |
-| deeplabv3+ | resnet50 | ssl | 0.548 | 0.232 |
-| deeplabv3+ | resnet50 | swsl | 0.558 | 0.233 |
-| unet | resnet50 | imagenet | 0.515 | 0.226 |
-| unet | resnet50 | ssl | 0.560 | 0.209 |
-| unet | resnet50 | swsl | 0.590 | 0.226 |
-| unet | resnet18 | LANDSAT_ETM_SR_SIMCLR | 0.530 | 0.264 |
-| unet | resnet18 | LANDSAT_ETM_SR_MOCO | 0.519 | 0.227 |
+Test Jaccard: mean: 0.589, standard deviation:0.075  
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
 
 ### example outputs
 The model can detect ponds fairly accurately:
@@ -157,6 +153,43 @@ There needs to be some tweaks for the model to better identify wetlands and dry 
 There also needs to be adjustments made to the model to account for false positives:
 ![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
 ![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+
+## Git Usage
+
+Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
+
+## Repository Structure
+### main repository
+* **train.py**: containing code for training models
+* **model.py**: defining the model framework used in training
+* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
+* **sweep.job**: script used to run tuning with Wandb
+* **requirements.txt**: containing required packages' information
+
+### configs
+containing config information
+* **dsi.py**: default config for model training
+* **sweep_config.yml**: config used for wandb sweep
+
+### utils
+
+Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
+* **get_naip_images.py**
+* **img_params.py** calculating images stats
+* **plot.py** plotting image with labels
+* **transform.py** Creating augmentation pipeline
+
+### notebooks
+
+Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
+
+### data
+Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
+
+
+### output
+
+Contains example model output images.
 
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu

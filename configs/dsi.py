@@ -64,8 +64,8 @@ IMAGE_AUG_INDICES = [
     3,  # Gaussian Blur0
     # 4,  # Plasma Brightness
     5,  # Saturation
-    6,  # Channel Shuffle
-    7,  # Gamma
+    # 6,  # Channel Shuffle
+    # 7,  # Gamma
 ]
 
 # Augmentation
