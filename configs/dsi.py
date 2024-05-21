@@ -1,5 +1,5 @@
 """
-This module contains configuration settings for the application.
+This module contains configuration settings.
 """
 
 import os
