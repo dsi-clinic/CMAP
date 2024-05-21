@@ -35,7 +35,7 @@ from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 
-def arg_parsing(args):
+def arg_parsing():
     """
     Parsing arguments passed in from command line
     Args:
@@ -56,13 +56,10 @@ def arg_parsing(args):
     return exp_name, split, wandb_tune, num_trials
 
 
-def writer_prep(config, exp_name, wandb_tune, trial_num):
+def writer_prep(trial_num):
     """
     Preparing writers and logging for each training trial
     Args:
-        config: settings in the configuration file
-        exp_name: experiment name passed in by command line
-        wandb_tune: boolean - tuning with wandb or not
         trial_num: current trial number
     """
     # set output path and exit run if path already exists
@@ -111,7 +108,7 @@ def writer_prep(config, exp_name, wandb_tune, trial_num):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
-def initialize_dataset(config):
+def initialize_dataset():
     """
     Initialize the dataset by loading NAIP and KaneCounty data.
 
@@ -148,15 +145,9 @@ def initialize_dataset(config):
     return naip, kc
 
 
-def build_dataset(config, naip, kc, split):
+def build_dataset():
     """
     Randomly split and load data to be the test and train sets
-
-    Args:
-        config: settings in the configuration file
-        naip: NAIP dataset
-        kc: KaneCounty dataset
-        split: the percentage of splitting (entered from args)
     """
     # record generator seed
     seed = random.randint(0, sys.maxsize)
@@ -239,12 +230,9 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     return base_loss
 
 
-def create_model(config, device):
+def create_model():
     """
     Setting up training model, loss function and measuring metrics
-    Args:
-        config: Settings in the configuration file.
-        device: The device (CPU or GPU) to use for the model.
 
     Returns:
         tuple: A tuple containing:
@@ -324,7 +312,7 @@ def copy_first_entry(a_list: list) -> list:
     return a_list
 
 
-def normalize_func(config, model):
+def normalize_func(model):
     """
     Create normalization functions for input data to a given model.
 
@@ -335,7 +323,6 @@ def normalize_func(config, model):
     of each list to match the number of input channels.
 
     Args:
-        config: Settings in the configuration file.
         model: The model for which the normalization functions are created.
 
     Returns:
@@ -405,9 +392,6 @@ def train_setup(
     color_augs,
     train_images_root,
     model,
-    config,
-    device,
-    kc,
 ) -> Tuple[torch.Tensor]:
     """
     Sets up for the training step by sending images and masks to device,
@@ -423,9 +407,6 @@ def train_setup(
         color_augs: The sequence of color augmentations.
         train_images_root: The root path for saving training sample images.
         model: The PyTorch model instance.
-        config: The configuration settings.
-        device: The device (CPU or GPU) to use for the model.
-        kc: The KaneCounty dataset.
 
     Returns:
         Tuple[torch.Tensor]:
@@ -434,7 +415,7 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    normalize, scale = normalize_func(config, model)
+    normalize, scale = normalize_func(model)
     # add extra channel(s) to the images and masks
     if samp_image.size(1) != model.in_channels:
         for _ in range(model.in_channels - samp_image.size(1)):
@@ -509,9 +490,6 @@ def train_epoch(
     color_augs,
     spatial_aug_mode,
     color_aug_mode,
-    config,
-    device,
-    kc,
 ) -> None:
     """
     Executes a training step for the model
@@ -548,9 +526,6 @@ def train_epoch(
             color_augs,
             train_images_root,
             model,
-            config,
-            device,
-            kc,
         )
 
         # compute prediction error
@@ -604,9 +579,6 @@ def test(
     writer,
     num_classes,
     jaccard_per_class: Metric,
-    config,
-    device,
-    kc,
 ) -> float:
     """
     Executes a testing step for the model and saves sample output images
@@ -657,7 +629,7 @@ def test(
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
             X = samp_image.to(device)
-            normalize, scale = normalize_func(config, model)
+            normalize, scale = normalize_func(model)
             X_scaled = scale(X)
             X = normalize(X_scaled)
             y = samp_mask.to(device)
@@ -751,10 +723,6 @@ def train(
     spatial_augs,
     color_augs,
     jaccard_per_class,
-    config,
-    device,
-    kc,
-    wandb_tune,
 ):
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -816,9 +784,6 @@ def train(
                 writer,
                 num_classes,
                 jaccard_per_class,
-                config,
-                device,
-                kc,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -836,9 +801,6 @@ def train(
             color_augs,
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
-            config,
-            device,
-            kc,
         )
 
         test_loss, t_jaccard = test(
@@ -852,9 +814,6 @@ def train(
             writer,
             num_classes,
             jaccard_per_class,
-            config,
-            device,
-            kc,
         )
         # Checks for plateau
         if best_loss is None:
@@ -878,9 +837,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def run_trials(
-    config, args, wandb_tune, num_trials, run, exp_name, naip, kc, split, device
-):
+def run_trials():
     """
     Running training for multiple trials
     """
@@ -899,11 +856,9 @@ def run_trials(
             out_root,
             writer,
             logger,
-        ) = writer_prep(config, exp_name, wandb_tune, num)
+        ) = writer_prep(num)
         # randomly splitting the data at every trial
-        train_dataloader, test_dataloader = build_dataset(
-            config, naip, kc, split
-        )
+        train_dataloader, test_dataloader = build_dataset()
         (
             model,
             loss_fn,
@@ -911,7 +866,7 @@ def run_trials(
             test_jaccard,
             jaccard_per_class,
             optimizer,
-        ) = create_model(config, device)
+        ) = create_model()
         spatial_augs, color_augs = create_augmentation_pipelines(
             config,
             config.SPATIAL_AUG_INDICES,
@@ -933,10 +888,6 @@ def run_trials(
             spatial_augs,
             color_augs,
             jaccard_per_class,
-            config,
-            device,
-            kc,
-            wandb_tune,
         )
 
         train_ious.append(float(train_iou))
@@ -968,10 +919,7 @@ def run_trials(
         wandb.finish()
 
 
-def main():
-    """
-    Main function
-    """
+if __name__ == "__main__":
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
         description="Train a segmentation model to predict stormwater storage "
@@ -1007,43 +955,19 @@ def main():
 
     args = parser.parse_args()
     config = importlib.import_module(args.config)
-    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials = arg_parsing()
+
     device = (
         "cuda"
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
     logging.info(f"Using {device} device")
-    naip, kc = initialize_dataset(config)
+
+    naip, kc = initialize_dataset()
 
     if wandb_tune:
         run = wandb.init(project="cmap_train")
-        run_trials(
-            config,
-            args,
-            wandb_tune,
-            num_trials,
-            run,
-            exp_name,
-            naip,
-            kc,
-            split,
-            device,
-        )
+        run_trials()
     else:
-        run_trials(
-            config,
-            args,
-            wandb_tune,
-            num_trials,
-            None,
-            exp_name,
-            naip,
-            kc,
-            split,
-            device,
-        )
-
-
-if __name__ == "__main__":
-    main()
+        run_trials()
