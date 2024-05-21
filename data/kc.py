@@ -1,6 +1,14 @@
+"""
+This module provides a custom PyTorch GeoDataset for working with vector data
+representing labels or features in Kane County, Illinois. The vector data is
+stored as shapes in a GeoDatabase file, and this module allows for retrieving
+samples of labels or features as masks or rasterized images within specified
+bounding boxes.
+"""
+
 import math
 import sys
-from typing import Any, Optional
+from typing import Optional
 
 import geopandas as gpd
 import numpy as np
@@ -59,7 +67,7 @@ class KaneCounty(GeoDataset):
         path: str,
         layer: int,
         label_col: str,
-        labels: dict[int, str],
+        labels,
         patch_size: int,
         dest_crs: Optional[CRS] = None,
         res: float = 0.0001,
@@ -117,7 +125,7 @@ class KaneCounty(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-    def __getitem__(self, query: BoundingBox) -> dict[str, Any]:
+    def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
 
         Args:
@@ -160,7 +168,7 @@ class KaneCounty(GeoDataset):
             masks = np.zeros((round(height), round(width)), dtype=np.uint8)
 
         sample = {
-            "mask": torch.tensor(masks).long(),
+            "mask": torch.Tensor(masks).long(),
             "crs": self.crs,
             "bbox": query,
         }

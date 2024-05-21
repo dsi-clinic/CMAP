@@ -1,3 +1,7 @@
+"""
+This module contains configuration settings for the application.
+"""
+
 import os
 
 # data paths
