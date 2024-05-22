@@ -108,9 +108,8 @@ def plot_from_tensors(
     cmap = build_cmap(colors) if colors is not None else "viridis"
 
     # Determine the layout and create subplots
-    num_keys = len(sample)
     fig, axs = plt.subplots(
-        num_keys // 2 + num_keys % 2, min(num_keys, 2), figsize=(8, 8)
+        len(sample) // 2 + len(sample) % 2, min(len(sample), 2), figsize=(8, 8)
     )
     axs = np.array(axs).reshape(-1)
 
@@ -120,8 +119,8 @@ def plot_from_tensors(
         ax = axs[i]
 
         if "image" in name.lower():
-            img = tensor[0:3, :, :].permute(1, 2, 0)  # Handle RGB image tensors
-            ax.imshow(img)
+            # Handle RGB image tensors
+            ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
         else:
             unique = (
                 tensor[0].unique()
