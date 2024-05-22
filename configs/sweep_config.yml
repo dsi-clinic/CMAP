@@ -24,7 +24,7 @@ parameters:
 command:
 - python
 - train.py
-- configs.dsi
+- configs.config
 - --tune 
 - --num_trials
 - 2
