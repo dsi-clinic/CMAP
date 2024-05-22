@@ -32,11 +32,12 @@ from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
+
 MODEL_DEVICE = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
-    )
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
+)
 
 
 def arg_parsing(argument):
@@ -732,7 +733,7 @@ def train(
     aug_config,
     path_config: Tuple[str, str, str],
     writer: SummaryWriter,
-    wandb_t
+    wandb_t,
 ) -> Tuple[float, float]:
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -942,7 +943,7 @@ def run_trials():
             aug_config,
             path_config,
             writer,
-            wandb_tune
+            wandb_tune,
         )
 
         train_ious.append(float(train_iou))
