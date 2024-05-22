@@ -107,7 +107,8 @@ def get_token() -> str:
         Token for accessing naip images on the planetary computer catalog
     """
     res = requests.get(
-        "https://planetarycomputer.microsoft.com/api/sas/v1/token/naip"
+        "https://planetarycomputer.microsoft.com/api/sas/v1/token/naip",
+        timeout=10,
     )
     return res.json()["token"]
 
@@ -320,7 +321,7 @@ def download_image(
         os.makedirs(save_dir)
 
     # retrieve the image and write it to disk; if the request fails, print the error
-    res = requests.get(url, stream=True)
+    res = requests.get(url, stream=True, timeout=10)
     if res.status_code != 200:
         print(
             f"Failed to download image: {res.text}. Status code: {res.status_code}"
