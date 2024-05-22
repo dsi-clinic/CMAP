@@ -160,12 +160,18 @@ def build_dataset():
     test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        dataset=train_dataset,
-        size=config.PATCH_SIZE,
-        batch_size=config.BATCH_SIZE,
+        config={
+            "dataset": train_dataset,
+            "size": config.PATCH_SIZE,
+            "batch_size": config.BATCH_SIZE,
+        }
     )
     test_sampler = BalancedGridGeoSampler(
-        dataset=test_dataset, size=config.PATCH_SIZE, stride=config.PATCH_SIZE
+        config={
+            "dataset": test_dataset,
+            "size": config.PATCH_SIZE,
+            "stride": config.PATCH_SIZE,
+        }
     )
 
     # create dataloaders (must use batch_sampler)
