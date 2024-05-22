@@ -677,7 +677,9 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
+        logging.info(
+            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
+        )
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -824,8 +826,10 @@ def train(
             plateau_count += 1
             if plateau_count >= patience:
                 logging.info(
-                    "Loss Plateau: %d epochs, reached patience of %d", t, patience
-                    )
+                    "Loss Plateau: %d epochs, reached patience of %d",
+                    t,
+                    patience,
+                )
                 break
 
     print("Done!")
