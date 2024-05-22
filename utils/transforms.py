@@ -1,3 +1,29 @@
+"""
+This module provides functions for image augmentation and processing.
+
+Functions:
+- separate_channels(image, rgb_indices): Separates specified RGB channels
+from other channels in an image tensor.
+- combine_channels(rgb, other_channels, rgb_mask, original_shape):
+Recombines the RGB and other channels after augmentation.
+- create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices):
+Creates lists of spatial and color augmentations based on provided indices and parameters.
+- apply_augs(spatial_transforms, color_transforms, image, mask, spatial_mode,
+color_mode, rgb_channels=None): Applies spatial and color augmentations to an image
+and its corresponding mask.
+
+Parameters:
+- image (torch.Tensor): The input image tensor.
+- mask (torch.Tensor): The corresponding mask tensor.
+- spatial_aug_indices (list): Indices to select spatial augmentations.
+- color_aug_indices (list): Indices to select color augmentations for RGB channels.
+- spatial_mode (str): Augmentation mode for spatial augmentations -
+'random' for random augmentations or 'all' for all.
+- color_mode (str): Augmentation mode for color augmentations -
+'random' for random augmentations or 'all' for all.
+- rgb_channels (list): Indices of RGB channels in the image tensor.
+"""
+
 import random
 
 import kornia.augmentation as K
@@ -97,8 +123,6 @@ def apply_augs(
     color_transforms,
     image,
     mask,
-    spatial_mode,
-    color_mode,
     rgb_channels=None,
 ):
     """
@@ -109,8 +133,6 @@ def apply_augs(
         color_transforms (list): List of color augmentations for RGB channels.
         image (torch.Tensor): The input image tensor.
         mask (torch.Tensor): The corresponding mask tensor.
-        mode (str): Augmentation mode - 'random' for random augmentations
-                    or 'all' for all.
         rgb_channels (list): Indices of RGB channels in the image tensor.
 
     Returns:
@@ -120,35 +142,33 @@ def apply_augs(
     """
     if rgb_channels is None:
         rgb_channels = [0, 1, 2]
-    # Create a boolean mask for identifying RGB channels
-    rgb_mask = torch.zeros(
-        image.shape[1], dtype=torch.bool, device=image.device
-    )
-    rgb_mask[rgb_channels] = True
 
-    # Random mode: pick random number and set of augmentations to apply
-    if spatial_mode == "random":
+    # Determine augmentation modes
+    spatial_mode = (
+        spatial_transforms if isinstance(spatial_transforms, str) else None
+    )
+    color_mode = color_transforms if isinstance(color_transforms, str) else None
+
+    # Randomly select augmentations if modes are specified
+    if spatial_mode:
         spatial_augmentations = random.sample(
             spatial_transforms, k=random.randint(1, len(spatial_transforms))
         )
     else:
         spatial_augmentations = spatial_transforms
 
-    if color_mode == "random":
+    if color_mode:
         color_augmentations = random.sample(
             color_transforms, k=random.randint(1, len(color_transforms))
         )
     else:
         color_augmentations = color_transforms
 
-    # Create a pipeline for spatial augmentations and apply them to the image and mask
+    # Apply spatial augmentations to the image and mask
     spatial_aug_pipeline = K.AugmentationSequential(
         *spatial_augmentations, data_keys=["image", "mask"], same_on_batch=False
     )
     augmented_image, augmented_mask = spatial_aug_pipeline(image, mask)
-
-    # Generate a mask of non-padded areas in the augmented image
-    non_padded_area_mask = augmented_image.any(dim=1, keepdim=True)
 
     # Separate RGB channels for color augmentation
     rgb_only, non_rgb = separate_channels(augmented_image, rgb_channels)
@@ -161,10 +181,10 @@ def apply_augs(
 
     # Recombine RGB and non-RGB channels
     fully_augmented_image = combine_channels(
-        augmented_rgb, non_rgb, rgb_mask, image.shape
+        augmented_rgb, non_rgb, torch.tensor(rgb_channels).bool(), image.shape
     )
 
     # Ensure color augmentations do not affect zero-padded areas
-    fully_augmented_image *= non_padded_area_mask
+    fully_augmented_image *= augmented_image.any(dim=1, keepdim=True)
 
     return fully_augmented_image, augmented_mask
