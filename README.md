@@ -19,7 +19,7 @@ Several tasks are associated with this project:
 
 These goals will be accomplished within the following pipeline structure:
 1. Preprocess Kane County stormwater structures shape data (preproc_kc.py) to obtain corresponding NAIP images (utils/get_naip_images.py).
-2. Utilize a training loop (train.py) with configurations (configs/dsi.py) assigned to the cluster (.job), utilizing the model defined in utils/model.py and the custom Raster Dataset defined in utils/kc.py.
+2. Utilize a training loop (train.py) with configurations (configs/config.py) assigned to the cluster (.job), utilizing the model defined in utils/model.py and the custom Raster Dataset defined in utils/kc.py.
 
 ## Usage
 
@@ -52,7 +52,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
 ```
 
 ### Example of Training with Slurm
@@ -81,7 +81,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
+python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
 
 Or, to run in an interactive session:
@@ -92,7 +92,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.dsi [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
 ```
 
 ## Git Usage
@@ -168,7 +168,7 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 
 ### configs
 containing config information
-* **dsi.py**: default config for model training
+* **config.py**: default config for model training
 * **sweep_config.yml**: config used for wandb sweep
 
 ### utils
