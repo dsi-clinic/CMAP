@@ -437,7 +437,6 @@ def save_training_images(
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            "grid",
             kc.colors,
             kc.labels_inverse,
             sample["bbox"][i],
