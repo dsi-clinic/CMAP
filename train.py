@@ -385,11 +385,11 @@ def add_extra_channels(image, model):
         image = add_extra_channel(image)
     return image
 
-def apply_augmentations(X, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
+def apply_augmentations(X_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
     """
     Apply augmentations to the image and mask.
     """
-    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode)
+    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X_og, y_og, spatial_aug_mode, color_aug_mode)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()     # Remove channel dim from mask
     return X_aug, y_squeezed
@@ -464,11 +464,14 @@ def train_setup(
     X_scaled, normalize = normalize_and_scale(X, model)
 
     # Apply augmentations
-    X_aug, y_squeezed = apply_augmentations(X_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
+    X_aug, y_squeezed = apply_augmentations(X_scaled, y, spatial_augs, 
+                                            color_augs, spatial_aug_mode, 
+                                            color_aug_mode)
 
     # Save training sample images if first batch
     if batch == 0:
-        save_training_images(epoch, batch, train_images_root, X, samp_mask, X_aug, y_squeezed, sample)
+        save_training_images(epoch, batch, train_images_root, 
+                             X, samp_mask, X_aug, y_squeezed, sample)
 
     return normalize(X_aug), y_squeezed
 
