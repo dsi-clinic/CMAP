@@ -95,7 +95,6 @@ COLOR_AUG_MODE = "all"  # all or random
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
 KC_LAYER = 4
-KC_LABEL_COL = "BasinType"
 KC_LABELS = {
     "BACKGROUND": 0,
     "POND": 1,
