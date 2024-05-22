@@ -453,7 +453,6 @@ def train_setup(
             plot_from_tensors(
                 plot_tensors,
                 sample_fname,
-                "grid",
                 kc.colors,
                 kc.labels_inverse,
                 sample["bbox"][i],
@@ -654,7 +653,6 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            "row",
                             kc.colors,
                             kc.labels_inverse,
                             sample["bbox"][i],
