@@ -1,3 +1,7 @@
+"""
+This module contains configuration settings.
+"""
+
 import os
 
 # data paths

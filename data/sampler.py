@@ -1,9 +1,15 @@
+"""
+This module provides custom samplers used for sampling patches or chips from
+geospatial datasets in a manner that avoids tries to avoid areas of missing
+label. These samplers are designed to handle cases where the bounding boxes in
+the dataset are smaller than the desired patch size, ensuring that both
+background and feature areas are adequately represented in the sampled data.
+"""
+
 import math
-from collections.abc import Iterator
-from typing import Optional, Union
 
 import torch
-from torchgeo.datasets import BoundingBox, GeoDataset
+from torchgeo.datasets import BoundingBox
 from torchgeo.samplers import BatchGeoSampler, GeoSampler
 from torchgeo.samplers.constants import Units
 from torchgeo.samplers.utils import (
@@ -23,12 +29,12 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
 
     def __init__(
         self,
-        dataset: GeoDataset,
-        size: Union[tuple[float, float], float],
-        batch_size: int,
-        length: Optional[int] = None,
-        roi: Optional[BoundingBox] = None,
-        units: Units = Units.PIXELS,
+        dataset,
+        size,
+        batch_size,
+        length=None,
+        roi=None,
+        units=Units.PIXELS,
     ) -> None:
         """Initialize a new Sampler instance.
 
@@ -94,7 +100,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         if torch.sum(self.areas) == 0:
             self.areas += 1
 
-    def __iter__(self) -> Iterator[list[BoundingBox]]:
+    def __iter__(self):
         """Return a batch of indices of a dataset.
 
         Returns:
@@ -137,11 +143,11 @@ class BalancedGridGeoSampler(GeoSampler):
 
     def __init__(
         self,
-        dataset: GeoDataset,
-        size: Union[tuple[float, float], float],
-        stride: Union[tuple[float, float], float],
-        roi: Optional[BoundingBox] = None,
-        units: Units = Units.PIXELS,
+        dataset,
+        size,
+        stride,
+        roi=None,
+        units=Units.PIXELS,
     ) -> None:
         """Initialize a new Sampler instance.
 
@@ -208,7 +214,7 @@ class BalancedGridGeoSampler(GeoSampler):
             self.hits.append(hit)
             self.length += rows * cols
 
-    def __iter__(self) -> Iterator[BoundingBox]:
+    def __iter__(self):
         """Return the index of a dataset.
 
         Returns:
@@ -247,7 +253,7 @@ class BalancedGridGeoSampler(GeoSampler):
 
                         yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
 
-    def __len__(self) -> int:
+    def __len__(self):
         """Return the number of samples over the ROI.
 
         Returns:

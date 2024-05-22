@@ -9,21 +9,6 @@ import os
 
 from utils.get_naip_images import get_images, get_river_images
 
-parser = argparse.ArgumentParser(
-    description="Preprocess Kane County data to get corresponding NAIP images"
-)
-parser.add_argument("config", type=str, help="Path to the configuration file")
-parser.add_argument(
-    "--action",
-    type=str,
-    default="all",
-    choices=["all", "images", "river"],
-    help="Specify the action to perform",
-)
-args = parser.parse_args()
-spec = importlib.util.spec_from_file_location(args.config)
-config = importlib.import_module(args.config)
-
 
 def get_kane_county_images() -> None:
     """
@@ -51,13 +36,31 @@ def get_kane_county_river_images() -> None:
     get_river_images("image", data_fpath, save_dir)
 
 
-# Determine which action to perform based on user input
-if args.action == "all":
-    get_kane_county_images()
-    get_kane_county_river_images()
+if __name__ == "__main__":
 
-elif args.action == "images":
-    get_kane_county_images()
+    parser = argparse.ArgumentParser(
+        description="Preprocess Kane County data to get corresponding NAIP images"
+    )
+    parser.add_argument(
+        "config", type=str, help="Path to the configuration file"
+    )
+    parser.add_argument(
+        "--action",
+        type=str,
+        default="all",
+        choices=["all", "images", "river"],
+        help="Specify the action to perform",
+    )
+    args = parser.parse_args()
+    config = importlib.import_module(args.config)
 
-elif args.action == "river":
-    get_kane_county_river_images()
+    # Determine which action to perform based on user input
+    if args.action == "all":
+        get_kane_county_images()
+        get_kane_county_river_images()
+
+    elif args.action == "images":
+        get_kane_county_images()
+
+    elif args.action == "river":
+        get_kane_county_river_images()
