@@ -1,22 +1,69 @@
+"""
+This module provides a class for configuring and using segmentation models.
+
+It includes utilities for selecting different architectures, backbones,
+input channels, number of classes,
+number of filters, and weights to initialize the model.
+
+Attributes:
+    segmentation_models_pytorch (module): A Python package containing implementations
+    of various segmentation models.
+    timm (module): A library for model architectures and pretrained weights from
+    the PyTorch Image Models repository.
+    torchgeo.models (module): Models provided by the TorchGeo library for
+    geospatial data processing.
+    torchgeo.trainers.utils (module): Utilities for training models in the
+    TorchGeo library.
+    torchvision.models._api (module): A module containing model definitions
+    from the torchvision library.
+
+Classes:
+    SegmentationModel: A class for configuring and using segmentation models.
+
+Functions:
+    None
+
+Exceptions:
+    None
+"""
+
 import importlib
 import os
 from typing import Union
 
 import segmentation_models_pytorch as smp
-import timm
 from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
 
 
 class SegmentationModel:
+    """
+    This class represents a segmentation model for image segmentation tasks.
+
+    It allows configuring various aspects of the model architecture, such as
+    the model type, backbone, number of input channels,
+    number of classes to predict, number of filters (for FCN model), and
+    weights to initialize the model.
+
+    Attributes:
+        None
+
+    Methods:
+        __init__: Initializes the SegmentationModel object with the provided
+        parameters and configures the model accordingly.
+
+    Exceptions:
+        ValueError: Raised if the provided model type is not valid or if the
+        backbone for weights does not match the model backbone.
+    """
+
     def __init__(
         self,
         model: str = "unet",
         backbone: str = "resnet50",
         in_channels: int = 5,
         num_classes: int = None,
-        num_filters: int = 3,
         weights: Union[WeightsEnum, str, bool] = True,
     ):
         """
@@ -45,9 +92,6 @@ class SegmentationModel:
             The number of classes to predict. Should match the number of classes in
             the mask.
 
-        num_filters : int
-            The number of filters to use in the model. Only used for the FCN model.
-
         weights : Union[str, bool]
             The weights to use for the model. If True, uses imagenet weights. Can also
             accept a string path to a weights file, or a WeightsEnum with pretrained
@@ -68,8 +112,7 @@ class SegmentationModel:
                 weights_chans = weights_meta["in_chans"]
                 del imported_module
 
-                if weights_chans > in_channels:
-                    in_channels = weights_chans
+                in_channels = max(in_channels, weights_chans)
 
                 weights_backbone = weights_module.split("_")[0]
                 if (
@@ -77,7 +120,7 @@ class SegmentationModel:
                     and backbone != "vit_small_patch16_224"
                 ):
                     raise ValueError(
-                        f"Backbone for weights '{weights_backbone}' does not match {backbone}."  # noqa: B950
+                        "Backbone for weights does not match model backbone."
                     )
 
                 if isinstance(weights_attribute, WeightsEnum):
@@ -109,12 +152,7 @@ class SegmentationModel:
                 self.model = FCN(
                     in_channels=in_channels,
                     classes=num_classes,
-                    num_filters=num_filters,
-                )
-
-            elif model == "test_weights":
-                self.model = timm.create_model(
-                    backbone, in_chans=in_channels, num_classes=num_classes
+                    num_filters=3,
                 )
 
             else:
