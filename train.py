@@ -34,35 +34,32 @@ from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 
-def arg_parsing():
+def arg_parsing(argument):
     """
     Parsing arguments passed in from command line
     """
     # if no experiment name provided, set to timestamp
-    exp_name_arg = args.experiment_name
+    exp_name_arg = argument.experiment_name
     if exp_name_arg is None:
         exp_name_arg = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
-    split_arg = float(int(args.split) / 100)
-    if split_arg is None:
-        split_arg = 0.80
 
+    split_arg = float(int(argument.split) / 100)
     # tuning with wandb
-    wandb_tune_arg = args.tune
-    num_trials_arg = int(args.num_trials)
+    wandb_tune_arg = argument.tune
+    num_trials_arg = int(argument.num_trials)
 
     return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
-
-def writer_prep(trial_num):
+def writer_prep(exp_n, trial_num, wandb_t):
     """
     Preparing writers and logging for each training trial
     Args:
         trial_num: current trial number
     """
     # set output path and exit run if path already exists
-    exp_trial_name = f"{exp_name}_trial{trial_num}"
+    exp_trial_name = f"{exp_n}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
-    if wandb_tune:
+    if wandb_t:
         os.makedirs(out_root, exist_ok=True)
     else:
         os.makedirs(out_root, exist_ok=False)
@@ -149,7 +146,7 @@ def build_dataset():
     """
     # record generator seed
     seed = random.randint(0, sys.maxsize)
-    logging.info(f"Dataset random split seed: {seed}")
+    logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
 
     # split the dataset
@@ -327,18 +324,18 @@ def normalize_func(model):
                mean and standard deviation.
                The second function scales input data to a range between 0 and 255.
     """
-    mean = config.DATASET_MEAN
-    std = config.DATASET_STD
+    data_mean = config.DATASET_MEAN
+    data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-    if len(mean) != model.in_channels:
-        for _ in range(model.in_channels - len(mean)):
-            mean = copy_first_entry(mean)
-            std = copy_first_entry(std)
+    if len(data_mean) != model.in_channels:
+        for _ in range(model.in_channels - len(data_mean)):
+            data_mean = copy_first_entry(data_mean)
+            data_std = copy_first_entry(data_std)
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
-    normalize = K.Normalize(mean=mean, std=std)
+    normalize = K.Normalize(mean=data_mean, std=data_std)
     scale = K.Normalize(mean=scale_mean, std=scale_std)
     return normalize, scale
 
@@ -372,6 +369,58 @@ def add_extra_channel(
     return augmented_tensor
 
 
+def normalize_and_scale(sample_image, model):
+    """
+    Normalize and scale the sample image.
+    """
+    normalize, scale = normalize_func(model)
+    scaled_image = scale(sample_image)
+    return scaled_image, normalize
+
+def add_extra_channels(image, model):
+    """
+    Add extra channels to the image if necessary.
+    """
+    while image.size(1) < model.in_channels:
+        image = add_extra_channel(image)
+    return image
+
+def apply_augmentations(X, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
+    """
+    Apply augmentations to the image and mask.
+    """
+    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode)
+    y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
+    y_squeezed = y_aug.squeeze()     # Remove channel dim from mask
+    return X_aug, y_squeezed
+
+def save_training_images(epoch, batch, train_images_root, X, samp_mask, X_aug, y_aug, sample):
+    """
+    Save training sample images.
+    """
+    save_dir = os.path.join(
+        train_images_root,
+        f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
+    )
+    os.makedirs(save_dir, exist_ok=True)
+
+    for i in range(config.BATCH_SIZE):
+        plot_tensors = {
+            "RGB Image": X[i].cpu(),
+            "Mask": samp_mask[i],
+            "Augmented_RGBImage": X_aug[i].cpu(),
+            "Augmented_Mask": y_aug[i].cpu(),
+        }
+        sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+        plot_from_tensors(
+            plot_tensors,
+            sample_fname,
+            "grid",
+            kc.colors,
+            kc.labels_inverse,
+            sample["bbox"][i],
+        )
+
 def train_setup(
     sample: DefaultDict[str, Any],
     train_config,
@@ -403,67 +452,25 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    normalize, scale = normalize_func(model)
-    # add extra channel(s) to the images and masks
-    if samp_image.size(1) != model.in_channels:
-        for _ in range(model.in_channels - samp_image.size(1)):
-            samp_image = add_extra_channel(samp_image)
 
-    # send img and mask to device; convert y to float tensor for augmentation
+    # Add extra channels to image if necessary
+    samp_image = add_extra_channels(samp_image, model)
+
+    # Send image and mask to device; convert mask to float tensor for augmentation
     X = samp_image.to(device)
     y = samp_mask.type(torch.float32).to(device)
 
-    # scale both img and mask to range of [0, 1] (req'd for augmentations)
-    X = scale(X)
+    # Normalize and scale image
+    X_scaled, normalize = normalize_and_scale(X, model)
 
-    X_aug, y_aug = apply_augs(
-        spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode
-    )
+    # Apply augmentations
+    X_aug, y_squeezed = apply_augmentations(X_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
 
-    # denormalize mask to reset to index tensor (req'd for loss func)
-    y = y_aug.type(torch.int64)
-
-    # remove channel dim from y (req'd for loss func)
-    y_squeezed = y.squeeze()
-
-    # plot first batch
+    # Save training sample images if first batch
     if batch == 0:
-        save_dir = os.path.join(
-            train_images_root,
-            f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
-        )
-        try:
-            os.mkdir(save_dir)
+        save_training_images(epoch, batch, train_images_root, X, samp_mask, X_aug, y_squeezed, sample)
 
-        except FileExistsError:
-            # Directory already exists, remove it recursively
-            shutil.rmtree(save_dir)
-            os.mkdir(save_dir)
-
-        for i in range(config.BATCH_SIZE):
-            plot_tensors = {
-                "RGB Image": X[i].cpu(),
-                "Mask": samp_mask[i],
-                "Augmented_RGBImage": X_aug[i].cpu(),
-                "Augmented_Mask": y[i].cpu(),
-            }
-            sample_fname = os.path.join(
-                save_dir, f"train_sample-{epoch}.{i}.png"
-            )
-            plot_from_tensors(
-                plot_tensors,
-                sample_fname,
-                "grid",
-                kc.colors,
-                kc.labels_inverse,
-                sample["bbox"][i],
-            )
-
-    return (
-        normalize(X_aug),
-        y_squeezed,
-    )
-
+    return normalize(X_aug), y_squeezed
 
 def train_epoch(
     dataloader,
@@ -664,10 +671,8 @@ def test(
     final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
-    logging.info(
-        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
-        + f"Test avg loss: {test_loss:>4f} \n"
-    )
+    logging.info(f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, \
+                 Test avg loss: {test_loss:>4f} \n")
 
     # Access the labels and their names
     _labels = {}
@@ -681,7 +686,6 @@ def test(
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
-
 
 def train(
     model: Module,
@@ -855,7 +859,7 @@ def run_trials():
             out_root,
             writer,
             logger,
-        ) = writer_prep(num)
+        ) = writer_prep(exp_name, num, wandb_tune)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset()
         (
@@ -963,7 +967,7 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     config = importlib.import_module(args.config)
-    exp_name, split, wandb_tune, num_trials = arg_parsing()
+    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
     device = (
         "cuda"
