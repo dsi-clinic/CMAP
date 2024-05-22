@@ -125,15 +125,15 @@ def initialize_dataset():
     naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
     shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
-    kc_dataset = KaneCounty(
-        shape_path,
+    dataset_config = (
         config.KC_LAYER,
-        config.KC_LABEL_COL,
         config.KC_LABELS,
         config.PATCH_SIZE,
         naip_dataset.crs,
         naip_dataset.res,
     )
+    kc_dataset = KaneCounty(shape_path, dataset_config)
+
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT)
         naip_dataset = naip_dataset & dem

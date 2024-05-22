@@ -8,13 +8,11 @@ bounding boxes.
 
 import math
 import sys
-from typing import Optional
 
 import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
-from rasterio.crs import CRS
 from torchgeo.datasets import BoundingBox, GeoDataset
 
 
@@ -62,43 +60,62 @@ class KaneCounty(GeoDataset):
         15: "UNKNOWN",
     }
 
-    def __init__(
-        self,
-        path: str,
-        layer: int,
-        label_col: str,
-        labels,
-        patch_size: int,
-        dest_crs: Optional[CRS] = None,
-        res: float = 0.0001,
-    ) -> None:
+    def __init__(self, path: str, configs) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
             path: directory to the file to load
-            layer: specifying layer of GPKG
-            label_col: name of the dataset property that has the label to be
-                rasterized into the mask
-            labels: a dictionary containing a label mapping for masks
-            patch_size: the patch size used for the model
-            dest_crs: the coordinate reference system (CRS) to convert to
-            res: resolution of the dataset in units of CRS
+            configs: a tuple containing
+                layer: specifying layer of GPKG
+                labels: a dictionary containing a label mapping for masks
+                patch_size: the patch size used for the model
+                dest_crs: the coordinate reference system (CRS) to convert to
+                res: resolution of the dataset in units of CRS
 
         Raises:
             FileNotFoundError: if no files are found in path
         """
         super().__init__()
 
-        # read from the file, filter by label, and convert crs
-        gdf = gpd.read_file(path, layer=layer)[[label_col, "geometry"]]
-        gdf = gdf[gdf[label_col].isin(labels.keys())]
-        gdf = gdf.to_crs(dest_crs)
+        layer, labels, patch_size, dest_crs, res = configs
+
+        gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
         self.gdf = gdf
 
-        # preserve context around shapes and ensure small shapes can be sampled
         context_size = math.ceil(patch_size / 2 * res)
+        self.context_size = context_size
+        self._crs = dest_crs
+        self._res = res
 
-        # Populate the dataset index
+        self._populate_index(path, gdf, context_size)
+        self.labels = labels
+        self.colors = {i: self.all_colors[i] for i in labels.values()}
+        self.labels_inverse = {v: k for k, v in labels.items()}
+
+    def _load_and_prepare_data(self, path, layer, labels, dest_crs):
+        """Load and prepare the GeoDataFrame.
+
+        Args:
+            path: directory to the file to load
+            layer: specifying layer of GPKG
+            labels: a dictionary containing a label mapping for masks
+            dest_crs: the coordinate reference system (CRS) to convert to
+
+        Returns:
+            gdf: A GeoDataFrame filtered and converted to the target CRS
+        """
+        gdf = gpd.read_file(path, layer=layer)[["BasinType", "geometry"]]
+        gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+        gdf = gdf.to_crs(dest_crs)
+        return gdf
+
+    def _populate_index(self, path, gdf, context_size):
+        """Populate the spatial index with data from the GeoDataFrame.
+
+        Args:
+            gdf: GeoDataFrame containing the data
+            context_size: size of the context around shapes for sampling
+        """
         i = 0
         for _, row in gdf.iterrows():
             minx, miny, maxx, maxy = row["geometry"].bounds
@@ -116,14 +133,6 @@ class KaneCounty(GeoDataset):
         if i == 0:
             msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
             raise FileNotFoundError(msg)
-
-        self.label_col = label_col
-        self.labels = labels
-        self.colors = {i: self.all_colors[i] for i in labels.values()}
-        self.labels_inverse = {v: k for k, v in labels.items()}
-        self.context_size = context_size
-        self._crs = dest_crs
-        self._res = res
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
@@ -148,11 +157,11 @@ class KaneCounty(GeoDataset):
         shapes = []
         for obj in objs:
             shape = obj["geometry"]
-            label = self.labels[obj[self.label_col]]
+            label = self.labels[obj["BasinType"]]
             shapes.append((shape, label))
 
-        width = (query.maxx - query.minx) / self.res
-        height = (query.maxy - query.miny) / self.res
+        width = (query.maxx - query.minx) / self._res
+        height = (query.maxy - query.miny) / self._res
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
@@ -177,3 +186,9 @@ class KaneCounty(GeoDataset):
             sample = self.transforms(sample)
 
         return sample
+
+    def __getlabels__(self):
+        """
+        Returns the labels of the dataset.
+        """
+        return self.labels
