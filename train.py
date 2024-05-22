@@ -33,36 +33,40 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
+MODEL_DEVICE = (
+    "cuda"
+    if torch.cuda.is_available()
+    else "mps" if torch.backends.mps.is_available() else "cpu"
+)
 
-def arg_parsing():
+
+def arg_parsing(argument):
     """
     Parsing arguments passed in from command line
     """
     # if no experiment name provided, set to timestamp
-    exp_name_arg = args.experiment_name
+    exp_name_arg = argument.experiment_name
     if exp_name_arg is None:
         exp_name_arg = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
-    split_arg = float(int(args.split) / 100)
-    if split_arg is None:
-        split_arg = 0.80
 
+    split_arg = float(int(argument.split) / 100)
     # tuning with wandb
-    wandb_tune_arg = args.tune
-    num_trials_arg = int(args.num_trials)
+    wandb_tune_arg = argument.tune
+    num_trials_arg = int(argument.num_trials)
 
     return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
 
-def writer_prep(trial_num):
+def writer_prep(exp_n, trial_num, wandb_t):
     """
     Preparing writers and logging for each training trial
     Args:
         trial_num: current trial number
     """
     # set output path and exit run if path already exists
-    exp_trial_name = f"{exp_name}_trial{trial_num}"
+    exp_trial_name = f"{exp_n}_trial{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
-    if wandb_tune:
+    if wandb_t:
         os.makedirs(out_root, exist_ok=True)
     else:
         os.makedirs(out_root, exist_ok=False)
@@ -255,7 +259,7 @@ def create_model():
         backbone=config.BACKBONE,
         num_classes=config.NUM_CLASSES,
         weights=config.WEIGHTS,
-    ).model.to(device)
+    ).model.to(MODEL_DEVICE)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
@@ -271,17 +275,17 @@ def create_model():
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(device)
+    ).to(MODEL_DEVICE)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(device)
+    ).to(MODEL_DEVICE)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average=None,
-    ).to(device)
+    ).to(MODEL_DEVICE)
     optimizer = AdamW(
         model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
     )
@@ -333,18 +337,18 @@ def normalize_func(model):
                mean and standard deviation.
                The second function scales input data to a range between 0 and 255.
     """
-    mean = config.DATASET_MEAN
-    std = config.DATASET_STD
+    data_mean = config.DATASET_MEAN
+    data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-    if len(mean) != model.in_channels:
-        for _ in range(model.in_channels - len(mean)):
-            mean = copy_first_entry(mean)
-            std = copy_first_entry(std)
+    if len(data_mean) != model.in_channels:
+        for _ in range(model.in_channels - len(data_mean)):
+            data_mean = copy_first_entry(data_mean)
+            data_std = copy_first_entry(data_std)
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
-    normalize = K.Normalize(mean=mean, std=std)
+    normalize = K.Normalize(mean=data_mean, std=data_std)
     scale = K.Normalize(mean=scale_mean, std=scale_std)
     return normalize, scale
 
@@ -378,6 +382,68 @@ def add_extra_channel(
     return augmented_tensor
 
 
+def normalize_and_scale(sample_image, model):
+    """
+    Normalize and scale the sample image.
+    """
+    normalize, scale = normalize_func(model)
+    scaled_image = scale(sample_image)
+    return scaled_image, normalize
+
+
+def add_extra_channels(image, model):
+    """
+    Add extra channels to the image if necessary.
+    """
+    while image.size(1) < model.in_channels:
+        image = add_extra_channel(image)
+    return image
+
+
+def apply_augmentations(
+    x_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+):
+    """
+    Apply augmentations to the image and mask.
+    """
+    x_aug, y_aug = apply_augs(
+        spatial_augs, color_augs, x_og, y_og, spatial_aug_mode, color_aug_mode
+    )
+    y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
+    y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
+    return x_aug, y_squeezed
+
+
+def save_training_images(
+    epoch, batch, train_images_root, x, samp_mask, x_aug, y_aug, sample
+):
+    """
+    Save training sample images.
+    """
+    save_dir = os.path.join(
+        train_images_root,
+        f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
+    )
+    os.makedirs(save_dir, exist_ok=True)
+
+    for i in range(config.BATCH_SIZE):
+        plot_tensors = {
+            "RGB Image": x[i].cpu(),
+            "Mask": samp_mask[i],
+            "Augmented_RGBImage": x_aug[i].cpu(),
+            "Augmented_Mask": y_aug[i].cpu(),
+        }
+        sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+        plot_from_tensors(
+            plot_tensors,
+            sample_fname,
+            "grid",
+            kc.colors,
+            kc.labels_inverse,
+            sample["bbox"][i],
+        )
+
+
 def train_setup(
     sample: DefaultDict[str, Any],
     train_config,
@@ -409,65 +475,36 @@ def train_setup(
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
-    normalize, scale = normalize_func(model)
-    # add extra channel(s) to the images and masks
-    if samp_image.size(1) != model.in_channels:
-        for _ in range(model.in_channels - samp_image.size(1)):
-            samp_image = add_extra_channel(samp_image)
 
-    # send img and mask to device; convert y to float tensor for augmentation
-    X = samp_image.to(device)
-    y = samp_mask.type(torch.float32).to(device)
+    # Add extra channels to image if necessary
+    samp_image = add_extra_channels(samp_image, model)
 
-    # scale both img and mask to range of [0, 1] (req'd for augmentations)
-    X = scale(X)
+    # Send image and mask to device; convert mask to float tensor for augmentation
+    x = samp_image.to(MODEL_DEVICE)
+    y = samp_mask.type(torch.float32).to(MODEL_DEVICE)
 
-    X_aug, y_aug = apply_augs(
-        spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode
+    # Normalize and scale image
+    x_scaled, normalize = normalize_and_scale(x, model)
+
+    # Apply augmentations
+    x_aug, y_squeezed = apply_augmentations(
+        x_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
     )
 
-    # denormalize mask to reset to index tensor (req'd for loss func)
-    y = y_aug.type(torch.int64)
-
-    # remove channel dim from y (req'd for loss func)
-    y_squeezed = y.squeeze()
-
-    # plot first batch
+    # Save training sample images if first batch
     if batch == 0:
-        save_dir = os.path.join(
+        save_training_images(
+            epoch,
+            batch,
             train_images_root,
-            f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
+            x,
+            samp_mask,
+            x_aug,
+            y_squeezed,
+            sample,
         )
-        try:
-            os.mkdir(save_dir)
 
-        except FileExistsError:
-            # Directory already exists, remove it recursively
-            shutil.rmtree(save_dir)
-            os.mkdir(save_dir)
-
-        for i in range(config.BATCH_SIZE):
-            plot_tensors = {
-                "RGB Image": X[i].cpu(),
-                "Mask": samp_mask[i],
-                "Augmented_RGBImage": X_aug[i].cpu(),
-                "Augmented_Mask": y[i].cpu(),
-            }
-            sample_fname = os.path.join(
-                save_dir, f"train_sample-{epoch}.{i}.png"
-            )
-            plot_from_tensors(
-                plot_tensors,
-                sample_fname,
-                kc.colors,
-                kc.labels_inverse,
-                sample["bbox"][i],
-            )
-
-    return (
-        normalize(X_aug),
-        y_squeezed,
-    )
+    return normalize(x_aug), y_squeezed
 
 
 def train_epoch(
@@ -512,7 +549,7 @@ def train_epoch(
             spatial_augs,
             color_augs,
         )
-        X, y = train_setup(
+        x, y = train_setup(
             sample,
             train_config,
             aug_config,
@@ -520,7 +557,7 @@ def train_epoch(
         )
 
         # compute prediction error
-        outputs = model(X)
+        outputs = model(x)
         loss = compute_loss(
             model,
             outputs,
@@ -608,18 +645,18 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-            X = samp_image.to(device)
+            x = samp_image.to(MODEL_DEVICE)
             normalize, scale = normalize_func(model)
-            X_scaled = scale(X)
-            X = normalize(X_scaled)
-            y = samp_mask.to(device)
+            x_scaled = scale(x)
+            x = normalize(x_scaled)
+            y = samp_mask.to(MODEL_DEVICE)
             if y.size(0) == 1:
                 y_squeezed = y
             else:
                 y_squeezed = y.squeeze()
 
             # compute prediction error
-            outputs = model(X)
+            outputs = model(x)
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
@@ -641,7 +678,7 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "RGB Image": X_scaled[i].cpu(),
+                        "RGB Image": x_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
@@ -669,8 +706,8 @@ def test(
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
-        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, "
-        + f"Test avg loss: {test_loss:>4f} \n"
+        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, \
+                 Test avg loss: {test_loss:>4f} \n"
     )
 
     # Access the labels and their names
@@ -695,6 +732,7 @@ def train(
     aug_config,
     path_config: Tuple[str, str, str],
     writer: SummaryWriter,
+    wandb_t,
 ) -> Tuple[float, float]:
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -757,7 +795,7 @@ def train(
     num_classes = config.NUM_CLASSES
 
     # reducing number of epoch in hyperparameter tuning
-    if wandb_tune:
+    if wandb_t:
         epoch_config = 10
     else:
         epoch_config = config.EPOCHS
@@ -850,6 +888,7 @@ def run_trials():
     """
 
     if wandb_tune:
+        run = wandb.init(project="cmap_train")
         vars(args).update(run.config)
         print("wandb taken over config")
 
@@ -863,7 +902,7 @@ def run_trials():
             out_root,
             writer,
             logger,
-        ) = writer_prep(num)
+        ) = writer_prep(exp_name, num, wandb_tune)
         # randomly splitting the data at every trial
         train_dataloader, test_dataloader = build_dataset()
         (
@@ -904,6 +943,7 @@ def run_trials():
             aug_config,
             path_config,
             writer,
+            wandb_tune,
         )
 
         train_ious.append(float(train_iou))
@@ -971,19 +1011,10 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     config = importlib.import_module(args.config)
-    exp_name, split, wandb_tune, num_trials = arg_parsing()
+    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
-    device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
-    )
-    logging.info("Using %s device", device)
+    logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset()
 
-    if wandb_tune:
-        run = wandb.init(project="cmap_train")
-        run_trials()
-    else:
-        run_trials()
+    run_trials()
