@@ -422,9 +422,7 @@ def train_setup(
     # scale both img and mask to range of [0, 1] (req'd for augmentations)
     X = scale(X)
 
-    X_aug, y_aug = apply_augs(
-        spatial_augs, color_augs, X, y
-    )
+    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X, y)
 
     # denormalize mask to reset to index tensor (req'd for loss func)
     y = y_aug.type(torch.int64)
