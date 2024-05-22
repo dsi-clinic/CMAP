@@ -707,9 +707,9 @@ def test(
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
-    "\nTest error: \n Jaccard index: %4f, \nTest avg loss: %4f \n",
-    final_jaccard,
-    test_loss,
+        "\nTest error: \n Jaccard index: %4f, \nTest avg loss: %4f \n",
+        final_jaccard,
+        test_loss,
     )
 
     # Access the labels and their names
@@ -884,9 +884,6 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-
-
-
 if __name__ == "__main__":
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -965,7 +962,9 @@ if __name__ == "__main__":
                 config.SPATIAL_AUG_INDICES,
                 config.IMAGE_AUG_INDICES,
             )
-            logging.info("Trial %d\n====================================", num + 1)
+            logging.info(
+                "Trial %d\n====================================", num + 1
+            )
             train_test_config = (
                 train_dataloader,
                 train_jaccard,
