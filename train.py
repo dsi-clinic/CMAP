@@ -707,8 +707,9 @@ def test(
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logging.info(
-        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, \
-                 Test avg loss: {test_loss:>4f} \n"
+    "\nTest error: \n Jaccard index: %4f, \nTest avg loss: %4f \n",
+    final_jaccard,
+    test_loss,
     )
 
     # Access the labels and their names
@@ -883,97 +884,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def run_trials():
-    """
-    Running training for multiple trials
-    """
 
-    if wandb_tune:
-        run = wandb.init(project="cmap_train")
-        vars(args).update(run.config)
-        print("wandb taken over config")
-
-    train_ious = []
-    test_ious = []
-
-    for num in range(num_trials):
-        (
-            train_images_root,
-            test_image_root,
-            out_root,
-            writer,
-            logger,
-        ) = writer_prep(exp_name, num, wandb_tune)
-        # randomly splitting the data at every trial
-        train_dataloader, test_dataloader = build_dataset()
-        (
-            model,
-            loss_fn,
-            train_jaccard,
-            test_jaccard,
-            jaccard_per_class,
-            optimizer,
-        ) = create_model()
-        spatial_augs, color_augs = create_augmentation_pipelines(
-            config,
-            config.SPATIAL_AUG_INDICES,
-            config.IMAGE_AUG_INDICES,
-        )
-        logging.info("Trial %d\n====================================", num + 1)
-        train_test_config = (
-            train_dataloader,
-            train_jaccard,
-            test_jaccard,
-            test_dataloader,
-            loss_fn,
-            optimizer,
-            jaccard_per_class,
-        )
-        aug_config = (
-            spatial_augs,
-            color_augs,
-        )
-        path_config = (
-            out_root,
-            train_images_root,
-            test_image_root,
-        )
-        train_iou, test_iou = train(
-            model,
-            train_test_config,
-            aug_config,
-            path_config,
-            writer,
-            wandb_tune,
-        )
-
-        train_ious.append(float(train_iou))
-        test_ious.append(float(test_iou))
-        writer.close()
-        logger.handlers.clear()
-
-    test_average = mean(test_ious)
-    train_average = mean(train_ious)
-    test_std = 0
-    train_std = 0
-    if num_trials > 1:
-        test_std = stdev(test_ious)
-        train_std = stdev(train_ious)
-
-    print(
-        f"""
-        Training result: {train_ious},
-        average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
-    )
-    print(
-        f"""
-        Test result: {test_ious},
-        average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
-    )
-
-    if wandb_tune:
-        run.log({"average_test_jaccard_index": test_average})
-        wandb.finish()
 
 
 if __name__ == "__main__":
@@ -1017,5 +928,97 @@ if __name__ == "__main__":
     logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset()
+
+    def run_trials():
+        """
+        Running training for multiple trials
+        """
+
+        if wandb_tune:
+            run = wandb.init(project="cmap_train")
+            vars(args).update(run.config)
+            print("wandb taken over config")
+
+        train_ious = []
+        test_ious = []
+
+        for num in range(num_trials):
+            (
+                train_images_root,
+                test_image_root,
+                out_root,
+                writer,
+                logger,
+            ) = writer_prep(exp_name, num, wandb_tune)
+            # randomly splitting the data at every trial
+            train_dataloader, test_dataloader = build_dataset()
+            (
+                model,
+                loss_fn,
+                train_jaccard,
+                test_jaccard,
+                jaccard_per_class,
+                optimizer,
+            ) = create_model()
+            spatial_augs, color_augs = create_augmentation_pipelines(
+                config,
+                config.SPATIAL_AUG_INDICES,
+                config.IMAGE_AUG_INDICES,
+            )
+            logging.info("Trial %d\n====================================", num + 1)
+            train_test_config = (
+                train_dataloader,
+                train_jaccard,
+                test_jaccard,
+                test_dataloader,
+                loss_fn,
+                optimizer,
+                jaccard_per_class,
+            )
+            aug_config = (
+                spatial_augs,
+                color_augs,
+            )
+            path_config = (
+                out_root,
+                train_images_root,
+                test_image_root,
+            )
+            train_iou, test_iou = train(
+                model,
+                train_test_config,
+                aug_config,
+                path_config,
+                writer,
+                wandb_tune,
+            )
+
+            train_ious.append(float(train_iou))
+            test_ious.append(float(test_iou))
+            writer.close()
+            logger.handlers.clear()
+
+        test_average = mean(test_ious)
+        train_average = mean(train_ious)
+        test_std = 0
+        train_std = 0
+        if num_trials > 1:
+            test_std = stdev(test_ious)
+            train_std = stdev(train_ious)
+
+        print(
+            f"""
+            Training result: {train_ious},
+            average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
+        )
+        print(
+            f"""
+            Test result: {test_ious},
+            average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+        )
+
+        if wandb_tune:
+            run.log({"average_test_jaccard_index": test_average})
+            wandb.finish()
 
     run_trials()
