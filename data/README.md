@@ -21,3 +21,6 @@ This class defines a custom Vector Dataset for Kane County. It specifies file pa
 #### Kane County DEM Dataset (`dem.py`)
 
 This class defines the Digital Elevation Model data for Kane County. It specifies the regex for the file containing the DEM data, assuming that it is a single band file. Instructions for how to convert a geodatabase file into a tif file can be found at the top of the file. The conversion process requires the installation of gdal and is run on the command line.
+
+#### Samplers for training and testing (`sampler.py)
+This module provides custom samplers used for sampling patches or chips from geospatial datasets in a manner that avoids tries to avoid areas of missing label. These samplers are designed to handle cases where the bounding boxes in the dataset are smaller than the desired patch size, ensuring that both background and feature areas are adequately represented in the sampled data.
