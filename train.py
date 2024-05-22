@@ -32,6 +32,11 @@ from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
+MODEL_DEVICE = (
+        "cuda"
+        if torch.cuda.is_available()
+        else "mps" if torch.backends.mps.is_available() else "cpu"
+    )
 
 
 def arg_parsing(argument):
@@ -253,7 +258,7 @@ def create_model():
         backbone=config.BACKBONE,
         num_classes=config.NUM_CLASSES,
         weights=config.WEIGHTS,
-    ).model.to(model_device)
+    ).model.to(MODEL_DEVICE)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
@@ -269,17 +274,17 @@ def create_model():
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(model_device)
+    ).to(MODEL_DEVICE)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(model_device)
+    ).to(MODEL_DEVICE)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average=None,
-    ).to(model_device)
+    ).to(MODEL_DEVICE)
     optimizer = AdamW(
         model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
     )
@@ -474,8 +479,8 @@ def train_setup(
     samp_image = add_extra_channels(samp_image, model)
 
     # Send image and mask to device; convert mask to float tensor for augmentation
-    x = samp_image.to(model_device)
-    y = samp_mask.type(torch.float32).to(model_device)
+    x = samp_image.to(MODEL_DEVICE)
+    y = samp_mask.type(torch.float32).to(MODEL_DEVICE)
 
     # Normalize and scale image
     x_scaled, normalize = normalize_and_scale(x, model)
@@ -543,7 +548,7 @@ def train_epoch(
             spatial_augs,
             color_augs,
         )
-        X, y = train_setup(
+        x, y = train_setup(
             sample,
             train_config,
             aug_config,
@@ -551,7 +556,7 @@ def train_epoch(
         )
 
         # compute prediction error
-        outputs = model(X)
+        outputs = model(x)
         loss = compute_loss(
             model,
             outputs,
@@ -639,11 +644,11 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-            x = samp_image.to(model_device)
+            x = samp_image.to(MODEL_DEVICE)
             normalize, scale = normalize_func(model)
             x_scaled = scale(x)
             x = normalize(x_scaled)
-            y = samp_mask.to(model_device)
+            y = samp_mask.to(MODEL_DEVICE)
             if y.size(0) == 1:
                 y_squeezed = y
             else:
@@ -1007,16 +1012,7 @@ if __name__ == "__main__":
     config = importlib.import_module(args.config)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
-    model_device = (
-        "cuda"
-        if torch.cuda.is_available()
-        else "mps" if torch.backends.mps.is_available() else "cpu"
-    )
-<<<<<<< HEAD
-    logging.info(f"Using {model_device} device")
-=======
-    logging.info("Using %s device", device)
->>>>>>> main
+    logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset()
 
