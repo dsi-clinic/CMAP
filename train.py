@@ -468,15 +468,15 @@ def train_setup(
     samp_image = add_extra_channels(samp_image, model)
 
     # Send image and mask to device; convert mask to float tensor for augmentation
-    X = samp_image.to(model_device)
+    x = samp_image.to(model_device)
     y = samp_mask.type(torch.float32).to(model_device)
 
     # Normalize and scale image
-    X_scaled, normalize = normalize_and_scale(X, model)
+    x_scaled, normalize = normalize_and_scale(x, model)
 
     # Apply augmentations
-    X_aug, y_squeezed = apply_augmentations(
-        X_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    x_aug, y_squeezed = apply_augmentations(
+        x_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
     )
 
     # Save training sample images if first batch
@@ -485,14 +485,14 @@ def train_setup(
             epoch,
             batch,
             train_images_root,
-            X,
+            x,
             samp_mask,
-            X_aug,
+            x_aug,
             y_squeezed,
             sample,
         )
 
-    return normalize(X_aug), y_squeezed
+    return normalize(x_aug), y_squeezed
 
 
 def train_epoch(
@@ -633,10 +633,10 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-            X = samp_image.to(model_device)
+            x = samp_image.to(model_device)
             normalize, scale = normalize_func(model)
-            X_scaled = scale(X)
-            X = normalize(X_scaled)
+            x_scaled = scale(x)
+            x = normalize(x_scaled)
             y = samp_mask.to(model_device)
             if y.size(0) == 1:
                 y_squeezed = y
@@ -644,7 +644,7 @@ def test(
                 y_squeezed = y.squeeze()
 
             # compute prediction error
-            outputs = model(X)
+            outputs = model(x)
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
@@ -666,7 +666,7 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "RGB Image": X_scaled[i].cpu(),
+                        "RGB Image": x_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
@@ -719,6 +719,7 @@ def train(
     aug_config,
     path_config: Tuple[str, str, str],
     writer: SummaryWriter,
+    wandb_t
 ) -> Tuple[float, float]:
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -781,7 +782,7 @@ def train(
     num_classes = config.NUM_CLASSES
 
     # reducing number of epoch in hyperparameter tuning
-    if wandb_tune:
+    if wandb_t:
         epoch_config = 10
     else:
         epoch_config = config.EPOCHS
@@ -926,6 +927,7 @@ def run_trials():
             aug_config,
             path_config,
             writer,
+            wandb_tune
         )
 
         train_ious.append(float(train_iou))
