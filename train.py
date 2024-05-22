@@ -385,16 +385,18 @@ def add_extra_channels(image, model):
         image = add_extra_channel(image)
     return image
 
-def apply_augmentations(X_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
+def apply_augmentations(x_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
     """
     Apply augmentations to the image and mask.
     """
-    X_aug, y_aug = apply_augs(spatial_augs, color_augs, X_og, y_og, spatial_aug_mode, color_aug_mode)
+    x_aug, y_aug = apply_augs(
+    spatial_augs, color_augs, x_og, y_og, spatial_aug_mode, color_aug_mode
+)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()     # Remove channel dim from mask
-    return X_aug, y_squeezed
+    return x_aug, y_squeezed
 
-def save_training_images(epoch, batch, train_images_root, X, samp_mask, X_aug, y_aug, sample):
+def save_training_images(epoch, batch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
     """
     Save training sample images.
     """
@@ -406,9 +408,9 @@ def save_training_images(epoch, batch, train_images_root, X, samp_mask, X_aug, y
 
     for i in range(config.BATCH_SIZE):
         plot_tensors = {
-            "RGB Image": X[i].cpu(),
+            "RGB Image": x[i].cpu(),
             "Mask": samp_mask[i],
-            "Augmented_RGBImage": X_aug[i].cpu(),
+            "Augmented_RGBImage": x_aug[i].cpu(),
             "Augmented_Mask": y_aug[i].cpu(),
         }
         sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
