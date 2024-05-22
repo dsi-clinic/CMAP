@@ -1,3 +1,14 @@
+"""
+The `get_naip_images.py` module is designed for retrieving NAIP imagery based on
+geographic areas defined by shapefiles. It includes functions to read shapefiles,
+transform geometries, search for images in the Planetary Computer's STAC catalog,
+and download images that overlap specified areas.
+
+Key functionalities:
+- Process and transform shapefile geometries to standard coordinates.
+- Fetch and download NAIP images with specified overlap or most recent imagery.
+"""
+
 import os
 from typing import Any, Dict, Iterator
 
@@ -27,11 +38,11 @@ def get_geometry(fpath: str, layer: int = None) -> Iterator[Dict[str, Any]]:
     dict
         Dictionary with id and geometry
     """
-    with fiona.open(fpath, layer=layer) as sf:
-        for feature in iter(sf):
+    with fiona.open(fpath, layer=layer) as shapefile:
+        for feature in iter(shapefile):
             # transform the geometry to EPSG:4326 (standard lat/long)
             geom = transform.transform_geom(
-                sf.crs,
+                shapefile.crs,
                 "EPSG:4326",
                 feature["geometry"],
                 antimeridian_cutting=True,
@@ -165,7 +176,7 @@ def split_geometry(geometry, max_size=0.01):
 
 
 def get_image_url(
-    geometry: fiona.model.Geometry,
+    geometry: Dict[str, Any],
     catalog: pystac_client.Client,
     date_range: str,
     img_type: str,
@@ -202,7 +213,6 @@ def get_image_url(
             "img_type must be either 'rendered_preview' or 'image'"
         )
 
-    # Search for NAIP images that intersect with the geometry
     search = catalog.search(
         collections=["naip"], intersects=geometry, datetime=date_range
     )
@@ -212,25 +222,18 @@ def get_image_url(
         print("No images found for this geometry")
         return None
 
-    # if area of interest is not a point and more than one image is found,
-    # get the image with the most overlap
-    if geometry.type != "Point" and len(items) > 1:
+    if geometry["type"] != "Point" and len(items) > 1:
         max_overlap = sorted(
             items,
-            key=lambda x: area_of_overlap(x.geometry, dict(geometry)),
+            key=lambda x: area_of_overlap(x.geometry, geometry),
             reverse=True,
         )[0]
-        url = max_overlap.assets[img_type].href
-    # else just take the most recent image
-    else:
-        url = items[0].assets[img_type].href
-
-    # return the url without the token
-    return url.split("?", 1)[0]
+        return max_overlap.assets[img_type].href.split("?", 1)[0]
+    return items[0].assets[img_type].href.split("?", 1)[0]
 
 
 def get_image_urls(
-    geometry: fiona.model.Geometry,
+    geometry: Dict[str, Any],
     catalog: pystac_client.Client,
     date_range: str,
     img_type: str,
@@ -279,7 +282,7 @@ def get_image_urls(
 
 
 def download_image(
-    url: str, save_dir: str, img_type: str, id: str = None
+    url: str, save_dir: str, img_type: str, image_id: str = None
 ) -> None:
     """
     Downloads images from specified URL.
@@ -302,15 +305,15 @@ def download_image(
     """
     # create the save path
     if img_type == "image":
-        if id is None:
-            img_name = url.split("?", 1)[0].split("/")[-1]
+        if image_id is None:
+            img_name = url.split("?", 1)[0].split("/")
         else:
-            img_name = id + ".tif"
+            img_name = image_id + ".tif"
     else:
-        if id is None:
+        if image_id is None:
             img_name = url.split("?", 1)[1].split("&")[1][5:]
         else:
-            img_name = id + ".png"
+            img_name = image_id + ".png"
     save_fpath = os.path.join(save_dir, img_name)
 
     if not os.path.exists(save_dir):
@@ -324,9 +327,9 @@ def download_image(
         )
     else:
         print(f"Writing image {img_name} to disk")
-        with open(save_fpath, "wb") as f:
+        with open(save_fpath, "wb") as file:
             for chunk in res.iter_content(chunk_size=8192):
-                f.write(chunk)
+                file.write(chunk)
 
 
 def get_images(
@@ -360,11 +363,10 @@ def get_images(
             url = get_image_url(
                 geometry["geometry"], catalog, "2021-01-01/2024-01-01", img_type
             )
-            if url not in urls:
+            if url and url not in urls:
                 urls.add(url)
-        except Exception:
-            print("Error retrieving image url")
-
+        except requests.RequestException as req_error:
+            print(f"Network error retrieving image url: {str(req_error)}")
     for url in urls:
         url = url + "?" + get_token()
         download_image(url, save_dir, img_type)
@@ -400,17 +402,14 @@ def get_river_images(img_type: str, data_fpath: str, save_dir: str):
                 geometry["geometry"], catalog, "2021-01-01/2024-01-01", "image"
             )
             urls.update(url_list)
-        except Exception:
-            print("Attempting to split geometry and retry...")
+        except requests.RequestException as req_error:
+            print(f"Network error while retrieving URLs: {str(req_error)}")
             parts = split_geometry(geometry["geometry"])
             for part in parts:
-                try:
-                    part_url_list = get_image_urls(
-                        part, catalog, "2021-01-01/2024-01-01", "image"
-                    )
-                    urls.update(part_url_list)
-                except Exception as e:
-                    print(f"Failed request for part: {str(e)}")
+                part_url_list = get_image_urls(
+                    part, catalog, "2021-01-01/2024-01-01", "image"
+                )
+                urls.update(part_url_list)
     for url in urls:
         url = url + "?" + get_token()
         download_image(url, save_dir, img_type)
