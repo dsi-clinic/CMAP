@@ -423,7 +423,7 @@ def train_setup(
     X = scale(X)
 
     X_aug, y_aug = apply_augs(
-        spatial_augs, color_augs, X, y, spatial_aug_mode, color_aug_mode
+        spatial_augs, color_augs, X, y
     )
 
     # denormalize mask to reset to index tensor (req'd for loss func)
