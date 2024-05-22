@@ -889,6 +889,7 @@ def run_trials():
     """
 
     if wandb_tune:
+        run = wandb.init(project="cmap_train")
         vars(args).update(run.config)
         print("wandb taken over config")
 
@@ -1017,8 +1018,4 @@ if __name__ == "__main__":
 
     naip, kc = initialize_dataset()
 
-    if wandb_tune:
-        run = wandb.init(project="cmap_train")
-        run_trials()
-    else:
-        run_trials()
+    run_trials()
