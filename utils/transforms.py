@@ -144,40 +144,15 @@ def apply_augs(
     if rgb_channels is None:
         rgb_channels = [0, 1, 2]
 
-    # Determine augmentation modes
-    spatial_mode = (
-        spatial_transforms if isinstance(spatial_transforms, str) else None
-    )
-    color_mode = color_transforms if isinstance(color_transforms, str) else None
-
-    # Randomly select augmentations if modes are specified
-    if spatial_mode:
-        spatial_augmentations = random.sample(
-            spatial_transforms, k=random.randint(1, len(spatial_transforms))
-        )
-    else:
-        spatial_augmentations = spatial_transforms
-
-    if color_mode:
-        color_augmentations = random.sample(
-            color_transforms, k=random.randint(1, len(color_transforms))
-        )
-    else:
-        color_augmentations = color_transforms
-
     # Apply spatial augmentations to the image and mask
-    spatial_aug_pipeline = K.AugmentationSequential(
-        *spatial_augmentations, data_keys=["image", "mask"], same_on_batch=False
-    )
+    spatial_aug_pipeline = get_spatial_aug_pipeline(spatial_transforms)
     augmented_image, augmented_mask = spatial_aug_pipeline(image, mask)
 
     # Separate RGB channels for color augmentation
     rgb_only, non_rgb = separate_channels(augmented_image, rgb_channels)
 
     # Apply color augmentations only to the RGB channels
-    color_aug_pipeline = K.AugmentationSequential(
-        *color_augmentations, data_keys=["image"], same_on_batch=False
-    )
+    color_aug_pipeline = get_color_aug_pipeline(color_transforms)
     augmented_rgb = color_aug_pipeline(rgb_only)
 
     # Recombine RGB and non-RGB channels
@@ -189,3 +164,50 @@ def apply_augs(
     fully_augmented_image *= augmented_image.any(dim=1, keepdim=True)
 
     return fully_augmented_image, augmented_mask
+
+
+def get_spatial_aug_pipeline(spatial_transforms):
+    """
+    Return spatial augmentation pipeline
+
+    Parameters:
+        spatial_transforms (list): List of spatial augmentations to apply.
+    """
+    spatial_mode = (
+        spatial_transforms if isinstance(spatial_transforms, str) else None
+    )
+
+    # Randomly select augmentations if modes are specified
+    if spatial_mode:
+        spatial_augmentations = random.sample(
+            spatial_transforms, k=random.randint(1, len(spatial_transforms))
+        )
+    else:
+        spatial_augmentations = spatial_transforms
+
+    # Apply spatial augmentations to the image and mask
+    return K.AugmentationSequential(
+        *spatial_augmentations, data_keys=["image", "mask"], same_on_batch=False
+    )
+
+
+def get_color_aug_pipeline(color_transforms):
+    """
+    Return color augmentation pipeline
+
+    Parameters:
+        color_transforms (list): List of color augmentations to apply.
+    """
+    color_mode = color_transforms if isinstance(color_transforms, str) else None
+
+    if color_mode:
+        color_augmentations = random.sample(
+            color_transforms, k=random.randint(1, len(color_transforms))
+        )
+    else:
+        color_augmentations = color_transforms
+
+    # Apply color augmentations only to the RGB channels
+    return K.AugmentationSequential(
+        *color_augmentations, data_keys=["image"], same_on_batch=False
+    )
