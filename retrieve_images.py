@@ -1,6 +1,6 @@
 """
 To run: from repo directory (2024-winter-cmap)
-> python preproc_kc.py configs.config --action all
+> python retrieve_images.py configs.config --action all
 """
 
 import argparse
