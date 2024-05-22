@@ -50,6 +50,7 @@ def arg_parsing(argument):
 
     return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
+
 def writer_prep(exp_n, trial_num, wandb_t):
     """
     Preparing writers and logging for each training trial
@@ -246,7 +247,7 @@ def create_model():
         backbone=config.BACKBONE,
         num_classes=config.NUM_CLASSES,
         weights=config.WEIGHTS,
-    ).model.to(device)
+    ).model.to(model_device)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
@@ -262,17 +263,17 @@ def create_model():
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(device)
+    ).to(model_device)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
-    ).to(device)
+    ).to(model_device)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=config.NUM_CLASSES,
         ignore_index=config.IGNORE_INDEX,
         average=None,
-    ).to(device)
+    ).to(model_device)
     optimizer = AdamW(
         model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
     )
@@ -377,6 +378,7 @@ def normalize_and_scale(sample_image, model):
     scaled_image = scale(sample_image)
     return scaled_image, normalize
 
+
 def add_extra_channels(image, model):
     """
     Add extra channels to the image if necessary.
@@ -385,18 +387,24 @@ def add_extra_channels(image, model):
         image = add_extra_channel(image)
     return image
 
-def apply_augmentations(x_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode):
+
+def apply_augmentations(
+    x_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+):
     """
     Apply augmentations to the image and mask.
     """
     x_aug, y_aug = apply_augs(
-    spatial_augs, color_augs, x_og, y_og, spatial_aug_mode, color_aug_mode
-)
+        spatial_augs, color_augs, x_og, y_og, spatial_aug_mode, color_aug_mode
+    )
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
-    y_squeezed = y_aug.squeeze()     # Remove channel dim from mask
+    y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed
 
-def save_training_images(epoch, batch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
+
+def save_training_images(
+    epoch, batch, train_images_root, x, samp_mask, x_aug, y_aug, sample
+):
     """
     Save training sample images.
     """
@@ -422,6 +430,7 @@ def save_training_images(epoch, batch, train_images_root, x, samp_mask, x_aug, y
             kc.labels_inverse,
             sample["bbox"][i],
         )
+
 
 def train_setup(
     sample: DefaultDict[str, Any],
@@ -459,23 +468,32 @@ def train_setup(
     samp_image = add_extra_channels(samp_image, model)
 
     # Send image and mask to device; convert mask to float tensor for augmentation
-    X = samp_image.to(device)
-    y = samp_mask.type(torch.float32).to(device)
+    X = samp_image.to(model_device)
+    y = samp_mask.type(torch.float32).to(model_device)
 
     # Normalize and scale image
     X_scaled, normalize = normalize_and_scale(X, model)
 
     # Apply augmentations
-    X_aug, y_squeezed = apply_augmentations(X_scaled, y, spatial_augs, 
-                                            color_augs, spatial_aug_mode, 
-                                            color_aug_mode)
+    X_aug, y_squeezed = apply_augmentations(
+        X_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    )
 
     # Save training sample images if first batch
     if batch == 0:
-        save_training_images(epoch, batch, train_images_root, 
-                             X, samp_mask, X_aug, y_squeezed, sample)
+        save_training_images(
+            epoch,
+            batch,
+            train_images_root,
+            X,
+            samp_mask,
+            X_aug,
+            y_squeezed,
+            sample,
+        )
 
     return normalize(X_aug), y_squeezed
+
 
 def train_epoch(
     dataloader,
@@ -615,11 +633,11 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-            X = samp_image.to(device)
+            X = samp_image.to(model_device)
             normalize, scale = normalize_func(model)
             X_scaled = scale(X)
             X = normalize(X_scaled)
-            y = samp_mask.to(device)
+            y = samp_mask.to(model_device)
             if y.size(0) == 1:
                 y_squeezed = y
             else:
@@ -676,8 +694,10 @@ def test(
     final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
-    logging.info(f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, \
-                 Test avg loss: {test_loss:>4f} \n")
+    logging.info(
+        f"\nTest error: \n Jaccard index: {final_jaccard:>4f}, \
+                 Test avg loss: {test_loss:>4f} \n"
+    )
 
     # Access the labels and their names
     _labels = {}
@@ -691,6 +711,7 @@ def test(
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
+
 
 def train(
     model: Module,
@@ -974,12 +995,12 @@ if __name__ == "__main__":
     config = importlib.import_module(args.config)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
-    device = (
+    model_device = (
         "cuda"
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
-    logging.info(f"Using {device} device")
+    logging.info(f"Using {model_device} device")
 
     naip, kc = initialize_dataset()
 
