@@ -54,3 +54,9 @@ class KaneDEM(RasterDataset):
             "image"
         ]  # Assuming the elevation data is stored as 'image'
         return {"elevation": elevation}
+
+    def __getallbands__(self):
+        """
+        Get all bands for this dataset.
+        """
+        return self.all_bands
