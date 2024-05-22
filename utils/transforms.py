@@ -7,7 +7,8 @@ from other channels in an image tensor.
 - combine_channels(rgb, other_channels, rgb_mask, original_shape):
 Recombines the RGB and other channels after augmentation.
 - create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices):
-Creates lists of spatial and color augmentations based on provided indices and parameters.
+Creates lists of spatial and color augmentations based on provided indices 
+and parameters.
 - apply_augs(spatial_transforms, color_transforms, image, mask, spatial_mode,
 color_mode, rgb_channels=None): Applies spatial and color augmentations to an image
 and its corresponding mask.
