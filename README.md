@@ -18,7 +18,7 @@ Several tasks are associated with this project:
 3. Train a model to identify different types of locations (e.g., wet ponds, dry-turf bottom, dry-mesic prairie, and constructed wetland detention basins) and then use this model to identify other areas of the region with these attributes.
 
 These goals will be accomplished within the following pipeline structure:
-1. Preprocess Kane County stormwater structures shape data (preproc_kc.py) to obtain corresponding NAIP images (utils/get_naip_images.py).
+1. Obtain corresponding NAIP images (retrieve_images.py and utils/get_naip_images.py).
 2. Utilize a training loop (train.py) with configurations (configs/config.py) assigned to the cluster (.job), utilizing the model defined in utils/model.py and the custom Raster Dataset defined in utils/kc.py.
 
 ## Usage
@@ -104,7 +104,7 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 
 * train.py: code for training models
 * model.py: code defining model used for training
-* 
+* retrieve_images.py: code for obtaining image data used for training
 
 ### utils
 
