@@ -415,7 +415,7 @@ def apply_augmentations(
 
 
 def save_training_images(
-    epoch, batch, train_images_root, x, samp_mask, x_aug, y_aug, sample
+    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
 ):
     """
     Save training sample images.
