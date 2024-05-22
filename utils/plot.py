@@ -1,3 +1,40 @@
+"""
+Module: plot.py
+
+This module provides utility functions for working with image data, including
+building colormaps, plotting images, and analyzing ground truth masks.
+
+Dependencies:
+- matplotlib.patches as mpatches
+- matplotlib.pyplot as plt
+- numpy as np
+- torch
+- ListedColormap from matplotlib.colors
+- Tensor from torch
+- Dict from typing
+- BoundingBox from torchgeo.datasets.utils
+
+Functions:
+- build_cmap(colors: Dict[int, tuple]) -> ListedColormap:
+    Build a ListedColormap object from a dictionary.
+
+- plot_from_tensors(
+    sample: Dict[str, Tensor],
+    save_path: str,
+    mode: str = "row",
+    colors: Dict[int, tuple] = None,
+    labels: Dict[int, str] = None,
+    coords: BoundingBox = None
+) -> None:
+    Plots a sample from the training dataset and saves to provided file path.
+
+- determine_dominant_label(ground_truth: Tensor) -> int:
+    Determines the most common label ID from a ground truth mask tensor.
+
+- find_labels_in_ground_truth(ground_truth: Tensor) -> List[int]:
+    Finds all unique label IDs from a ground truth mask tensor.
+"""
+
 from typing import Dict
 
 import matplotlib.patches as mpatches
@@ -36,7 +73,6 @@ def build_cmap(colors: Dict[int, tuple]):
 def plot_from_tensors(
     sample: Dict[str, Tensor],
     save_path: str,
-    mode: str = "row",
     colors: Dict[int, tuple] = None,
     labels: Dict[int, str] = None,
     coords: BoundingBox = None,
@@ -54,9 +90,6 @@ def plot_from_tensors(
     save_path : str
         The path to save the plot to
 
-    mode : str
-        Either 'grid' or 'row' for orientation of images on plot
-
     colors : Dict[int, tuple]
         A dictionary containing a color mapping for masks
             keys : mask indices
@@ -71,67 +104,49 @@ def plot_from_tensors(
         The x, y, t coords for the sample taken from a dataloader sample's
         bbox key
     """
-    # create the colormap
-    if colors is not None:
-        cmap = build_cmap(colors)
-    else:
-        cmap = "viridis"
+    # Create the colormap
+    cmap = build_cmap(colors) if colors is not None else "viridis"
 
-    # Set the figure dimensions and create subplots accordingly
-    if mode == "grid":
-        n_rows = int(round(len(sample.keys()) / 2))
-        n_cols = 2 if len(sample.keys()) > 1 else 1
-        fig, axs = plt.subplots(n_rows, n_cols, figsize=(8, 8))
-        # Ensure axs is always an array, even if it's 1x1
-        axs = np.array(axs).reshape(-1)
-    elif mode == "row":
-        fig, axs = plt.subplots(1, len(sample.keys()), figsize=(12, 4))
-        # Ensure axs is always an array, even if it's 1x1
-        axs = np.array(axs).reshape(-1)
-    else:
-        raise ValueError("Invalid mode")
+    # Determine the layout and create subplots
+    num_keys = len(sample)
+    fig, axs = plt.subplots(
+        num_keys // 2 + num_keys % 2, min(num_keys, 2), figsize=(8, 8)
+    )
+    axs = np.array(axs).reshape(-1)
 
-    # Plot each input tensor
+    # Plot each input tensor and gather unique labels
     unique_labels = Tensor()
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
 
         if "image" in name.lower():
-            # Handle RGB image tensors by ignoring the NIR channel
-            img = tensor[0:3, :, :].permute(1, 2, 0)
+            img = tensor[0:3, :, :].permute(1, 2, 0)  # Handle RGB image tensors
             ax.imshow(img)
         else:
-            # Get the unique labels present in the mask
-            if len(tensor.shape) == 2:
-                unique = tensor.unique()
-                ax.imshow(
-                    tensor,
-                    cmap=cmap,
-                    vmin=0,
-                    vmax=len(cmap.colors) - 1,
-                    interpolation="none",
-                )
-            else:
-                unique = tensor[0].unique()
-                ax.imshow(
-                    tensor[0],
-                    cmap=cmap,
-                    vmin=0,
-                    vmax=len(cmap.colors) - 1,
-                    interpolation="none",
-                )
-            unique_labels = torch.cat((unique, unique_labels)).unique()
+            unique = (
+                tensor[0].unique()
+                if len(tensor.shape) != 2
+                else tensor.unique()
+            )
+            ax.imshow(
+                tensor[0] if len(tensor.shape) != 2 else tensor,
+                cmap=cmap,
+                vmin=0,
+                vmax=len(cmap.colors) - 1,
+                interpolation="none",
+            )
+            unique_labels = torch.cat((unique, unique_labels))
+
         ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
-        unique_labels = unique_labels.type(torch.int).tolist()
-        patches = []
-        for i in unique_labels:
-            patches.append(
-                mpatches.Patch(color=cmap.colors[i], label=labels[i])
-            )
+        unique_labels = unique_labels.unique().type(torch.int).tolist()
+        patches = [
+            mpatches.Patch(color=cmap.colors[i], label=labels[i])
+            for i in unique_labels
+        ]
 
         fig.legend(
             handles=patches,
@@ -140,7 +155,7 @@ def plot_from_tensors(
             borderaxespad=0.0,
         )
 
-    # If bounding box coords were provided, add them to the plot
+    # Add bounding box coords to the plot if provided
     if coords is not None:
         fig.text(0, 0, s=coords, fontsize=10, color="gray")
 

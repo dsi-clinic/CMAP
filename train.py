@@ -149,7 +149,7 @@ def build_dataset():
     """
     # record generator seed
     seed = random.randint(0, sys.maxsize)
-    logging.info(f"Dataset random split seed: {seed}")
+    logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
 
     # split the dataset
@@ -549,13 +549,13 @@ def train_epoch(
         train_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
-            logging.info(f"loss: {loss:>7f}  [{current:>5d}/{num_batches:>5d}]")
+            logging.info("loss: %7.7f  [%5d/%5d]", loss, current, num_batches)
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
-    logging.info(f"Train Jaccard index: {final_jaccard:.4f}")
+    logging.info("Train Jaccard index: %.4f", final_jaccard)
     return final_jaccard
 
 
@@ -683,7 +683,9 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info(f"IoU for {label_name}: {final_jaccard_per_class[i]} \n")
+        logging.info(
+            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
+        )
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -782,7 +784,7 @@ def train(
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
-        logging.info(f"Epoch {t + 1}\n-------------------------------")
+        logging.info("Epoch %d\n-------------------------------", t + 1)
         train_config = (
             loss_fn,
             train_jaccard,
@@ -830,14 +832,16 @@ def train(
             plateau_count += 1
             if plateau_count >= patience:
                 logging.info(
-                    f"Loss Plateau: {t} epochs, reached patience of {patience}"
+                    "Loss Plateau: %d epochs, reached patience of %d",
+                    t,
+                    patience,
                 )
                 break
 
     print("Done!")
 
     torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
-    logging.info(f"Saved PyTorch Model State to {out_root}")
+    logging.info("Saved PyTorch Model State to %s", out_root)
 
     return epoch_jaccard, t_jaccard
 
@@ -877,7 +881,7 @@ def run_trials():
             config.SPATIAL_AUG_INDICES,
             config.IMAGE_AUG_INDICES,
         )
-        logging.info(f"Trial {num + 1}\n====================================")
+        logging.info("Trial %d\n====================================", num + 1)
         train_test_config = (
             train_dataloader,
             train_jaccard,
@@ -976,7 +980,7 @@ if __name__ == "__main__":
         if torch.cuda.is_available()
         else "mps" if torch.backends.mps.is_available() else "cpu"
     )
-    logging.info(f"Using {device} device")
+    logging.info("Using %s device", device)
 
     naip, kc = initialize_dataset()
 
