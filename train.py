@@ -495,7 +495,6 @@ def train_setup(
     if batch == 0:
         save_training_images(
             epoch,
-            batch,
             train_images_root,
             x,
             samp_mask,
@@ -883,6 +882,61 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
+def one_trial(exp_n, num, wandb_t):
+    (
+        train_images_root,
+        test_image_root,
+        out_root,
+        writer,
+        logger,
+    ) = writer_prep(exp_n, num, wandb_t)
+    # randomly splitting the data at every trial
+    train_dataloader, test_dataloader = build_dataset()
+    (
+        model,
+        loss_fn,
+        train_jaccard,
+        test_jaccard,
+        jaccard_per_class,
+        optimizer,
+    ) = create_model()
+    spatial_augs, color_augs = create_augmentation_pipelines(
+        config,
+        config.SPATIAL_AUG_INDICES,
+        config.IMAGE_AUG_INDICES,
+    )
+    logging.info("Trial %d\n====================================", num + 1)
+    train_test_config = (
+        train_dataloader,
+        train_jaccard,
+        test_jaccard,
+        test_dataloader,
+        loss_fn,
+        optimizer,
+        jaccard_per_class,
+    )
+    aug_config = (
+        spatial_augs,
+        color_augs,
+    )
+    path_config = (
+        out_root,
+        train_images_root,
+        test_image_root,
+    )
+    train_iou, test_iou = train(
+        model,
+        train_test_config,
+        aug_config,
+        path_config,
+        writer,
+        wandb_tune,
+    )
+    writer.close()
+    logger.handlers.clear()
+    return train_iou, test_iou
+
+
 if __name__ == "__main__":
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -939,62 +993,9 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            (
-                train_images_root,
-                test_image_root,
-                out_root,
-                writer,
-                logger,
-            ) = writer_prep(exp_name, num, wandb_tune)
-            # randomly splitting the data at every trial
-            train_dataloader, test_dataloader = build_dataset()
-            (
-                model,
-                loss_fn,
-                train_jaccard,
-                test_jaccard,
-                jaccard_per_class,
-                optimizer,
-            ) = create_model()
-            spatial_augs, color_augs = create_augmentation_pipelines(
-                config,
-                config.SPATIAL_AUG_INDICES,
-                config.IMAGE_AUG_INDICES,
-            )
-            logging.info(
-                "Trial %d\n====================================", num + 1
-            )
-            train_test_config = (
-                train_dataloader,
-                train_jaccard,
-                test_jaccard,
-                test_dataloader,
-                loss_fn,
-                optimizer,
-                jaccard_per_class,
-            )
-            aug_config = (
-                spatial_augs,
-                color_augs,
-            )
-            path_config = (
-                out_root,
-                train_images_root,
-                test_image_root,
-            )
-            train_iou, test_iou = train(
-                model,
-                train_test_config,
-                aug_config,
-                path_config,
-                writer,
-                wandb_tune,
-            )
-
+            train_iou, test_iou = one_trial(exp_name, num, wandb_tune)
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
-            writer.close()
-            logger.handlers.clear()
 
         test_average = mean(test_ious)
         train_average = mean(train_ious)
