@@ -258,12 +258,10 @@ def create_model():
         "model": config.MODEL,
         "backbone": config.BACKBONE,
         "num_classes": config.NUM_CLASSES,
-        "weights": config.WEIGHTS
+        "weights": config.WEIGHTS,
     }
 
-    model = SegmentationModel(
-        model_configs
-    ).model.to(MODEL_DEVICE)
+    model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
