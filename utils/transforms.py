@@ -118,6 +118,7 @@ def create_augmentation_pipelines(
 
     return selected_spatial_transforms, selected_color_transforms
 
+
 def apply_augs(
     aug_config,
     image,
@@ -172,6 +173,7 @@ def apply_augs(
 
     return fully_augmented_image, augmented_mask
 
+
 def get_spatial_augmentation(spatial_transforms, mode, image, mask):
     """
     Return the image and mask after spatial augmentation
@@ -198,6 +200,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
 
     # Apply spatial augmentations to the image and mask
     return spatial_aug_pipeline(image, mask)
+
 
 def get_augmented_rgb(color_transforms, mode, rgb_only):
     """

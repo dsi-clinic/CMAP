@@ -414,6 +414,7 @@ def apply_augmentations(
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed
 
+
 def save_training_images(
     epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
 ):
