@@ -408,9 +408,8 @@ def apply_augmentations(
     """
     Apply augmentations to the image and mask.
     """
-    x_aug, y_aug = apply_augs(
-        spatial_augs, color_augs, x_og, y_og, spatial_aug_mode, color_aug_mode
-    )
+    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
+    x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed

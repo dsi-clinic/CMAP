@@ -120,8 +120,7 @@ def create_augmentation_pipelines(
 
 
 def apply_augs(
-    spatial_transforms,
-    color_transforms,
+    aug_config,
     image,
     mask,
     rgb_channels=None,
@@ -144,41 +143,50 @@ def apply_augs(
     if rgb_channels is None:
         rgb_channels = [0, 1, 2]
 
+    # Create a boolean mask for identifying RGB channels
+    rgb_mask = torch.zeros(
+        image.shape[1], dtype=torch.bool, device=image.device
+    )
+    rgb_mask[rgb_channels] = True
+
+    spatial_transforms, color_transforms, spatial_mode, color_mode = aug_config
+
     # Apply spatial augmentations to the image and mask
-    spatial_aug_pipeline = get_spatial_aug_pipeline(spatial_transforms)
-    augmented_image, augmented_mask = spatial_aug_pipeline(image, mask)
+    augmented_image, augmented_mask = get_spatial_augmentation(
+        spatial_transforms, spatial_mode, image, mask
+    )
 
     # Separate RGB channels for color augmentation
     rgb_only, non_rgb = separate_channels(augmented_image, rgb_channels)
 
     # Apply color augmentations only to the RGB channels
-    color_aug_pipeline = get_color_aug_pipeline(color_transforms)
-    augmented_rgb = color_aug_pipeline(rgb_only)
+    augmented_rgb = get_augmented_rgb(color_transforms, color_mode, rgb_only)
 
     # Recombine RGB and non-RGB channels
     fully_augmented_image = combine_channels(
-        augmented_rgb, non_rgb, torch.tensor(rgb_channels).bool(), image.shape
+        augmented_rgb, non_rgb, rgb_mask, image.shape
     )
 
-    # Ensure color augmentations do not affect zero-padded areas
+    # Generate a mask of non-padded areas in the augmented image
+    # and ensure color augmentations do not affect zero-padded areas
     fully_augmented_image *= augmented_image.any(dim=1, keepdim=True)
 
     return fully_augmented_image, augmented_mask
 
 
-def get_spatial_aug_pipeline(spatial_transforms):
+def get_spatial_augmentation(spatial_transforms, mode, image, mask):
     """
-    Return spatial augmentation pipeline
+    Return the image and mask after spatial augmentation
 
     Parameters:
         spatial_transforms (list): List of spatial augmentations to apply.
+        mode (str): Augmentation mode - 'random' for random augmentations
+                    or 'all' for all.
+        image (torch.Tensor): The input image tensor.
+        mask (torch.Tensor): The corresponding mask tensor.
     """
-    spatial_mode = (
-        spatial_transforms if isinstance(spatial_transforms, str) else None
-    )
-
     # Randomly select augmentations if modes are specified
-    if spatial_mode:
+    if mode:
         spatial_augmentations = random.sample(
             spatial_transforms, k=random.randint(1, len(spatial_transforms))
         )
@@ -186,21 +194,25 @@ def get_spatial_aug_pipeline(spatial_transforms):
         spatial_augmentations = spatial_transforms
 
     # Apply spatial augmentations to the image and mask
-    return K.AugmentationSequential(
+    spatial_aug_pipeline = K.AugmentationSequential(
         *spatial_augmentations, data_keys=["image", "mask"], same_on_batch=False
     )
 
+    # Apply spatial augmentations to the image and mask
+    return spatial_aug_pipeline(image, mask)
 
-def get_color_aug_pipeline(color_transforms):
+
+def get_augmented_rgb(color_transforms, mode, rgb_only):
     """
-    Return color augmentation pipeline
+    Return the RGB channels after color augmentation
 
     Parameters:
         color_transforms (list): List of color augmentations to apply.
+        mode (str): Augmentation mode - 'random' for random augmentations
+                    or 'all' for all.
+        rgb_only: The RGB channels to apply color augmentations to
     """
-    color_mode = color_transforms if isinstance(color_transforms, str) else None
-
-    if color_mode:
+    if mode:
         color_augmentations = random.sample(
             color_transforms, k=random.randint(1, len(color_transforms))
         )
@@ -208,6 +220,8 @@ def get_color_aug_pipeline(color_transforms):
         color_augmentations = color_transforms
 
     # Apply color augmentations only to the RGB channels
-    return K.AugmentationSequential(
+    color_aug_pipeline = K.AugmentationSequential(
         *color_augmentations, data_keys=["image"], same_on_batch=False
     )
+
+    return color_aug_pipeline(rgb_only)
