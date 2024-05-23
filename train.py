@@ -146,7 +146,7 @@ def initialize_dataset():
     return naip_dataset, kc_dataset
 
 
-def build_dataset():
+def build_dataset(naip_set, split_rate):
     """
     Randomly split and load data to be the test and train sets
     Returns train dataloader and test dataloader
@@ -158,7 +158,7 @@ def build_dataset():
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
-        naip, [split, 1 - split], generator
+        naip_set, [split_rate, 1 - split_rate], generator
     )
     train_dataset = train_portion & kc
     test_dataset = test_portion & kc
@@ -403,11 +403,12 @@ def add_extra_channels(image, model):
 
 
 def apply_augmentations(
-    x_og, y_og, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    dataset, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
 ):
     """
     Apply augmentations to the image and mask.
     """
+    x_og, y_og = dataset
     aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
     x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
@@ -486,16 +487,16 @@ def train_setup(
     # Normalize and scale image
     x_scaled, normalize = normalize_and_scale(x, model)
 
+    img_data = (x_scaled, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
-        x_scaled, y, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+        img_data, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
     )
 
     # Save training sample images if first batch
     if batch == 0:
         save_training_images(
             epoch,
-            batch,
             train_images_root,
             x,
             samp_mask,
@@ -798,6 +799,7 @@ def train(
     # reducing number of epoch in hyperparameter tuning
     if wandb_t:
         epoch_config = 10
+
     else:
         epoch_config = config.EPOCHS
 
@@ -883,6 +885,68 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
+def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
+    """
+    Runing a single trial of training
+    Input:
+        exp_n: experiment name
+        num: current number of trial
+        wandb_t: whether tuning with wandb
+    """
+    (
+        train_images_root,
+        test_image_root,
+        out_root,
+        writer,
+        logger,
+    ) = writer_prep(exp_n, num, wandb_t)
+    # randomly splitting the data at every trial
+    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate)
+    (
+        model,
+        loss_fn,
+        train_jaccard,
+        test_jaccard,
+        jaccard_per_class,
+        optimizer,
+    ) = create_model()
+    spatial_augs, color_augs = create_augmentation_pipelines(
+        config,
+        config.SPATIAL_AUG_INDICES,
+        config.IMAGE_AUG_INDICES,
+    )
+    logging.info("Trial %d\n====================================", num + 1)
+    train_test_config = (
+        train_dataloader,
+        train_jaccard,
+        test_jaccard,
+        test_dataloader,
+        loss_fn,
+        optimizer,
+        jaccard_per_class,
+    )
+    aug_config = (
+        spatial_augs,
+        color_augs,
+    )
+    path_config = (
+        out_root,
+        train_images_root,
+        test_image_root,
+    )
+    train_iou, test_iou = train(
+        model,
+        train_test_config,
+        aug_config,
+        path_config,
+        writer,
+        wandb_tune,
+    )
+    writer.close()
+    logger.handlers.clear()
+    return train_iou, test_iou
+
+
 if __name__ == "__main__":
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -939,62 +1003,11 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            (
-                train_images_root,
-                test_image_root,
-                out_root,
-                writer,
-                logger,
-            ) = writer_prep(exp_name, num, wandb_tune)
-            # randomly splitting the data at every trial
-            train_dataloader, test_dataloader = build_dataset()
-            (
-                model,
-                loss_fn,
-                train_jaccard,
-                test_jaccard,
-                jaccard_per_class,
-                optimizer,
-            ) = create_model()
-            spatial_augs, color_augs = create_augmentation_pipelines(
-                config,
-                config.SPATIAL_AUG_INDICES,
-                config.IMAGE_AUG_INDICES,
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, naip, split
             )
-            logging.info(
-                "Trial %d\n====================================", num + 1
-            )
-            train_test_config = (
-                train_dataloader,
-                train_jaccard,
-                test_jaccard,
-                test_dataloader,
-                loss_fn,
-                optimizer,
-                jaccard_per_class,
-            )
-            aug_config = (
-                spatial_augs,
-                color_augs,
-            )
-            path_config = (
-                out_root,
-                train_images_root,
-                test_image_root,
-            )
-            train_iou, test_iou = train(
-                model,
-                train_test_config,
-                aug_config,
-                path_config,
-                writer,
-                wandb_tune,
-            )
-
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
-            writer.close()
-            logger.handlers.clear()
 
         test_average = mean(test_ious)
         train_average = mean(train_ious)
