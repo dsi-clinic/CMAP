@@ -1003,7 +1003,9 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, naip, split
+            )
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 
