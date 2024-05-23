@@ -254,11 +254,15 @@ def create_model():
             - optimizer: The optimizer for training the model.
     """
     # create the model
+    model_configs = {
+        "model": config.MODEL,
+        "backbone": config.BACKBONE,
+        "num_classes": config.NUM_CLASSES,
+        "weights": config.WEIGHTS
+    }
+
     model = SegmentationModel(
-        model=config.MODEL,
-        backbone=config.BACKBONE,
-        num_classes=config.NUM_CLASSES,
-        weights=config.WEIGHTS,
+        model_configs
     ).model.to(MODEL_DEVICE)
     logging.info(model)
 
