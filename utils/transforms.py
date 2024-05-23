@@ -217,8 +217,11 @@ def get_augmented_rgb(color_transforms, mode, rgb_only):
         color_augmentations = color_transforms
 
     # Apply color augmentations only to the RGB channels
-    color_aug_pipeline = K.AugmentationSequential(
+    return K.AugmentationSequential(
         *color_augmentations, data_keys=["image"], same_on_batch=False
     )
+<<<<<<< HEAD
 
     return color_aug_pipeline(rgb_only)
+=======
+>>>>>>> main
