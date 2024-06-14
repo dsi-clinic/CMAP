@@ -28,7 +28,8 @@ These goals will be accomplished within the following pipeline structure:
 
 Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
-2. Create and initiate a cmap specific conda environment using the following steps:
+2. Ensure you have access to [Slurm] (python train.py configs.config --experiment_name baseline_v1). 
+3. Create and initiate a cmap specific conda environment using the following steps:
     1) Install miniconda:
     ```
     mkdir -p ~/miniconda3
@@ -43,8 +44,7 @@ Before running the repository (see details below), you need to perform the follo
     pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
 ### Example of Training in Command Line
-Next, you can train the model in an interactive session
-
+Next, you can train the model in an interactive session.  
 ```
 srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
 
@@ -52,8 +52,12 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
+
+Replace the <ExperimentName> with what you want to title the experiment. For example, if you want to title it baseline_v1, the code will be: 
+```python train.py configs.config --experiment_name baseline_v1``` 
+.Aug_type, split, and num_trial are optional so you can ignore them if you don't have their parameters.
 
 ### Example of Training with Slurm
 
@@ -81,7 +85,7 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
+python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
 ```
 
 Or, to run in an interactive session:
@@ -92,7 +96,7 @@ conda activate cmap
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] [--num_trial <num_trial>]
+python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
 
 ## Git Usage
