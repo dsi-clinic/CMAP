@@ -16,8 +16,10 @@ from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
 
+
 import kornia.augmentation as K
 import torch
+
 import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW
@@ -27,11 +29,16 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
+from data.rd import RiverDataset
 from data.kc import KaneCounty
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
+
+# importing river images
+from retrieve_images import get_kane_county_river_images
+from utils.get_naip_images import get_river_geometry
 
 MODEL_DEVICE = (
     "cuda"
@@ -113,9 +120,7 @@ def initialize_dataset():
     """
     Initialize the dataset by loading NAIP and KaneCounty data.
     This function loads NAIP (National Agriculture Imagery Program)
-    data and KaneCounty shapefile data. Optionally, if DEM
-    (Digital Elevation Model) data is provided, it is also loaded
-    and merged with NAIP data.
+    data and KaneCounty shapefile data.
 
     Args:
         config: settings in the configuration file
@@ -126,9 +131,10 @@ def initialize_dataset():
             The first element is the NAIP dataset, and the
             second element is the KaneCounty dataset.
     """
-    naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+    naip_dataset = NAIP(config.KC_RIVER_ROOT)
+
+    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
     dataset_config = (
         config.KC_LAYER,
         config.KC_LABELS,
@@ -136,14 +142,16 @@ def initialize_dataset():
         naip_dataset.crs,
         naip_dataset.res,
     )
-    kc_dataset = KaneCounty(shape_path, dataset_config)
+    labels = RiverDataset(shape_path, dataset_config)
 
-    if config.KC_DEM_ROOT is not None:
-        dem = KaneDEM(config.KC_DEM_ROOT)
-        naip_dataset = naip_dataset & dem
-        print("naip and dem loaded")
+    if config.KC_RIVER_ROOT is not None:
+        # river_images = NAIP(config.KC_RIVER_ROOT)
+        river_labels = RiverDataset(...)
+        images = naip_dataset
+        labels = labels & river_labels
+        print("naip and river data loaded")
 
-    return naip_dataset, kc_dataset
+    return images, labels
 
 
 def build_dataset(naip_set, split_rate):
@@ -160,8 +168,8 @@ def build_dataset(naip_set, split_rate):
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & kc
-    test_dataset = test_portion & kc
+    train_dataset = train_portion & rd
+    test_dataset = test_portion & rd
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -439,8 +447,8 @@ def save_training_images(
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            kc.colors,
-            kc.labels_inverse,
+            rd.colors,
+            rd.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -687,7 +695,7 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = rd.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = os.path.join(epoch_dir, label_name)
                         if not os.path.exists(save_dir):
                             os.makedirs(save_dir)
@@ -697,8 +705,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            kc.colors,
-                            kc.labels_inverse,
+                            rd.colors,
+                            rd.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -714,7 +722,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in kc.labels.items():
+    for label_name, label_id in rd.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -987,7 +995,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset()
+    naip, rd = initialize_dataset()
 
     def run_trials():
         """
