@@ -59,7 +59,12 @@ python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type 
 
 If you have access to Slurm, you can also train model with it. For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
 
-To run this repo on the Slurm cluster after setting up your conda environment, you can use the following submit script to run a training loop:
+This option is best if you know that your code runs and you don't need to test anything with it. 
+
+To run this repo on the Slurm cluster after setting up your conda environment, 
+
+1. Create a file on 2024-winter-cmap called 'submit.sh'. 
+2. Copy paste the following into that file, changing YOUR-USERNAME to your username:
 ```
 #!/bin/bash -l
 #
@@ -81,8 +86,9 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
+python train.py configs.config [--experiment_name <ExperimentName>] [--aug_type <aug>] [--split <split>] --num_trial <num_trial>
 ```
+3. To run the file on terminal, type: `sbatch submit.sh`. You can monitor whether your job is running with `squeue`.  
 
 Or, to run in an interactive session:
 ```
