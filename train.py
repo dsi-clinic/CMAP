@@ -132,24 +132,79 @@ def initialize_dataset():
             second element is the KaneCounty dataset.
     """
 
-    naip_dataset = NAIP(config.KC_RIVER_ROOT)
+    images = NAIP(config.KC_IMAGE_ROOT)
 
-    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
+    # debug print
+    print("NAIP images loaded")
+    print(f"NAIP images loaded from {config.KC_IMAGE_ROOT}")
+
+    kc_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+
+    # debug print
+    print(f"KaneCounty shapefile path: {kc_shape_path}")
+
     dataset_config = (
         config.KC_LAYER,
         config.KC_LABELS,
         config.PATCH_SIZE,
-        naip_dataset.crs,
-        naip_dataset.res,
+        images.crs,
+        images.res,
     )
-    labels = RiverDataset(shape_path, dataset_config)
+
+    # debug print
+    print(f"KaneCounty dataset configuration: Layer: {config.KC_LAYER}, Labels: {config.KC_LABELS}")
+
+    labels = KaneCounty(kc_shape_path, dataset_config)
+
+    # debug print
+    print("kane county labels loaded successfully")
+    print(f"Labels data: {labels}")
+    #print(f"KaneCounty GeoDataFrame:\n{labels.geo_dataframe.head()}")
 
     if config.KC_RIVER_ROOT is not None:
-        # river_images = NAIP(config.KC_RIVER_ROOT)
-        river_labels = RiverDataset(...)
-        images = naip_dataset
-        labels = labels & river_labels
-        print("naip and river data loaded")
+
+        # debug print
+        print("river data found")
+        # Debug prints for river shapefile path components
+        print(f"KC_SHAPE_ROOT: {config.KC_SHAPE_ROOT}")
+        print(f"RD_SHAPE_FILE: {config.RD_SHAPE_FILE}")
+
+        river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
+
+        # debug print
+        print(f"river datat shapefile path: {river_shape_path}")
+
+        dataset_config = (
+            {"STREAM/RIVER": 1},
+            config.PATCH_SIZE,
+            images.crs,
+            images.res,
+        )
+
+        # debug print
+        print(f"RIVER dataset configuration: Layer: {config.RD_LAYER}, Labels: 'STREAM/RIVER'")
+
+        # debug print
+        print(f"River dataset configuration: {dataset_config}")
+        
+        images = images & NAIP(config.KC_RIVER_ROOT)
+        #images = NAIP(config.KC_RIVER_ROOT)
+
+        # debug print
+        print("merging datasets(river and all images) for training...")
+
+        # debug print
+        print(f"NAIP river images loaded and merged from {config.KC_RIVER_ROOT}")
+
+# THIS IS WHERE I AM GETTING THE ERROR 
+        riverdata = RiverDataset(river_shape_path, dataset_config)
+        # debug print
+        print("riverdata labels loaded successfully")
+        print(f"Labels data: {riverdata}")
+
+        labels = labels & riverdata
+
+        print(f"River labels loaded and merged from {river_shape_path}")
 
     return images, labels
 

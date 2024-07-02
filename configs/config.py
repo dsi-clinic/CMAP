@@ -95,14 +95,22 @@ COLOR_AUG_MODE = "all"  # all or random
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
 KC_LAYER = 4
+
 KC_LABELS = {
     "BACKGROUND": 0,
-    #"POND": 1,
-    #"WETLAND": 2,
-    #"DRY BOTTOM - TURF": 3,
-    #"DRY BOTTOM - MESIC PRAIRIE": 4,
+    "POND": 1,
+    "WETLAND": 2,
+    "DRY BOTTOM - TURF": 3,
+    "DRY BOTTOM - MESIC PRAIRIE": 4,
+}
+# River data
+RD_LAYER = 1
+RD_LABELS = {
+    "BACKGROUND": 0,
     "STREAM/RIVER": 1,
 }
+
+
 
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 

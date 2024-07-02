@@ -105,8 +105,18 @@ class KaneCounty(GeoDataset):
             gdf: A GeoDataFrame filtered and converted to the target CRS
         """
         gdf = gpd.read_file(path, layer=layer)[["BasinType", "geometry"]]
+
+        # debug print 
+        print("Initial Kane County GeoDataFrame loaded:")
+        print(gdf.head())
+
         gdf = gdf[gdf["BasinType"].isin(labels.keys())]
         gdf = gdf.to_crs(dest_crs)
+
+        # debbug print
+        print("Kane countys filtered gdf")
+        print(gdf.head())
+
         return gdf
 
     def _populate_index(self, path, gdf, context_size):

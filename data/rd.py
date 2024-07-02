@@ -24,13 +24,13 @@ class RiverDataset(GeoDataset):
 
     # all colors and labels
     all_colors = {
-        0: (255, 255, 0, 255),
-        1: (255, 255, 255, 255),
+        0: (0, 0, 0, 0),
+        1: (255, 255, 0, 255),
     }
 
     all_labels = {
-        0: "STREAM/RIVER",
-        1: "UNKNOWN",
+        0: "BACKGROUND",
+        1: "STREAM/RIVER"
     }
 
     def __init__(self, path: str, configs) -> None:
@@ -50,9 +50,13 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
-        layer, labels, patch_size, dest_crs, res = configs
-        gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
+        labels, patch_size, dest_crs, res = configs
+        gdf = self._load_and_prepare_data(path, dest_crs)
         self.gdf = gdf
+
+        # Debug prints
+        print(f"Configs received: {configs}")
+        print(f"Type of labels: {type(labels)}, Content: {labels}")
 
         context_size = math.ceil(patch_size / 2 * res)
         self.context_size = context_size
@@ -61,10 +65,14 @@ class RiverDataset(GeoDataset):
 
         self._populate_index(path, gdf, context_size)
         self.labels = labels
-        self.colors = {i: self.all_colors.get(i, (0, 0, 0, 0)) for i in labels.values()}
+        self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
-    def _load_and_prepare_data(self, path, layer, labels, dest_crs):
+         # Debug print
+        print(f"Initializing RiverDataset with configs: {configs}")
+
+
+    def _load_and_prepare_data(self, path, dest_crs):
         """Load and prepare the GeoDataFrame.
 
         Args:
@@ -78,11 +86,22 @@ class RiverDataset(GeoDataset):
         """
 
         # Read the shapefile into a GeoDataFrame
-        gdf = gpd.read_file(path, layer = layer)
+        gdf = gpd.read_file(path)
+
+        # debug print 
+        print("Initial GeoDataFrame loaded:")
+        print(gdf.head())
+        
+        # Debug print: Check unique values in FCODE
+        print(f"Unique FCODE values: {gdf['FCODE'].unique()}")
 
         # Filter by FCODE to only include stream and river
         gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
-        gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+        #gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+
+        # debug print
+        print("GeoDataFrame after filtering by FCODE:")
+        print(gdf.head())
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
@@ -136,7 +155,8 @@ class RiverDataset(GeoDataset):
         shapes = []
         for obj in objs:
             shape = obj["geometry"]
-            label = self.labels[obj["BasinType"]]
+            label = self.labels[obj["OBJECTID_1"]]
+            #label = self.labels
             shapes.append((shape, label))
 
         width = (query.maxx - query.minx) / self._res
