@@ -155,7 +155,7 @@ class RiverDataset(GeoDataset):
         shapes = []
         for obj in objs:
             shape = obj["geometry"]
-            label = self.labels[obj["OBJECTID_1"]]
+            label = self.labels[obj["FCODE"]]
             #label = self.labels
             shapes.append((shape, label))
 

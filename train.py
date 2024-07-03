@@ -406,10 +406,19 @@ def normalize_func(model):
     data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
+
+    # debug print
+    print("len data mean ", len(data_mean))
+
     if len(data_mean) != model.in_channels:
+
+        print("len data mean ", len(data_mean))
+        print("model in channels", model.in_channels)
+
         for _ in range(model.in_channels - len(data_mean)):
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
+            print("len data mean in for-loop ", len(data_mean))
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
@@ -704,12 +713,19 @@ def test(
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
+            print("printing the shape of x- first for-loop, ", samp_image.shape)
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
+                print("printing the shape of x- if sample != model in channels, ", samp_image.shape)
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
+
+                    print("printing the shape of x- if sample != model in channels- for-loop, ", x.shape)
             x = samp_image.to(MODEL_DEVICE)
+
+            print("printing the shape of x, ", x.shape)
+
             normalize, scale = normalize_func(model)
             x_scaled = scale(x)
             x = normalize(x_scaled)

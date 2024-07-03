@@ -113,7 +113,7 @@ class KaneCounty(GeoDataset):
         gdf = gdf[gdf["BasinType"].isin(labels.keys())]
         gdf = gdf.to_crs(dest_crs)
 
-        # debbug print
+        # debug print
         print("Kane countys filtered gdf")
         print(gdf.head())
 
