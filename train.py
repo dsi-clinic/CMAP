@@ -138,6 +138,7 @@ def initialize_dataset():
     print("NAIP images loaded")
     print(f"NAIP images loaded from {config.KC_IMAGE_ROOT}")
 
+
     kc_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
 
     # debug print
@@ -196,7 +197,6 @@ def initialize_dataset():
         # debug print
         print(f"NAIP river images loaded and merged from {config.KC_RIVER_ROOT}")
 
-# THIS IS WHERE I AM GETTING THE ERROR 
         riverdata = RiverDataset(river_shape_path, dataset_config)
         # debug print
         print("riverdata labels loaded successfully")
@@ -411,7 +411,7 @@ def normalize_func(model):
     print("len data mean ", len(data_mean))
 
     if len(data_mean) != model.in_channels:
-
+        
         print("len data mean ", len(data_mean))
         print("model in channels", model.in_channels)
 
@@ -419,7 +419,7 @@ def normalize_func(model):
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
             print("len data mean in for-loop ", len(data_mean))
-
+        
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
     normalize = K.Normalize(mean=data_mean, std=data_std)
