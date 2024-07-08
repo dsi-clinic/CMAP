@@ -18,4 +18,4 @@ export PATH="/home/YOUR_USERNAME/miniconda/bin:$PATH"
 
 cd /home/YOUR_USERNAME/2024-winter-cmap
 
-python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>$SLURM_ARRAY_TASK_ID
+python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
