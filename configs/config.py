@@ -14,6 +14,12 @@ KC_DEM_ROOT = None
 KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
 OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
+DIFFSAT_IMGS_ROOT = "/net/scratch/ijain1/naip_dataset"
+# this is where the images from generate image dataset is saved. if you want to change, edit at the bottom of the file when parsing argument into save_naip_images
+
+DIFFSAT_MODEL_ROOT = '/net/scratch/ijain1/finetuning_unconditional_final_model-loss'
+# for instructions on how to retrain, look on https://github.com/ishitajain21/diffusers/tree/main 
+
 # model selection
 MODEL = "deeplabv3+"
 BACKBONE = "resnet101"

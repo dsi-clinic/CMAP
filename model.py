@@ -138,7 +138,7 @@ class SegmentationModel:
                     in_channels=self.in_channels,
                     classes=self.num_classes,
                 )
-
+                
             elif model == "fcn":
                 self.model = FCN(
                     in_channels=self.in_channels,
