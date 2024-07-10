@@ -21,7 +21,7 @@ DIFFSAT_MODEL_ROOT = '/net/scratch/ijain1/finetuning_unconditional_final_model-l
 # for instructions on how to retrain, look on https://github.com/ishitajain21/diffusers/tree/main 
 
 # model selection
-MODEL = "deeplabv3+"
+MODEL = "Diffsat"
 BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
