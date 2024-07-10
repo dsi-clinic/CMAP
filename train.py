@@ -53,8 +53,8 @@ def arg_parsing(argument):
     # tuning with wandb
     wandb_tune_arg = argument.tune
     num_trials_arg = int(argument.num_trials)
-    model_type = argument.model_type
-    return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg, model_type
+
+    return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
 
 def writer_prep(exp_n, trial_num, wandb_t):
@@ -320,35 +320,40 @@ def copy_first_entry(a_list: list) -> list:
     return a_list
 
 
-def normalize_func(model, model_type):
+def normalize_func(model):
     """
     Create normalization functions for input data to a given model.
 
+    This function generates normalization functions based on the mean
+    and standard deviation specified in the configuration. If the
+    number of channels in the model input does not match the length of
+    the mean and standard deviation lists, it replicates the first entry
+    of each list to match the number of input channels.
+
     Args:
         model: The model for which the normalization functions are created.
-        model_type: The type of model being used ('cmap' or 'diffsat')
 
     Returns:
         tuple: A tuple containing two normalization functions.
+               The first function normalizes input data using the specified
+               mean and standard deviation.
+               The second function scales input data to a range between 0 and 255.
     """
     data_mean = config.DATASET_MEAN
     data_std = config.DATASET_STD
-
-    if model_type == 'diffsat':
-        data_mean = data_mean[:3]
-        data_std = data_std[:3]
-    else:
-        # Original behavior for other models
-        if len(data_mean) != model.in_channels:
-            for _ in range(model.in_channels - len(data_mean)):
-                data_mean = copy_first_entry(data_mean)
-                data_std = copy_first_entry(data_std)
+    # add copies of first entry to DATASET_MEAN and DATASET_STD
+    # to match data in_channels
+    if len(data_mean) != model.in_channels:
+        for _ in range(model.in_channels - len(data_mean)):
+            data_mean = copy_first_entry(data_mean)
+            data_std = copy_first_entry(data_std)
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
     normalize = K.Normalize(mean=data_mean, std=data_std)
     scale = K.Normalize(mean=scale_mean, std=scale_std)
     return normalize, scale
+
 
 def add_extra_channel(
     image_tensor: torch.Tensor, source_channel: int = 0
@@ -377,25 +382,7 @@ def add_extra_channel(
     augmented_tensor = torch.cat((image_tensor, extra_channel), dim=1)
 
     return augmented_tensor
-def ensure_correct_channels(image: torch.Tensor, model_type: str, model_in_channels: int) -> torch.Tensor:
-    """
-    Ensures the image has the correct number of channels based on the model type.
 
-    Args:
-        image_tensor: A tensor containing image data. Expected shape is (batch, channels, h, w)
-        model_type: The type of model being used ('cmap' or 'diffsat')
-        model_in_channels: The number of input channels expected by the model
-
-    Returns:
-        torch.Tensor: A modified tensor with the correct number of channels
-    """
-    if model_type == 'diffsat':
-        return image[:, :3, :, :]  # Always return 3 channels for diffsat
-    else:
-        # Original behavior for other models
-        while image.size(1) < model_in_channels:
-            image = add_extra_channel(image)
-        return image
 
 def normalize_and_scale(sample_image, model):
     """
@@ -463,7 +450,6 @@ def train_setup(
     train_config,
     aug_config,
     model,
-    model_type,
 ) -> Tuple[torch.Tensor]:
     """
     Sets up for the training step by sending images and masks to device,
@@ -492,15 +478,15 @@ def train_setup(
     samp_mask = sample["mask"]
 
     # Add extra channels to image if necessary
-    samp_image = ensure_correct_channels(samp_image, model_type, model.in_channels)
+    samp_image = add_extra_channels(samp_image, model)
 
     # Send image and mask to device; convert mask to float tensor for augmentation
     x = samp_image.to(MODEL_DEVICE)
     y = samp_mask.type(torch.float32).to(MODEL_DEVICE)
 
     # Normalize and scale image
-    normalize, scale = normalize_func(model, model_type)
-    x_scaled = scale(x)
+    x_scaled, normalize = normalize_and_scale(x, model)
+
     img_data = (x_scaled, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
@@ -749,7 +735,6 @@ def train(
     path_config: Tuple[str, str, str],
     writer: SummaryWriter,
     wandb_t,
-    model_type: str,
 ) -> Tuple[float, float]:
     """
     Train a deep learning model using the specified configuration and parameters.
@@ -995,18 +980,10 @@ if __name__ == "__main__":
         help="Please enter the number of trial for each train",
         default="1",
     )
-    parser.add_argument(
-        "--model_type", 
-        type=str, 
-        default="cmap",
-        choices=['diffsat', 'cmap'], 
-        help="To train with regular model or to train with diffsat model", 
-        
-    )
 
     args = parser.parse_args()
     config = importlib.import_module(args.config)
-    exp_name, split, wandb_tune, num_trials,model_type = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
@@ -1055,21 +1032,4 @@ if __name__ == "__main__":
             run.log({"average_test_jaccard_index": test_average})
             wandb.finish()
 
-    if model_type == 'cmap':
-        run_trials()
-    else: 
-        # change code somewhere to cut off the NIR channels 
-        # out channels = 
-        # let anna know where the different repos are
-        # command click on from pretrained. change channels keyword arguments 
-        # extremly minor surgery to just change the out channels. 
-        # if no keyword argument that lets you change out channels. 
-        # create a model, print model, put in slack and anna can help, 
-        # __repr__ method. in a pytorch model, torch.nn.module is subclased by pytorch. 
-        # change # of outchannels in final linear layer. do that by just replacing it. 
-        # model in last linear 
-        # outchannels of diffusion model = # of classes we are trying to predict 
-        # the diffusion model 
-        # copy-paste the code where you create the model. copy paste what it prints. 
-        # initialize the weights because th emodel is pretrained. for the last layer (change output channels) properly intialize that last layer. some kind of optimal distruution to iinitalize. 
-        # is the data one hot encoded? 
+    run_trials()
