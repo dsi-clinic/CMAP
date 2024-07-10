@@ -1058,6 +1058,18 @@ if __name__ == "__main__":
     if model_type == 'cmap':
         run_trials()
     else: 
-        print("To be constructed")
-        print()
-        
+        # change code somewhere to cut off the NIR channels 
+        # out channels = 
+        # let anna know where the different repos are
+        # command click on from pretrained. change channels keyword arguments 
+        # extremly minor surgery to just change the out channels. 
+        # if no keyword argument that lets you change out channels. 
+        # create a model, print model, put in slack and anna can help, 
+        # __repr__ method. in a pytorch model, torch.nn.module is subclased by pytorch. 
+        # change # of outchannels in final linear layer. do that by just replacing it. 
+        # model in last linear 
+        # outchannels of diffusion model = # of classes we are trying to predict 
+        # the diffusion model 
+        # copy-paste the code where you create the model. copy paste what it prints. 
+        # initialize the weights because th emodel is pretrained. for the last layer (change output channels) properly intialize that last layer. some kind of optimal distruution to iinitalize. 
+        # is the data one hot encoded? 
