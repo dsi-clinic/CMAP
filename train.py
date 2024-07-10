@@ -162,6 +162,7 @@ def initialize_dataset():
     print(f"Labels data: {labels}")
     #print(f"KaneCounty GeoDataFrame:\n{labels.geo_dataframe.head()}")
 
+
     if config.KC_RIVER_ROOT is not None:
 
         # debug print
@@ -188,7 +189,7 @@ def initialize_dataset():
         # debug print
         print(f"River dataset configuration: {dataset_config}")
         
-        images = images & NAIP(config.KC_RIVER_ROOT)
+        images = images | NAIP(config.KC_RIVER_ROOT)
         #images = NAIP(config.KC_RIVER_ROOT)
 
         # debug print
@@ -202,9 +203,9 @@ def initialize_dataset():
         print("riverdata labels loaded successfully")
         print(f"Labels data: {riverdata}")
 
-        labels = labels & riverdata
-
+        # create what the labels should be, labels inverse- inverse of that
         print(f"River labels loaded and merged from {river_shape_path}")
+        
 
     return images, labels
 
@@ -223,8 +224,8 @@ def build_dataset(naip_set, split_rate):
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & rd
-    test_dataset = test_portion & rd
+    train_dataset = train_portion & labels
+    test_dataset = test_portion & labels
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -407,18 +408,13 @@ def normalize_func(model):
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
 
-    # debug print
-    print("len data mean ", len(data_mean))
 
     if len(data_mean) != model.in_channels:
         
-        print("len data mean ", len(data_mean))
-        print("model in channels", model.in_channels)
 
         for _ in range(model.in_channels - len(data_mean)):
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
-            print("len data mean in for-loop ", len(data_mean))
         
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
@@ -511,8 +507,8 @@ def save_training_images(
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            rd.colors,
-            rd.labels_inverse,
+            labels.colors,
+            labels.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -713,18 +709,14 @@ def test(
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
-            print("printing the shape of x- first for-loop, ", samp_image.shape)
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
-                print("printing the shape of x- if sample != model in channels, ", samp_image.shape)
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
 
-                    print("printing the shape of x- if sample != model in channels- for-loop, ", x.shape)
+                    
             x = samp_image.to(MODEL_DEVICE)
-
-            print("printing the shape of x, ", x.shape)
 
             normalize, scale = normalize_func(model)
             x_scaled = scale(x)
@@ -766,7 +758,7 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = rd.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = os.path.join(epoch_dir, label_name)
                         if not os.path.exists(save_dir):
                             os.makedirs(save_dir)
@@ -776,8 +768,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            rd.colors,
-                            rd.labels_inverse,
+                            labels.colors,
+                            labels.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -793,7 +785,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in rd.labels.items():
+    for label_name, label_id in labels.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -1066,7 +1058,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, rd = initialize_dataset()
+    naip, labels = initialize_dataset()
 
     def run_trials():
         """
@@ -1112,3 +1104,8 @@ if __name__ == "__main__":
             wandb.finish()
 
     run_trials()
+
+
+# check the river data is immutatble- for next- to see if it works with the next function 
+
+# confirm - comment out the and comment- try with kc only 

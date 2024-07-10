@@ -29,7 +29,7 @@ class RiverDataset(GeoDataset):
     }
 
     all_labels = {
-        0: "BACKGROUND",
+        0: "UNKNOWN",
         1: "STREAM/RIVER"
     }
 
