@@ -133,16 +133,7 @@ def initialize_dataset():
     """
 
     images = NAIP(config.KC_IMAGE_ROOT)
-
-    # debug print
-    print("NAIP images loaded")
-    print(f"NAIP images loaded from {config.KC_IMAGE_ROOT}")
-
-
     kc_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
-
-    # debug print
-    print(f"KaneCounty shapefile path: {kc_shape_path}")
 
     dataset_config = (
         config.KC_LAYER,
@@ -152,30 +143,10 @@ def initialize_dataset():
         images.res,
     )
 
-    # debug print
-    print(f"KaneCounty dataset configuration: Layer: {config.KC_LAYER}, Labels: {config.KC_LABELS}")
-
-    labels = KaneCounty(kc_shape_path, dataset_config)
-
-    # debug print
-    print("kane county labels loaded successfully")
-    print(f"Labels data: {labels}")
-    #print(f"KaneCounty GeoDataFrame:\n{labels.geo_dataframe.head()}")
-
+    kc_labels = KaneCounty(kc_shape_path, dataset_config)
 
     if config.KC_RIVER_ROOT is not None:
-
-        # debug print
-        print("river data found")
-        # Debug prints for river shapefile path components
-        print(f"KC_SHAPE_ROOT: {config.KC_SHAPE_ROOT}")
-        print(f"RD_SHAPE_FILE: {config.RD_SHAPE_FILE}")
-
         river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
-
-        # debug print
-        print(f"river datat shapefile path: {river_shape_path}")
-
         dataset_config = (
             {"STREAM/RIVER": 1},
             config.PATCH_SIZE,
@@ -183,29 +154,17 @@ def initialize_dataset():
             images.res,
         )
 
-        # debug print
-        print(f"RIVER dataset configuration: Layer: {config.RD_LAYER}, Labels: 'STREAM/RIVER'")
-
-        # debug print
-        print(f"River dataset configuration: {dataset_config}")
-        
         images = images | NAIP(config.KC_RIVER_ROOT)
-        #images = NAIP(config.KC_RIVER_ROOT)
-
-        # debug print
-        print("merging datasets(river and all images) for training...")
-
-        # debug print
-        print(f"NAIP river images loaded and merged from {config.KC_RIVER_ROOT}")
-
         riverdata = RiverDataset(river_shape_path, dataset_config)
-        # debug print
-        print("riverdata labels loaded successfully")
-        print(f"Labels data: {riverdata}")
 
-        # create what the labels should be, labels inverse- inverse of that
-        print(f"River labels loaded and merged from {river_shape_path}")
-        
+        # kc and rd attributes
+        plot_labels = {**kc_labels.labels, **riverdata.labels}
+        labels = kc_labels | riverdata
+        labels.labels = plot_labels
+        labels.labels_inverse = {v: k for k, v in labels.labels.items()}
+
+        color_attributes = {**kc_labels.colors, **riverdata.colors}
+        labels.colors = color_attributes
 
     return images, labels
 
@@ -1104,8 +1063,3 @@ if __name__ == "__main__":
             wandb.finish()
 
     run_trials()
-
-
-# check the river data is immutatble- for next- to see if it works with the next function 
-
-# confirm - comment out the and comment- try with kc only 
