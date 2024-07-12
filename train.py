@@ -407,13 +407,12 @@ def ensure_correct_channels(
     Returns:
         torch.Tensor: A modified tensor with the correct number of channels
     """
-    # if config.model == 'diffsat':
-    #     return image[:, :3, :, :]  # Always return 3 channels for diffsat
-    # else:
-        #Original behavior for other models
-    while image.size(1) < model_in_channels:
-        image = add_extra_channel(image)
-    return image
+    if config.model == 'diffsat':
+        return image[:, :3, :, :]  # Always return 3 channels for diffsat
+    else:
+        while image.size(1) < model_in_channels:
+            image = add_extra_channel(image)
+        return image
 
 
 def normalize_and_scale(sample_image, model):
