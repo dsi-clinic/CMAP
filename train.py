@@ -154,12 +154,17 @@ def initialize_dataset():
             images.res,
         )
 
-        images = images | NAIP(config.KC_RIVER_ROOT)
+        images = NAIP(config.KC_RIVER_ROOT)
+        # labels = RiverDataset(river_shape_path, dataset_config)
+
+        # images = images | NAIP(config.KC_RIVER_ROOT)
         riverdata = RiverDataset(river_shape_path, dataset_config)
 
-        # kc and rd attributes
+        # # kc and rd attributes
         plot_labels = {**kc_labels.labels, **riverdata.labels}
-        labels = kc_labels | riverdata
+        # labels = kc_labels | riverdata
+        labels = riverdata
+        # labels = kc_labels
         labels.labels = plot_labels
         labels.labels_inverse = {v: k for k, v in labels.labels.items()}
 
@@ -367,14 +372,12 @@ def normalize_func(model):
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
 
-
     if len(data_mean) != model.in_channels:
-        
 
         for _ in range(model.in_channels - len(data_mean)):
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
-        
+
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
     normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -397,9 +400,7 @@ def add_extra_channel(
         torch.Tensor: A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[
-        :, source_channel : source_channel + 1, :, :
-    ]
+    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -443,9 +444,7 @@ def apply_augmentations(
     return x_aug, y_squeezed
 
 
-def save_training_images(
-    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
-):
+def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
     """
     Save training sample images.
     """
@@ -525,7 +524,7 @@ def train_setup(
         save_training_images(
             epoch,
             train_images_root,
-            x,
+            x_scaled,
             samp_mask,
             x_aug,
             y_squeezed,
@@ -603,9 +602,7 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), config.CLIP_VALUE
-            )
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
 
         optimizer.step()
         optimizer.zero_grad()
@@ -674,7 +671,6 @@ def test(
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
 
-                    
             x = samp_image.to(MODEL_DEVICE)
 
             normalize, scale = normalize_func(model)
@@ -701,9 +697,7 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0 or (
-                plateau_count == config.PATIENCE - 1 and batch < 10
-            ):
+            if batch == 0 or (plateau_count == config.PATIENCE - 1 and batch < 10):
                 epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
@@ -750,9 +744,7 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info(
-            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
-        )
+        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -834,24 +826,24 @@ def train(
         epoch_config = config.EPOCHS
 
     for t in range(epoch_config):
-        if t == 0:
-            test_config = (
-                loss_fn,
-                test_jaccard,
-                t,
-                plateau_count,
-                test_image_root,
-                writer,
-                num_classes,
-                jaccard_per_class,
-            )
-            test_loss, t_jaccard = test(
-                test_dataloader,
-                model,
-                test_config,
-                writer,
-            )
-            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
+        # if t == 0:
+        #     test_config = (
+        #         loss_fn,
+        #         test_jaccard,
+        #         t,
+        #         plateau_count,
+        #         test_image_root,
+        #         writer,
+        #         num_classes,
+        #         jaccard_per_class,
+        #     )
+        #     test_loss, t_jaccard = test(
+        #         test_dataloader,
+        #         model,
+        #         test_config,
+        #         writer,
+        #     )
+        #     print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info("Epoch %d\n-------------------------------", t + 1)
         train_config = (
@@ -875,37 +867,37 @@ def train(
             writer,
         )
 
-        test_config = (
-            loss_fn,
-            test_jaccard,
-            t + 1,
-            plateau_count,
-            test_image_root,
-            writer,
-            num_classes,
-            jaccard_per_class,
-        )
-        test_loss, t_jaccard = test(
-            test_dataloader,
-            model,
-            test_config,
-            writer,
-        )
-        # Checks for plateau
-        if best_loss is None:
-            best_loss = test_loss
-        elif test_loss < best_loss - threshold:
-            best_loss = test_loss
-            plateau_count = 0
-        else:
-            plateau_count += 1
-            if plateau_count >= patience:
-                logging.info(
-                    "Loss Plateau: %d epochs, reached patience of %d",
-                    t,
-                    patience,
-                )
-                break
+        # test_config = (
+        #     loss_fn,
+        #     test_jaccard,
+        #     t + 1,
+        #     plateau_count,
+        #     test_image_root,
+        #     writer,
+        #     num_classes,
+        #     jaccard_per_class,
+        # )
+        # test_loss, t_jaccard = test(
+        #     test_dataloader,
+        #     model,
+        #     test_config,
+        #     writer,
+        # )
+        # # Checks for plateau
+        # if best_loss is None:
+        #     best_loss = test_loss
+        # elif test_loss < best_loss - threshold:
+        #     best_loss = test_loss
+        #     plateau_count = 0
+        # else:
+        #     plateau_count += 1
+        #     if plateau_count >= patience:
+        #         logging.info(
+        #             "Loss Plateau: %d epochs, reached patience of %d",
+        #             t,
+        #             patience,
+        #         )
+        #         break
 
     print("Done!")
 
@@ -983,9 +975,7 @@ if __name__ == "__main__":
         description="Train a segmentation model to predict stormwater storage "
         + "and green infrastructure."
     )
-    parser.add_argument(
-        "config", type=str, help="Path to the configuration file"
-    )
+    parser.add_argument("config", type=str, help="Path to the configuration file")
     parser.add_argument(
         "--experiment_name",
         type=str,
@@ -1033,9 +1023,7 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split
-            )
+            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 

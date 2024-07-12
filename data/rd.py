@@ -14,6 +14,8 @@ import numpy as np
 import rasterio
 import torch
 from torchgeo.datasets import BoundingBox, GeoDataset
+from shapely.geometry import box
+from tqdm import tqdm
 
 
 class RiverDataset(GeoDataset):
@@ -28,10 +30,7 @@ class RiverDataset(GeoDataset):
         1: (255, 255, 0, 255),
     }
 
-    all_labels = {
-        0: "UNKNOWN",
-        1: "STREAM/RIVER"
-    }
+    all_labels = {0: "UNKNOWN", 1: "STREAM/RIVER"}
 
     def __init__(self, path: str, configs) -> None:
         """Initialize a new river dataset instance.
@@ -63,14 +62,13 @@ class RiverDataset(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-        self._populate_index(path, gdf, context_size)
+        self._populate_index(path, gdf, context_size, patch_size)
         self.labels = labels
         self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
-         # Debug print
+        # Debug print
         print(f"Initializing RiverDataset with configs: {configs}")
-
 
     def _load_and_prepare_data(self, path, dest_crs):
         """Load and prepare the GeoDataFrame.
@@ -88,16 +86,15 @@ class RiverDataset(GeoDataset):
         # Read the shapefile into a GeoDataFrame
         gdf = gpd.read_file(path)
 
-        # debug print 
+        # debug print
         print("Initial GeoDataFrame loaded:")
         print(gdf.head())
-        
+
         # Debug print: Check unique values in FCODE
         print(f"Unique FCODE values: {gdf['FCODE'].unique()}")
 
         # Filter by FCODE to only include stream and river
         gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
-        #gdf = gdf[gdf["BasinType"].isin(labels.keys())]
 
         # debug print
         print("GeoDataFrame after filtering by FCODE:")
@@ -106,32 +103,41 @@ class RiverDataset(GeoDataset):
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
         return gdf
-    
-    def _populate_index(self, path, gdf, context_size):
+
+    def _populate_index(self, path, gdf, context_size, patch_size):
         """Populate the spatial index with data from the GeoDataFrame.
 
         Args:
             gdf: GeoDataFrame containing the data
             context_size: size of the context around shapes for sampling
+            patch_size: size of the patch for the model
         """
+        patch_size_in_units = patch_size * self._res
         i = 0
-        for _, row in gdf.iterrows():
+
+        # Add tqdm progress bar
+        for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Populating index"):
             minx, miny, maxx, maxy = row["geometry"].bounds
-            mint, maxt = 0, sys.maxsize
-            coords = (
-                minx - context_size,
-                maxx + context_size,
-                miny - context_size,
-                maxy + context_size,
-                mint,
-                maxt,
-            )
-            self.index.insert(i, coords, row)
-            i += 1
+            x_range = np.arange(minx, maxx, patch_size_in_units)
+            y_range = np.arange(miny, maxy, patch_size_in_units)
+            for x in x_range:
+                for y in y_range:
+                    bbox = box(x, y, x + patch_size_in_units, y + patch_size_in_units)
+                    if row["geometry"].intersects(bbox):
+                        coords = (
+                            x - context_size,
+                            x + patch_size_in_units + context_size,
+                            y - context_size,
+                            y + patch_size_in_units + context_size,
+                            0,
+                            sys.maxsize,
+                        )
+                        self.index.insert(i, coords, row)
+                        i += 1
         if i == 0:
             msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
             raise FileNotFoundError(msg)
-        
+
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
 
@@ -153,26 +159,35 @@ class RiverDataset(GeoDataset):
             )
 
         shapes = []
+        print("objs in __getitem__:", len(objs))
         for obj in objs:
             shape = obj["geometry"]
             label = self.labels[obj["FCODE"]]
-            #label = self.labels
             shapes.append((shape, label))
+        print("len of shapes in __getitem__:", len(shapes))
 
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res
+        print("x range in bounds:", width)
+        print("query in __getitem__:", query)
+        print("width in __getitem__:", width)
+        print("height in __getitem__:", height)
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
         if shapes and min((round(height), round(width))) != 0:
+            print("found features")
+            print("shapes in __getitem__:", shapes)
             masks = rasterio.features.rasterize(
                 shapes,
                 out_shape=(round(height), round(width)),
                 transform=transform,
             )
+            print("sum of masks in __getitem__:", np.sum(masks))
+            print("mask shape in __getitem__:", masks.shape)
+            print("unique entries in mask in __getitem__:", np.unique(masks))
         else:
-            # If no features are found in this query, return an empty mask
-            # with the default fill value and dtype used by rasterize
+            print("no features found in this query")
             masks = np.zeros((round(height), round(width)), dtype=np.uint8)
 
         sample = {
