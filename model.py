@@ -29,14 +29,16 @@ Exceptions:
 
 import importlib
 import os
+import torch
 
 import segmentation_models_pytorch as smp
 from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
+from diffusers.src.diffusers.models.unets import UNet2DConditionModel
+import torch.nn as nn
 
-
-class SegmentationModel:
+class SegmentationModel():
     """
     This class represents a segmentation model for image segmentation tasks.
 
@@ -86,8 +88,10 @@ class SegmentationModel:
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
         self.in_channels = model_config.get("in_channels")
+        self.model_path = model_config["model_path"]
         if self.in_channels is None:
             self.in_channels = 5
+
         if model != "fcn":
             state_dict = None
             # set custom weights
@@ -120,8 +124,27 @@ class SegmentationModel:
                     state_dict = get_weight(weights_attribute).get_state_dict(
                         progress=True
                     )
+            if model == "diffsat":
+                from diffusers.src.diffusers import DiffusionPipeline
+                # batch_size = x.shape[0]
+                # timesteps = torch.zeros(batch_size, device=x.device)
+                # encoder_hidden_states = torch.zeros(batch_size, 77, 768, device=x.device)
+                self.model = UNet2DConditionModel.from_pretrained(
+                    self.model_path,
+                    subfolder="unet",
+                    in_channels=self.in_channels,
+                    out_channels=self.num_classes,
+                    low_cpu_mem_usage=False,
+                    ignore_mismatched_sizes=True,
+                    use_safetensors=True,
+                    encoder_name=self.backbone,
+                    encoder_weights="swsl" if self.weights is True else None,
+                    #timestep=timesteps, encoder_hidden_states=encoder_hidden_states
+                )
 
-            if model == "unet":
+
+                
+            elif model == "unet":
                 self.model = smp.Unet(
                     encoder_name=self.backbone,
                     encoder_weights="swsl" if self.weights is True else None,
@@ -132,13 +155,11 @@ class SegmentationModel:
             elif model == "deeplabv3+":
                 self.model = smp.DeepLabV3Plus(
                     encoder_name=self.backbone,
-                    encoder_weights=(
-                        "imagenet" if self.weights is True else None
-                    ),
+                    encoder_weights=("imagenet" if self.weights is True else None),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
                 )
-                
+
             elif model == "fcn":
                 self.model = FCN(
                     in_channels=self.in_channels,
@@ -166,3 +187,13 @@ class SegmentationModel:
         returns the weights of the model
         """
         return self.weights
+    
+    # def forward(self, x):
+    #     if self.model == 'diffsat':
+    #         batch_size = x.shape[0]
+    #         timesteps = torch.zeros(batch_size, device=x.device)
+    #         encoder_hidden_states = torch.zeros(batch_size, 77, 768, device=x.device)
+    #         return self.model(x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states)
+    #     else:
+    #         return self.model(x)
+

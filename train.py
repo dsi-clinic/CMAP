@@ -15,6 +15,15 @@ import sys
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
+import torch.nn as nn
+from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+import random
+import logging
+import sys
+import torch
+import os
+from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
+from torch.utils.data import DataLoader, TensorDataset
 
 import kornia.augmentation as K
 import torch
@@ -259,10 +268,12 @@ def create_model():
         "backbone": config.BACKBONE,
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
+        "model_path": config.MODEL_PATH,
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
-    logging.info(model)
+    
+    #logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
@@ -370,9 +381,7 @@ def add_extra_channel(
         torch.Tensor: A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[
-        :, source_channel : source_channel + 1, :, :
-    ]
+    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -382,6 +391,29 @@ def add_extra_channel(
     augmented_tensor = torch.cat((image_tensor, extra_channel), dim=1)
 
     return augmented_tensor
+
+
+def ensure_correct_channels(
+    image: torch.Tensor, model_in_channels: int
+) -> torch.Tensor:
+    """
+    Ensures the image has the correct number of channels based on the model type.
+
+    Args:
+        image_tensor: A tensor containing image data. Expected shape is (batch, channels, h, w)
+
+        model_in_channels: The number of input channels expected by the model
+
+    Returns:
+        torch.Tensor: A modified tensor with the correct number of channels
+    """
+    # if config.model == 'diffsat':
+    #     return image[:, :3, :, :]  # Always return 3 channels for diffsat
+    # else:
+        #Original behavior for other models
+    while image.size(1) < model_in_channels:
+        image = add_extra_channel(image)
+    return image
 
 
 def normalize_and_scale(sample_image, model):
@@ -416,9 +448,7 @@ def apply_augmentations(
     return x_aug, y_squeezed
 
 
-def save_training_images(
-    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
-):
+def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
     """
     Save training sample images.
     """
@@ -478,7 +508,7 @@ def train_setup(
     samp_mask = sample["mask"]
 
     # Add extra channels to image if necessary
-    samp_image = add_extra_channels(samp_image, model)
+    samp_image = ensure_correct_channels(samp_image, model.in_channels)
 
     # Send image and mask to device; convert mask to float tensor for augmentation
     x = samp_image.to(MODEL_DEVICE)
@@ -558,7 +588,16 @@ def train_epoch(
         )
 
         # compute prediction error
-        outputs = model(x)
+        #
+        # logging.info(model.hello())
+        if config.MODEL == "diffsat":
+            batch_size = x.shape[0]
+            timesteps = torch.zeros(batch_size, device=x.device)
+            # Update the dimension from 768 to 1280
+            encoder_hidden_states = torch.zeros(batch_size, 77, 1280, device=x.device)
+            outputs = model(x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states).sample
+        else:
+            outputs = model(x)
         loss = compute_loss(
             model,
             outputs,
@@ -576,9 +615,7 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(
-                model.parameters(), config.CLIP_VALUE
-            )
+            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
 
         optimizer.step()
         optimizer.zero_grad()
@@ -640,6 +677,7 @@ def test(
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
+
             samp_image = sample["image"]
             samp_mask = sample["mask"]
             # add an extra channel to the images and masks
@@ -647,8 +685,7 @@ def test(
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
             x = samp_image.to(MODEL_DEVICE)
-            normalize, scale = normalize_func(model)
-            x_scaled = scale(x)
+            x_scaled, normalize = normalize_and_scale(x, model)
             x = normalize(x_scaled)
             y = samp_mask.to(MODEL_DEVICE)
             if y.size(0) == 1:
@@ -657,7 +694,16 @@ def test(
                 y_squeezed = y.squeeze()
 
             # compute prediction error
-            outputs = model(x)
+            
+            #logging.info(model.hello())
+            if config.MODEL == "diffsat":
+                batch_size = x.shape[0]
+                timesteps = torch.zeros(batch_size, device=x.device)
+                # Update the dimension from 768 to 1280
+                encoder_hidden_states = torch.zeros(batch_size, 77, 1280, device=x.device)
+                outputs = model(x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states).sample
+            else:
+                outputs = model(x)
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
@@ -671,9 +717,7 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0 or (
-                plateau_count == config.PATIENCE - 1 and batch < 10
-            ):
+            if batch == 0 or (plateau_count == config.PATIENCE - 1 and batch < 10):
                 epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
@@ -720,9 +764,7 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info(
-            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
-        )
+        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -953,9 +995,7 @@ if __name__ == "__main__":
         description="Train a segmentation model to predict stormwater storage "
         + "and green infrastructure."
     )
-    parser.add_argument(
-        "config", type=str, help="Path to the configuration file"
-    )
+    parser.add_argument("config", type=str, help="Path to the configuration file")
     parser.add_argument(
         "--experiment_name",
         type=str,
@@ -1003,9 +1043,7 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split
-            )
+            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 
