@@ -36,7 +36,6 @@ from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
 from diffusers.src.diffusers.models.unets import UNet2DConditionModel
-import torch.nn as nn
 
 class SegmentationModel():
     """
@@ -87,7 +86,7 @@ class SegmentationModel():
         self.backbone = model_config["backbone"]
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
-        self.in_channels = model_config.get("in_channels")
+        self.in_channels = model_config.get("in_channels" )
         self.model_path = model_config["model_path"]
         if self.in_channels is None:
             self.in_channels = 5
@@ -126,6 +125,8 @@ class SegmentationModel():
                     )
             if model == "diffsat":
                 from diffusers.src.diffusers import DiffusionPipeline
+                model_path = "/net/scratch/ijain1/finetuning_unconditional_final_model-loss"
+                
                 # batch_size = x.shape[0]
                 # timesteps = torch.zeros(batch_size, device=x.device)
                 # encoder_hidden_states = torch.zeros(batch_size, 77, 768, device=x.device)

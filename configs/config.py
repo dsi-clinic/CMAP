@@ -42,16 +42,23 @@ PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-4
 NUM_WORKERS = 8
-EPOCHS = 150
+EPOCHS = 40
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
-PATIENCE = 25
+PATIENCE = 10
 THRESHOLD = 0.01
 WEIGHT_DECAY = 0
 REGULARIZATION_TYPE = None
 REGULARIZATION_WEIGHT = 1.0e-5
 GRADIENT_CLIPPING = False
 CLIP_VALUE = 1.0
+
+# # hyperparameters for diffsat: 
+# ATTENTION_HEAD_DIM = 16 
+# LAYERS_PER_BLOCK = 2
+# NORM_NUM_GROUPS = 32
+# NORM_EPS = 1e-6
+
 
 # data augmentation
 SPATIAL_AUG_INDICES = [
@@ -75,6 +82,8 @@ IMAGE_AUG_INDICES = [
     # 6,  # Channel Shuffle
     # 7,  # Gamma
 ]
+
+IN_CHANNELS = 3
 
 # Augmentation
 ROTATION_DEGREES = 360
@@ -108,4 +117,4 @@ KC_LABELS = {
 }
 
 # for wandb
-WANDB_API = ""
+WANDB_API =  "7e6c27adf4c36f67152fa0f7d6b97cf19abbedbf"
