@@ -40,7 +40,7 @@ DATASET_STD = [
 BATCH_SIZE = 16
 PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-4
+LR = 0.01
 NUM_WORKERS = 8
 EPOCHS = 150
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
@@ -109,3 +109,5 @@ KC_LABELS = {
 
 # for wandb
 WANDB_API = ""
+
+IN_CHANNELS=3

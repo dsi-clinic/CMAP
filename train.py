@@ -15,12 +15,10 @@ import sys
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
-import torch.nn as nn
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 import random
 import logging
 import sys
-import torch
 import os
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torch.utils.data import DataLoader, TensorDataset
@@ -269,6 +267,7 @@ def create_model():
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
         "model_path": config.MODEL_PATH,
+        "in_channels": config.IN_CHANNELS
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
@@ -354,10 +353,16 @@ def normalize_func(model):
     data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-    if len(data_mean) != model.in_channels:
-        for _ in range(model.in_channels - len(data_mean)):
+    if config.MODEL == 'diffsat':
+        # For diffsat, use only the first 3 values
+        data_mean = data_mean[:3]
+        data_std = data_std[:3]
+    else: 
+        # For other models, adjust as needed
+        while len(data_mean) < model.in_channels:
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
+
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
@@ -407,7 +412,7 @@ def ensure_correct_channels(
     Returns:
         torch.Tensor: A modified tensor with the correct number of channels
     """
-    if config.model == 'diffsat':
+    if config.MODEL == 'diffsat':
         return image[:, :3, :, :]  # Always return 3 channels for diffsat
     else:
         while image.size(1) < model_in_channels:
@@ -421,6 +426,7 @@ def normalize_and_scale(sample_image, model):
     """
     normalize, scale = normalize_func(model)
     scaled_image = scale(sample_image)
+   
     return scaled_image, normalize
 
 
@@ -449,7 +455,7 @@ def apply_augmentations(
 
 def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
     """
-    Save training sample images.
+    Save training sample images
     """
     save_dir = os.path.join(
         train_images_root,
@@ -676,14 +682,13 @@ def test(
     test_loss = 0
     with torch.no_grad():
         for batch, sample in enumerate(dataloader):
-
             samp_image = sample["image"]
             samp_mask = sample["mask"]
-            # add an extra channel to the images and masks
-            if samp_image.size(1) != model.in_channels:
-                for _ in range(model.in_channels - samp_image.size(1)):
-                    samp_image = add_extra_channel(samp_image)
-            x = samp_image.to(MODEL_DEVICE)
+            
+            # Ensure correct channels
+            x = ensure_correct_channels(samp_image, model.in_channels)
+            
+            x = x.to(MODEL_DEVICE)
             x_scaled, normalize = normalize_and_scale(x, model)
             x = normalize(x_scaled)
             y = samp_mask.to(MODEL_DEVICE)
