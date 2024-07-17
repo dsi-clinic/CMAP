@@ -1,20 +1,19 @@
 #!/bin/bash
-#SBATCH --output=/home/ijain1/slurm/out/%j.%N.stdout
-#SBATCH --error=/home/ijain1/slurm/out/%j.%N.stderr
-#SBATCH --chdir=/home/ijain1/slurm
+#
+#SBATCH --mail-user=USERNAME@cs.uchicago.edu
+#SBATCH --mail-type=ALL
+#SBATCH --output=/home/USERNAM/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/USERNAM/slurm/out/%j.%N.stderr
+#SBATCH --chdir=/home/USERNAM/slurm
 #SBATCH --partition=general
 #SBATCH --job-name=cmap
 #SBATCH --time=12:00:00
 #SBATCH --mem=128GB
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
+source /home/USERNAME/miniconda3/bin/activate cmap
 
-source /home/ijain1/miniconda3/bin/activate cmap
-export PATH="/home/ijain1/miniconda/bin:$PATH"
-cd ~/2024-winter-cmap
+export PATH="/home/USERNAME/miniconda/bin:$PATH"
 
-echo "Current directory: $(pwd)"
-ls -la
-
-wandb login 7e6c27adf4c36f67152fa0f7d6b97cf19abbedbf
-wandb agent --count 7 ijain-harvey-mudd-college/cmap_train/eg8q91bt
+cd ~/cmap
+wandb agent <wandb path> --count 7

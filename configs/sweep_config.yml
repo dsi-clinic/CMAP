@@ -4,16 +4,29 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
-  LEARNING_RATE:
-    min: 0.0001
-    max: 0.01
+  COLOR_BRIGHTNESS:
+    values:
+      - 0.2
+      - 0.3
+      - 0.4
+      - 0.5
+  GAUSSIAN_BLUR_SIGMA:
+    values:
+      - (0.1, 0.2)
+      - (0.3, 0.4)
+      - (0.5, 0.6)
+  GAUSSIAN_BLUR_KERNEL:
+    values:
+      - (3,3)
+      - (5,5)
+      - (7,7)
 
-program: train.py
 command:
-  - ${env}
-  - python
-  - ${program}
-  - configs.config
-  - --tune
-  - --num_trials
-  - "2"
+- python
+- train.py
+- configs.config
+- --tune 
+- --num_trials
+- 2
+
+
