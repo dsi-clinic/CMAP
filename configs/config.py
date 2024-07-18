@@ -19,7 +19,7 @@ MODEL_PATH = "/net/scratch/ijain1/finetuning_unconditional_final_model-loss"
 # for instructions on how to retrain, look on https://github.com/ishitajain21/diffusers/tree/main 
 # if not using diffusionsat model, model_path = None 
 # model selection
-MODEL = "deeplabv3+"
+MODEL = "diffsat"
 BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
