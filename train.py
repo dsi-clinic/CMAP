@@ -36,6 +36,8 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
+from PIL import Image
+
 # importing river images
 from retrieve_images import get_kane_county_river_images
 from utils.get_naip_images import get_river_geometry
@@ -471,6 +473,37 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         )
 
 
+def save_output_images(images, output_dir):
+    """
+    Save a list of images to the specified output directory.
+
+    Args:
+    - images (list): A list of PIL Image objects or numpy arrays representing images.
+    - output_dir (str): The directory where images will be saved.
+    """
+    # Create the output directory if it doesn't exist
+    os.makedirs(output_dir, exist_ok=True)
+    
+    for i, img in enumerate(images):
+        # Construct the file name based on index (you can modify this as needed)
+        file_path = os.path.join(output_dir, f'image_{i}.png')
+        
+        # Convert the image to a PIL Image object if it's not already
+        if not isinstance(img, Image.Image):
+            img = Image.fromarray(img)
+        
+        # Save the image
+        img.save(file_path)
+        print(f'Saved {file_path}')
+
+# Example usage:
+# Assuming `output_images` is a list of PIL Image objects or numpy arrays
+output_images = [Image.open('image1.png'), Image.open('image2.png')]  # Replace with your images or numpy arrays
+output_directory = 'output_images'  # Specify your output directory
+
+save_output_images(output_images, output_directory)
+
+
 def train_setup(
     sample: DefaultDict[str, Any],
     train_config,
@@ -826,24 +859,24 @@ def train(
         epoch_config = config.EPOCHS
 
     for t in range(epoch_config):
-        # if t == 0:
-        #     test_config = (
-        #         loss_fn,
-        #         test_jaccard,
-        #         t,
-        #         plateau_count,
-        #         test_image_root,
-        #         writer,
-        #         num_classes,
-        #         jaccard_per_class,
-        #     )
-        #     test_loss, t_jaccard = test(
-        #         test_dataloader,
-        #         model,
-        #         test_config,
-        #         writer,
-        #     )
-        #     print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
+        if t == 0:
+            test_config = (
+                loss_fn,
+                test_jaccard,
+                t,
+                plateau_count,
+                test_image_root,
+                writer,
+                num_classes,
+                jaccard_per_class,
+            )
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
+                test_config,
+                writer,
+            )
+            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info("Epoch %d\n-------------------------------", t + 1)
         train_config = (
@@ -867,37 +900,37 @@ def train(
             writer,
         )
 
-        # test_config = (
-        #     loss_fn,
-        #     test_jaccard,
-        #     t + 1,
-        #     plateau_count,
-        #     test_image_root,
-        #     writer,
-        #     num_classes,
-        #     jaccard_per_class,
-        # )
-        # test_loss, t_jaccard = test(
-        #     test_dataloader,
-        #     model,
-        #     test_config,
-        #     writer,
-        # )
-        # # Checks for plateau
-        # if best_loss is None:
-        #     best_loss = test_loss
-        # elif test_loss < best_loss - threshold:
-        #     best_loss = test_loss
-        #     plateau_count = 0
-        # else:
-        #     plateau_count += 1
-        #     if plateau_count >= patience:
-        #         logging.info(
-        #             "Loss Plateau: %d epochs, reached patience of %d",
-        #             t,
-        #             patience,
-        #         )
-        #         break
+        test_config = (
+            loss_fn,
+            test_jaccard,
+            t + 1,
+            plateau_count,
+            test_image_root,
+            writer,
+            num_classes,
+            jaccard_per_class,
+        )
+        test_loss, t_jaccard = test(
+            test_dataloader,
+            model,
+            test_config,
+            writer,
+        )
+        # Checks for plateau
+        if best_loss is None:
+            best_loss = test_loss
+        elif test_loss < best_loss - threshold:
+            best_loss = test_loss
+            plateau_count = 0
+        else:
+            plateau_count += 1
+            if plateau_count >= patience:
+                logging.info(
+                    "Loss Plateau: %d epochs, reached patience of %d",
+                    t,
+                    patience,
+                )
+                break
 
     print("Done!")
 
