@@ -132,12 +132,12 @@ class SegmentationModel():
                 self.model = UNet2DConditionModel.from_pretrained(
                     self.model_path,
                     subfolder="unet",
-                    #in_channels=self.in_channels,
+                    in_channels=self.in_channels,
                     out_channels=self.num_classes,
                     low_cpu_mem_usage=False,
                     ignore_mismatched_sizes=True,
                     use_safetensors=True
-                    # encoder_name=self.backbone,
+                    #encoder_name=self.backbone,
                     # encoder_weights="swsl" if self.weights is True else None,
                     #timestep=timesteps, encoder_hidden_states=encoder_hidden_states
                 )

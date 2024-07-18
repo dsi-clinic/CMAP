@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
+from configs.config import IN_CHANNELS
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 import random
 import logging
@@ -353,7 +354,7 @@ def normalize_func(model):
     data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-    if config.MODEL == 'diffsat':
+    if config.MODEL == 'diffsat' and config.IN_CHANNELS==3:
         # For diffsat, use only the first 3 values
         data_mean = data_mean[:3]
         data_std = data_std[:3]
@@ -412,7 +413,7 @@ def ensure_correct_channels(
     Returns:
         torch.Tensor: A modified tensor with the correct number of channels
     """
-    if config.MODEL == 'diffsat':
+    if config.MODEL == 'diffsat'  and config.IN_CHANNELS==3:
         return image[:, :3, :, :]  # Always return 3 channels for diffsat
     else:
         while image.size(1) < model_in_channels:
@@ -533,7 +534,7 @@ def train_setup(
         save_training_images(
             epoch,
             train_images_root,
-            x,
+            x_scaled,
             samp_mask,
             x_aug,
             y_squeezed,
@@ -595,7 +596,7 @@ def train_epoch(
         # compute prediction error
         #
         # logging.info(model.hello())
-        if config.MODEL == "diffsat":
+        if config.MODEL == "diffsat"  and config.IN_CHANNELS==3:
             batch_size = x.shape[0]
             timesteps = torch.zeros(batch_size, device=x.device)
             # Update the dimension from 768 to 1280
@@ -700,7 +701,7 @@ def test(
             # compute prediction error
             
             #logging.info(model.hello())
-            if config.MODEL == "diffsat":
+            if config.MODEL == "diffsat" and config.IN_CHANNELS==3:
                 batch_size = x.shape[0]
                 timesteps = torch.zeros(batch_size, device=x.device)
                 # Update the dimension from 768 to 1280
