@@ -596,7 +596,7 @@ def train_epoch(
         # compute prediction error
         #
         # logging.info(model.hello())
-        if config.MODEL == "diffsat"  and config.IN_CHANNELS==3:
+        if config.MODEL == "diffsat":
             batch_size = x.shape[0]
             timesteps = torch.zeros(batch_size, device=x.device)
             # Update the dimension from 768 to 1280
@@ -701,7 +701,7 @@ def test(
             # compute prediction error
             
             #logging.info(model.hello())
-            if config.MODEL == "diffsat" and config.IN_CHANNELS==3:
+            if config.MODEL == "diffsat" :
                 batch_size = x.shape[0]
                 timesteps = torch.zeros(batch_size, device=x.device)
                 # Update the dimension from 768 to 1280
