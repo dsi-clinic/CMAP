@@ -188,12 +188,3 @@ class SegmentationModel():
         """
         return self.weights
     
-    # def forward(self, x):
-    #     if self.model == 'diffsat':
-    #         batch_size = x.shape[0]
-    #         timesteps = torch.zeros(batch_size, device=x.device)
-    #         encoder_hidden_states = torch.zeros(batch_size, 77, 768, device=x.device)
-    #         return self.model(x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states)
-    #     else:
-    #         return self.model(x)
-
