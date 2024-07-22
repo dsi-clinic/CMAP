@@ -488,12 +488,11 @@ def gradual_unfreeze(model, current_epoch, total_epochs):
     """
     Gradually unfreeze layers of the diffsat model from the end.
     """
-    if not hasattr(model, 'unet'):
-        return  # Early return if it's not a diffsat model
-
+    
     # Get all parameters
-    all_params = list(model.unet.parameters())
+    all_params = list(model.parameters())
     total_layers = len(all_params)
+    #print(all_params, total_layers)
     
     # Calculate how many layers to unfreeze in this epoch
     layers_to_unfreeze = max(1, int(total_layers * (current_epoch / total_epochs)))
@@ -506,7 +505,7 @@ def gradual_unfreeze(model, current_epoch, total_epochs):
     for param in all_params[-layers_to_unfreeze:]:
         param.requires_grad = True
 
-    print(f"Epoch {current_epoch}: Unfrozen {layers_to_unfreeze} out of {total_layers} layers")
+    #print(f"Epoch {current_epoch}: Unfrozen {layers_to_unfreeze} out of {total_layers} layers")
 
 
 def train_setup(
@@ -606,6 +605,13 @@ def train_epoch(
     model.train()
     jaccard.reset()
     train_loss = 0
+    if config.MODEL == "diffsat" and config.IN_CHANNELS == 4:
+        gradual_unfreeze(model, epoch, config.EPOCHS)
+    optimizer = torch.optim.AdamW(
+                filter(lambda p: p.requires_grad, model.parameters()),
+                lr=config.LR,
+                weight_decay=config.WEIGHT_DECAY
+            )
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
         aug_config = (
@@ -630,14 +636,9 @@ def train_epoch(
             # Update the dimension from 768 to 1280
             encoder_hidden_states = torch.zeros(batch_size, 77, 1280, device=x.device)
             outputs = model(x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states).sample
-        if config.MODEL == "diffsat" and config.IN_CHANNELS == 4:
-            gradual_unfreeze(model, epoch, config.EPOCHS)
+        
             # Update optimizer with current trainable parameters
-            optimizer = torch.optim.AdamW(
-                filter(lambda p: p.requires_grad, model.parameters()),
-                lr=config.LR,
-                weight_decay=config.WEIGHT_DECAY
-            )
+            
         else:
             print(config.MODEL)
             outputs = model(x)
