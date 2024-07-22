@@ -37,6 +37,7 @@ from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 from PIL import Image
+import numpy as np
 
 # importing river images
 from retrieve_images import get_kane_county_river_images
@@ -473,36 +474,6 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         )
 
 
-def save_output_images(images, output_dir):
-    """
-    Save a list of images to the specified output directory.
-
-    Args:
-    - images (list): A list of PIL Image objects or numpy arrays representing images.
-    - output_dir (str): The directory where images will be saved.
-    """
-    # Create the output directory if it doesn't exist
-    os.makedirs(output_dir, exist_ok=True)
-    
-    for i, img in enumerate(images):
-        # Construct the file name based on index (you can modify this as needed)
-        file_path = os.path.join(output_dir, f'image_{i}.png')
-        
-        # Convert the image to a PIL Image object if it's not already
-        if not isinstance(img, Image.Image):
-            img = Image.fromarray(img)
-        
-        # Save the image
-        img.save(file_path)
-        print(f'Saved {file_path}')
-
-# Example usage:
-# Assuming `output_images` is a list of PIL Image objects or numpy arrays
-output_images = [Image.open('image1.png'), Image.open('image2.png')]  # Replace with your images or numpy arrays
-output_directory = 'output_images'  # Specify your output directory
-
-save_output_images(output_images, output_directory)
-
 
 def train_setup(
     sample: DefaultDict[str, Any],
@@ -743,6 +714,7 @@ def test(
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
+
                     for label_id in label_ids:
                         label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = os.path.join(epoch_dir, label_name)
@@ -859,6 +831,7 @@ def train(
         epoch_config = config.EPOCHS
 
     for t in range(epoch_config):
+
         if t == 0:
             test_config = (
                 loss_fn,
@@ -916,6 +889,67 @@ def train(
             test_config,
             writer,
         )
+
+
+        # Plot inference images during training
+        #if t % 10 == 0 or t == epoch_config - 1: 
+        if True: 
+            epoch_dir = os.path.join(test_image_root, f"epoch-{t + 1}")
+            print(f"Saving test images to: {epoch_dir}")
+            if not os.path.exists(epoch_dir):
+                os.makedirs(epoch_dir)
+            model.eval()
+            with torch.no_grad():
+                for batch, sample in enumerate(test_dataloader):
+                    samp_image = sample["image"]
+                    samp_mask = sample["mask"]
+                    if samp_image.size(1) != model.in_channels:
+                        for _ in range(model.in_channels - samp_image.size(1)):
+                            samp_image = add_extra_channel(samp_image)
+
+                    x = samp_image.to(MODEL_DEVICE)
+                    normalize, scale = normalize_func(model)
+                    x_scaled = scale(x)
+                    x = normalize(x_scaled)
+                    y = samp_mask.to(MODEL_DEVICE)
+                    if y.size(0) == 1:
+                        y_squeezed = y
+                    else:
+                        y_squeezed = y.squeeze()
+
+                    outputs = model(x)
+                    preds = outputs.argmax(dim=1)
+
+                    # Plot only the first batch for brevity
+                    if batch == 0:
+                        for i in range(config.BATCH_SIZE):
+                            plot_tensors = {
+                                "RGB Image": x_scaled[i].cpu(),
+                                "ground_truth": samp_mask[i],
+                                "prediction": preds[i].cpu(),
+                            }
+                            ground_truth = samp_mask[i]
+                            label_ids = find_labels_in_ground_truth(ground_truth)
+
+                            for label_id in label_ids:
+                                label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
+                                save_dir = os.path.join(epoch_dir, label_name)
+                                if not os.path.exists(save_dir):
+                                    os.makedirs(save_dir)
+                                sample_fname = os.path.join(
+                                    save_dir, f"train_sample-{t + 1}.{batch}.{i}.png"
+                                )
+                                #print(f"Saving image: {sample_fname}")
+                                plot_from_tensors(
+                                    plot_tensors,
+                                    sample_fname,
+                                    labels.colors,
+                                    labels.labels_inverse,
+                                    sample["bbox"][i],
+                                )
+                    break  # Break after first batch for brevity
+
+
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss

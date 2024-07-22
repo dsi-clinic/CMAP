@@ -159,35 +159,35 @@ class RiverDataset(GeoDataset):
             )
 
         shapes = []
-        print("objs in __getitem__:", len(objs))
+        #print("objs in __getitem__:", len(objs))
         for obj in objs:
             shape = obj["geometry"]
             label = self.labels[obj["FCODE"]]
             shapes.append((shape, label))
-        print("len of shapes in __getitem__:", len(shapes))
+        #print("len of shapes in __getitem__:", len(shapes))
 
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res
-        print("x range in bounds:", width)
-        print("query in __getitem__:", query)
-        print("width in __getitem__:", width)
-        print("height in __getitem__:", height)
+        #print("x range in bounds:", width)
+        #print("query in __getitem__:", query)
+        #print("width in __getitem__:", width)
+        #print("height in __getitem__:", height)
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
         if shapes and min((round(height), round(width))) != 0:
-            print("found features")
-            print("shapes in __getitem__:", shapes)
+            #print("found features")
+            #print("shapes in __getitem__:", shapes)
             masks = rasterio.features.rasterize(
                 shapes,
                 out_shape=(round(height), round(width)),
                 transform=transform,
             )
-            print("sum of masks in __getitem__:", np.sum(masks))
-            print("mask shape in __getitem__:", masks.shape)
-            print("unique entries in mask in __getitem__:", np.unique(masks))
+            #print("sum of masks in __getitem__:", np.sum(masks))
+            #print("mask shape in __getitem__:", masks.shape)
+            #print("unique entries in mask in __getitem__:", np.unique(masks))
         else:
-            print("no features found in this query")
+            #print("no features found in this query")
             masks = np.zeros((round(height), round(width)), dtype=np.uint8)
 
         sample = {
