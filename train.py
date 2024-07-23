@@ -447,7 +447,7 @@ def apply_augmentations(
     return x_aug, y_squeezed
 
 
-def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
+def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample, model):
     """
     Save training sample images.
     """
@@ -457,21 +457,34 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     )
     os.makedirs(save_dir, exist_ok=True)
 
-    for i in range(config.BATCH_SIZE):
-        plot_tensors = {
-            "RGB Image": x[i].cpu(),
-            "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i].cpu(),
-            "Augmented_Mask": y_aug[i].cpu(),
-        }
-        sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
-        plot_from_tensors(
-            plot_tensors,
-            sample_fname,
-            labels.colors,
-            labels.labels_inverse,
-            sample["bbox"][i],
-        )
+    model.eval()
+    with torch.no_grad():
+        # Normalize and scale the input
+        normalize, scale = normalize_func(model)
+        x_scaled = scale(x)
+        x_normalized = normalize(x_scaled)
+
+        # Get the model predictions
+        outputs = model(x_normalized.to(MODEL_DEVICE))
+        preds = outputs.argmax(dim=1)
+
+        for i in range(config.BATCH_SIZE):
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+                "ground_truth": samp_mask[i],
+                "prediction": preds[i].cpu(),
+            }
+            sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+            plot_from_tensors(
+                plot_tensors,
+                sample_fname,
+                labels.colors,
+                labels.labels_inverse,
+                sample["bbox"][i],
+            )
 
 
 
@@ -533,6 +546,7 @@ def train_setup(
             x_aug,
             y_squeezed,
             sample,
+            model,
         )
 
     return normalize(x_aug), y_squeezed
@@ -890,7 +904,7 @@ def train(
             writer,
         )
 
-
+        ''''
         # Plot inference images during training
         #if t % 10 == 0 or t == epoch_config - 1: 
         if True: 
@@ -948,6 +962,7 @@ def train(
                                     sample["bbox"][i],
                                 )
                     break  # Break after first batch for brevity
+                    '''
 
 
         # Checks for plateau
