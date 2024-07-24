@@ -186,7 +186,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
         mask (torch.Tensor): The corresponding mask tensor.
     """
     # Randomly select augmentations if modes are specified
-    if mode:
+    if mode =='random':
         spatial_augmentations = random.sample(
             spatial_transforms, k=random.randint(1, len(spatial_transforms))
         )
