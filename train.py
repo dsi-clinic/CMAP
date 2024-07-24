@@ -174,6 +174,13 @@ def initialize_dataset():
         color_attributes = {**kc_labels.colors, **riverdata.colors}
         labels.colors = color_attributes
 
+        # debug print
+        print("river shape file: ")
+        print(len(river_shape_path))
+        print(f"Length of images dataset: {len(images)}")
+        print(f"Length of labels dataset: {len(labels)}")
+
+
     return images, labels
 
 
@@ -223,6 +230,10 @@ def build_dataset(naip_set, split_rate):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
+
+    # debug print
+    print(f"length of the combined datset: {len(train_dataset)}")
+
     return train_dataloader, test_dataloader
 
 

@@ -111,8 +111,10 @@ RD_LABELS = {
 }
 
 
+#RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 
-RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
+# Updated river shape file with images broken into segments
+RD_SHAPE_FILE = "/net/projects/cmap/workspaces/Output_River_Shapefile/"
 
 # for wandb
 WANDB_API = ""
