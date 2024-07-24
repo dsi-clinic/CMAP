@@ -186,7 +186,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
         mask (torch.Tensor): The corresponding mask tensor.
     """
     # Randomly select augmentations if modes are specified
-    if mode:
+    if mode == 'random':
         spatial_augmentations = random.sample(
             spatial_transforms, k=random.randint(1, len(spatial_transforms))
         )
@@ -212,7 +212,7 @@ def get_augmented_rgb(color_transforms, mode, rgb_only):
                     or 'all' for all.
         rgb_only: The RGB channels to apply color augmentations to
     """
-    if mode:
+    if mode == 'random':
         color_augmentations = random.sample(
             color_transforms, k=random.randint(1, len(color_transforms))
         )
