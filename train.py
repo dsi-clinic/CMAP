@@ -146,7 +146,8 @@ def initialize_dataset():
         images.res,
     )
 
-    kc_labels = KaneCounty(kc_shape_path, dataset_config)
+    labels = KaneCounty(kc_shape_path, dataset_config)
+
 
     if config.KC_RIVER_ROOT is not None:
         river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
@@ -157,6 +158,9 @@ def initialize_dataset():
             images.res,
         )
 
+        # commented code is when river data and all images are combined
+        # uncommented is to train river data only
+
         images = NAIP(config.KC_RIVER_ROOT)
         # labels = RiverDataset(river_shape_path, dataset_config)
 
@@ -164,22 +168,15 @@ def initialize_dataset():
         riverdata = RiverDataset(river_shape_path, dataset_config)
 
         # # kc and rd attributes
-        plot_labels = {**kc_labels.labels, **riverdata.labels}
+        plot_labels = {**labels.labels, **riverdata.labels}
         # labels = kc_labels | riverdata
         labels = riverdata
         # labels = kc_labels
         labels.labels = plot_labels
         labels.labels_inverse = {v: k for k, v in labels.labels.items()}
 
-        color_attributes = {**kc_labels.colors, **riverdata.colors}
+        color_attributes = {**labels.colors, **riverdata.colors}
         labels.colors = color_attributes
-
-        # debug print
-        print("river shape file: ")
-        print(len(river_shape_path))
-        print(f"Length of images dataset: {len(images)}")
-        print(f"Length of labels dataset: {len(labels)}")
-
 
     return images, labels
 
@@ -230,9 +227,6 @@ def build_dataset(naip_set, split_rate):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
-
-    # debug print
-    print(f"length of the combined datset: {len(train_dataset)}")
 
     return train_dataloader, test_dataloader
 
