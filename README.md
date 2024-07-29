@@ -185,3 +185,8 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
+- Ishita Jain - ijain@g.hmc.edu
+
+To do: 
+- Fix the resume checkpoint feauture. It should continously remove epochs that are older than 3.
+
