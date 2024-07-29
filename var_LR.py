@@ -18,8 +18,6 @@ import sys
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
-
-from numpy import save
 from configs.config import IN_CHANNELS
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 import random
@@ -49,9 +47,7 @@ from utils.transforms import apply_augs, create_augmentation_pipelines
 MODEL_DEVICE = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
 
@@ -68,10 +64,8 @@ def arg_parsing(argument):
     # tuning with wandb
     wandb_tune_arg = argument.tune
     num_trials_arg = int(argument.num_trials)
-    resume_checkpoint = argument.resume_checkpoint
-    save_checkpoints = argument.save_checkpoints
 
-    return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg, resume_checkpoint,save_checkpoints
+    return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
 
 def writer_prep(exp_n, trial_num, wandb_t):
@@ -277,14 +271,14 @@ def create_model():
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
         "model_path": config.MODEL_PATH,
-        "in_channels": config.IN_CHANNELS,
+        "in_channels": config.IN_CHANNELS
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
     if config.MODEL == "diffsat" and config.IN_CHANNELS == 4:
         for param in list(model.parameters())[:-1]:
             param.requires_grad = False
-    # logging.info(model)
+    #logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
@@ -365,15 +359,16 @@ def normalize_func(model):
     data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-    if config.MODEL == "diffsat" and config.IN_CHANNELS == 3:
+    if config.MODEL == 'diffsat' and config.IN_CHANNELS==3:
         # For diffsat, use only the first 3 values
         data_mean = data_mean[:3]
         data_std = data_std[:3]
-    else:
+    else: 
         # For other models, adjust as needed
         while len(data_mean) < model.in_channels:
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
+
 
     scale_mean = torch.tensor(0.0)
     scale_std = torch.tensor(255.0)
@@ -423,7 +418,7 @@ def ensure_correct_channels(
     Returns:
         torch.Tensor: A modified tensor with the correct number of channels
     """
-    if config.MODEL == "diffsat" and config.IN_CHANNELS == 3:
+    if config.MODEL == 'diffsat'  and config.IN_CHANNELS==3:
         return image[:, :3, :, :]  # Always return 3 channels for diffsat
     else:
         while image.size(1) < model_in_channels:
@@ -437,7 +432,7 @@ def normalize_and_scale(sample_image, model):
     """
     normalize, scale = normalize_func(model)
     scaled_image = scale(sample_image)
-
+   
     return scaled_image, normalize
 
 
@@ -489,33 +484,26 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             kc.labels_inverse,
             sample["bbox"][i],
         )
-
-
 def gradual_unfreeze(model, current_epoch, total_epochs):
     """
-    Gradually unfreeze layers of the diffsat model from the end.
+    Gradually unfreeze layers of the model from the end.
     """
-
     # Get all parameters
     all_params = list(model.parameters())
     total_layers = len(all_params)
-    # print(all_params, total_layers)
-
+    
     # Calculate how many layers to unfreeze in this epoch
     layers_to_unfreeze = max(1, int(total_layers * (current_epoch / total_epochs)))
-
+    
     # Freeze early layers
     for param in all_params[:-layers_to_unfreeze]:
         param.requires_grad = False
-
+    
     # Unfreeze later layers
     for param in all_params[-layers_to_unfreeze:]:
         param.requires_grad = True
 
-    print(
-        f"Epoch {current_epoch}: Unfrozen {layers_to_unfreeze} out of {total_layers} layers"
-    )
-
+    print(f"Epoch {current_epoch}: Unfrozen {layers_to_unfreeze} out of {total_layers} layers")
 
 def train_setup(
     sample: DefaultDict[str, Any],
@@ -616,11 +604,14 @@ def train_epoch(
     train_loss = 0
     if config.MODEL == "diffsat" and config.IN_CHANNELS == 4:
         gradual_unfreeze(model, epoch, config.EPOCHS)
-    optimizer = torch.optim.AdamW(
-        filter(lambda p: p.requires_grad, model.parameters()),
-        lr=config.LR,
-        weight_decay=config.WEIGHT_DECAY,
-    )
+
+        param_groups = []
+        for i, param in enumerate(model.parameters()):
+            if param.requires_grad:
+                lr = config.LR * (0.1 ** (len(list(model.parameters())) - i - 1))
+                param_groups.append({'params': [param], 'lr': lr})
+        optimizer = torch.optim.AdamW(param_groups, weight_decay=config.WEIGHT_DECAY)
+
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
         aug_config = (
@@ -644,12 +635,10 @@ def train_epoch(
             timesteps = torch.zeros(batch_size, device=x.device)
             # Update the dimension from 768 to 1280
             encoder_hidden_states = torch.zeros(batch_size, 77, 1280, device=x.device)
-            outputs = model(
-                x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states
-            ).sample
-
+            outputs = model(x, timesteps=timesteps, context=encoder_hidden_states)
+        
             # Update optimizer with current trainable parameters
-
+            
         else:
             print(config.MODEL)
             outputs = model(x)
@@ -734,10 +723,10 @@ def test(
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
             samp_mask = sample["mask"]
-
+            
             # Ensure correct channels
             x = ensure_correct_channels(samp_image, model.in_channels)
-
+            
             x = x.to(MODEL_DEVICE)
             x_scaled, normalize = normalize_and_scale(x, model)
             x = normalize(x_scaled)
@@ -748,18 +737,14 @@ def test(
                 y_squeezed = y.squeeze()
 
             # compute prediction error
-
-            # logging.info(model.hello())
+            
+            #logging.info(model.hello())
             if config.MODEL == "diffsat":
                 batch_size = x.shape[0]
                 timesteps = torch.zeros(batch_size, device=x.device)
                 # Update the dimension from 768 to 1280
-                encoder_hidden_states = torch.zeros(
-                    batch_size, 77, 1280, device=x.device
-                )
-                outputs = model(
-                    x, timestep=timesteps, encoder_hidden_states=encoder_hidden_states
-                ).sample
+                encoder_hidden_states = torch.zeros(batch_size, 77, 1280, device=x.device)
+                outputs = model(x, timesteps=timesteps, context=encoder_hidden_states)
             else:
                 outputs = model(x)
             loss = loss_fn(outputs, y_squeezed)
@@ -895,17 +880,7 @@ def train(
 
     # How many classes we're predicting
     num_classes = config.NUM_CLASSES
-    start_epoch = 0
-    if resume_checkpoint:
-        if os.path.isfile(resume_checkpoint):
-            print(f"Loading checkpoint '{resume_checkpoint}'")
-            checkpoint = torch.load(resume_checkpoint)
-            start_epoch = checkpoint['epoch']
-            model.load_state_dict(checkpoint['model_state_dict'])
-            optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-            print(f"Resumed training from epoch {start_epoch}")
-        else:
-            print(f"No checkpoint found at '{resume_checkpoint}'")
+
     # reducing number of epoch in hyperparameter tuning
     if wandb_t:
         epoch_config = 10
@@ -933,7 +908,7 @@ def train(
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
-        logging.info("Epoch %d\n-------------------------------", t + 1+start_epoch)
+        logging.info("Epoch %d\n-------------------------------", t + 1)
         train_config = (
             loss_fn,
             train_jaccard,
@@ -971,22 +946,6 @@ def train(
             test_config,
             writer,
         )
-
-        if save_checkpoints and (t + 1) % 30 == 0:
-            checkpoint_path = os.path.join(out_root, f'checkpoint_epoch_{t + 1}.pth')
-            torch.save({
-                'epoch': t + 1,
-                'model_state_dict': model.state_dict(),
-                'optimizer_state_dict': optimizer.state_dict(),
-            }, checkpoint_path)
-            print(f"Saved checkpoint at epoch {t + 1}")
-
-            # Delete old checkpoints
-            checkpoints = sorted([f for f in os.listdir(out_root) if f.startswith('checkpoint_epoch_')])
-            if len(checkpoints) > 3:
-                for checkpoint_to_delete in checkpoints[:-3]:
-                    os.remove(os.path.join(out_root, checkpoint_to_delete))
-                    print(f"Deleted old checkpoint: {checkpoint_to_delete}")
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss
@@ -1104,24 +1063,10 @@ if __name__ == "__main__":
         help="Please enter the number of trial for each train",
         default="1",
     )
-    parser.add_argument(
-        "--resume_checkpoint",
-        type=str,
-        help="Path to the checkpoint to resume training from",
-        default=None
-    )
-
-    parser.add_argument(
-        "--save_checkpoints",
-        type=bool,
-        help='Whether to save checkpoints or not',
-        default=False
-    )
-
 
     args = parser.parse_args()
     config = importlib.import_module(args.config)
-    exp_name, split, wandb_tune, num_trials, resume_checkpoint,save_checkpoints = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
@@ -1141,13 +1086,7 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, 
-                num, 
-                wandb_tune, 
-                naip, 
-                split
-            )            
+            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 
