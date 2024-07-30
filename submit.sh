@@ -1,11 +1,11 @@
 #!/bin/bash -l
 #
 
-#SBATCH --output=/net/scratch/ijain1/diffusion_sat_checkpoints/longer12_unfreeze_666.stdout
-#SBATCH --error=/net/scratch/ijain1/diffusion_sat_checkpoints/longer12_unfreeze_666.stderr
+#SBATCH --output=/net/scratch/ijain1/diffusion_sat_checkpoints/diffsat_12.stdout
+#SBATCH --error=/net/scratch/ijain1/diffusion_sat_checkpoints/diffsat_12.stderr
 #SBATCH --chdir=/home/ijain1/slurm
 #SBATCH --partition=general
-#SBATCH --job-name=cmap_longer12_unfreeze_666
+#SBATCH --job-name=cmap_diffsat_12
 #SBATCH --time=12:00:00
 #SBATCH --mem=128GB
 #SBATCH --gres=gpu:1
@@ -17,4 +17,4 @@ export PATH="/home/ijain1/miniconda/bin:$PATH"
 
 cd /home/ijain1/2024-winter-cmap
 
-python train.py configs.config --experiment_name longer12_unfreeze_666 --num_trials 3 --resume_checkpoint /net/projects/cmap/workspaces/ijain1/longer8_unfreeze_6_trial0/checkpoint_epoch_2.pth --save_checkpoints=True
+python train.py configs.config --experiment_name diffsat_12 --num_trials 1
