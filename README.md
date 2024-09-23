@@ -1,4 +1,4 @@
-# 2024-winter-cmap
+# CMAP
 
 ## Project Background
 A comprehensive inventory of stormwater storage and green infrastructure (GI) assets is lacking across northeastern Illinois. Understanding the location of these assets is crucial for ensuring proper maintenance and gaining insights into potential impacts on water quality and stormwater management. An inventory could assist county and municipal stormwater engineers, public works officials, and others in ensuring proper maintenance and inform the development of watershed-based plans and resilience plans.
