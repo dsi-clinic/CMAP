@@ -185,3 +185,4 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
+- Anna Poon - annapoon@uchicago.edu
