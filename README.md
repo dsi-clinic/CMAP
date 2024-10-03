@@ -24,11 +24,11 @@ These goals will be accomplished within the following pipeline structure:
 ## Usage
 
 
-### Environment Set Up 
+### Environment Set Up
 
 Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
-2. Ensure you have access to [Slurm] (python train.py configs.config --experiment_name baseline_v1). 
+2. Ensure you have access to [Slurm] (python train.py configs.config --experiment_name baseline_v1).
 3. Create and initiate a cmap specific conda environment using the following steps:
     1) Install miniconda:
     ```
@@ -44,7 +44,7 @@ Before running the repository (see details below), you need to perform the follo
     pip install -r /home/YOUR_USERNAME/2024-winter-cmap/requirements.txt
     ```
 ### Example of Training in Command Line
-Next, you can train the model in an interactive session.  
+Next, you can train the model in an interactive session.
 ```
 srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin/bash
 
@@ -55,8 +55,8 @@ cd /home/YOUR_USERNAME/2024-winter-cmap
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
 
-Replace the <ExperimentName> with what you want to title the experiment. For example, if you want to title it baseline_v1, the code will be: 
-```python train.py configs.config --experiment_name baseline_v1``` 
+Replace the <ExperimentName> with what you want to title the experiment. For example, if you want to title it baseline_v1, the code will be:
+```python train.py configs.config --experiment_name baseline_v1```
 .Aug_type, split, and num_trial are optional so you can ignore them if you don't have their parameters.
 
 ### Example of Training with Slurm
@@ -68,7 +68,7 @@ This option is best if you know that your code runs and you don't need to test a
 To run this repo on the Slurm cluster after setting up your conda environment,
 
 1. Go into the file called 'submit.sh'.
-2. Change YOUR-USERNAME to your username. 
+2. Change YOUR-USERNAME to your username.
 3. To run the file on terminal, type: `sbatch submit.sh`. You can monitor whether your job is running with `squeue`.
 
 Or, to run in an interactive session:
@@ -95,7 +95,7 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 
 ### utils
 
-Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
+Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
 
 ### notebooks
 
@@ -105,7 +105,7 @@ Contains short, clean notebooks to demonstrate analysis. Documentation and descr
 
 Contains details of acquiring all raw data used in repository. If data is small (<50MB) then it is okay to save it to the repo, making sure to clearly document how to the data is obtained.
 
-If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory. 
+If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory.
 
 Source attribution and descriptions included in the [README](data/README.md) file.
 
@@ -124,7 +124,7 @@ The below results were obtained with these specifications:
 * Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
 * Number of trails: 5
 
-Test Jaccard: mean: 0.589, standard deviation:0.075  
+Test Jaccard: mean: 0.589, standard deviation:0.075
 Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
 
 ### example outputs
@@ -160,7 +160,7 @@ containing config information
 
 ### utils
 
-Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable. 
+Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
 * **get_naip_images.py**
 * **img_params.py** calculating images stats
 * **plot.py** plotting image with labels
@@ -171,7 +171,7 @@ Project python code. Contains various utility functions and scripts which suppor
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
 
 ### data
-Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory. 
+Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory.
 
 
 ### output
@@ -185,3 +185,6 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
+
+## Collaborators- Fall 2024
+- Mohit Kumar Sathishkumar - mohitk@uchicago.edu
