@@ -29,7 +29,7 @@ These goals will be accomplished within the following pipeline structure:
 Before running the repository (see details below), you need to perform the following steps:
 1. Install make if you have not already done so.
 2. Ensure you have access to [Slurm] (python train.py configs.config --experiment_name baseline_v1).
-3. Create and initiate a cmap specific conda environment using the following steps:
+3. Create and initiate a cmap specific mamba environment using the following steps:
     1) Install micromamba:
     ```
     curl -Ls https://micro.mamba.pm/api/micromamba/linux-64/latest | tar -xvj bin/micromamba
@@ -42,7 +42,9 @@ Before running the repository (see details below), you need to perform the follo
     micromamba create -y --name cmap python=3.10
     micromamba activate cmap
     micromamba install -y pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
-    pip install -r /home/YOUR_USERNAME/CMAP/requirements.txt
+    git clone https://github.com/dsi-clinic/CMAP.git
+    cd CMAP
+    pip install -r requirements.txt
     ```
 ### Example of Training in Command Line
 Next, you can train the model in an interactive session.
@@ -51,7 +53,7 @@ srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin
 
 conda activate cmap
 
-cd /home/YOUR_USERNAME/2024-winter-cmap
+cd /home/YOUR_USERNAME/CMAP
 
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
@@ -78,7 +80,7 @@ srun -p general --pty --cpus-per-task=8 --gres=gpu:1 --mem=128GB -t 0-06:00 /bin
 
 conda activate cmap
 
-cd /home/YOUR_USERNAME/2024-winter-cmap
+cd /home/YOUR_USERNAME/CMAP
 
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
