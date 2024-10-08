@@ -41,7 +41,7 @@ Before running the repository (see details below), you need to perform the follo
     ```
     micromamba create -y --name cmap python=3.10
     micromamba activate cmap
-    micromamba install -y pytorch torchvision pytorch-cuda=12.1 -c pytorch-nightly -c nvidia
+    micromamba install -y pytorch torchvision pytorch-cuda=12.1 -c pytorch -c nvidia
     pip install -r /home/YOUR_USERNAME/CMAP/requirements.txt
     ```
 ### Example of Training in Command Line
