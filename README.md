@@ -186,5 +186,7 @@ Contains example model output images.
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
 
+
 ## Collaborators- Fall 2024
+- Anna Poon - annapoon@uchicago.edu
 - Mohit Kumar Sathishkumar - mohitk@uchicago.edu
