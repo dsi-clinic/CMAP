@@ -185,6 +185,7 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
+- Xiaoyue Wei - xiaoyue1@uchicago.edu
 
 
 ## Collaborators- Fall 2024
