@@ -85,9 +85,8 @@ class SegmentationModel:
         self.backbone = model_config["backbone"]
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
-        self.in_channels = model_config.get("in_channels")
-        if self.in_channels is None:
-            self.in_channels = 5
+        self.in_channels = model_config.get("in_channels", 5)
+    
         if model != "fcn":
             state_dict = None
             # set custom weights
@@ -139,21 +138,21 @@ class SegmentationModel:
                     classes=self.num_classes,
                 )
 
-            elif model == "fcn":
-                self.model = FCN(
-                    in_channels=self.in_channels,
-                    classes=self.num_classes,
-                    num_filters=3,
-                )
-
-            else:
-                raise ValueError(
-                    f"Model type '{model}' is not valid. "
-                    "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
-                )
+        elif model == "fcn":
             if self.weights and self.weights is not True:
                 self.model.encoder.load_state_dict(state_dict)
-            self.model.in_channels = self.in_channels
+                self.model.in_channels = self.in_channels
+            self.model = FCN(
+                in_channels=self.in_channels,
+                classes=self.num_classes,
+                num_filters=3,
+            )
+
+        else:
+            raise ValueError(
+                f"Model type '{model}' is not valid. "
+                "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
+            )
 
     def __getbackbone__(self):
         """
