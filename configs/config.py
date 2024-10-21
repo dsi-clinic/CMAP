@@ -3,6 +3,7 @@ This module contains configuration settings.
 """
 
 import os
+import wandb
 
 # data paths
 DATA_ROOT = "/net/projects/cmap/data"
@@ -14,11 +15,33 @@ KC_DEM_ROOT = None
 KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
 OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
 
-# model selection
-MODEL = "deeplabv3+"
-BACKBONE = "resnet101"
-# check backbone, mean, and std when setting weights
-WEIGHTS = True
+# Add support for wandb config dynamic loading
+config_defaults = {
+    # model selection
+    'MODEL' = "deeplabv3+",
+    'BACKBONE' = "resnet101",
+    # check backbone, mean, and std when setting weights
+    'WEIGHTS' = True,
+    'BATCH_SIZE' = 16,
+    'PATCH_SIZE' = 256,
+    'NUM_CLASSES' = 5 , # predicting 4 classes + background
+    'LR' = 1e-4 ,
+    'NUM_WORKERS' = 8,
+    'EPOCHS' = 30,
+    'IGNORE_INDEX' = 0,  # index in images to ignore for jaccard index
+    'LOSS_FUNCTION' = "JaccardLoss" , # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
+    'PATIENCE' = 5,
+    'THRESHOLD' = 0.01,
+    'WEIGHT_DECAY' = 0,
+    'REGULARIZATION_TYPE' = None,
+    'REGULARIZATION_WEIGHT' = 1.0e-5,
+    'GRADIENT_CLIPPING' = False,
+    'CLIP_VALUE' = 1.0,
+}
+
+# Initialize wandb config (ensuring backward compatibility)
+wandb.init(config=config_defaults)
+config = wandb.config
 
 # model hyperparams
 DATASET_MEAN = [
@@ -33,21 +56,19 @@ DATASET_STD = [
     0.025523325960784313,
     0.03643713776470588,
 ]
-BATCH_SIZE = 16
-PATCH_SIZE = 256
-NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-4
+
+# Set model hyperparameters from the config dynamically
+BATCH_SIZE = config.BATCH_SIZE
+LR = config.LR
 NUM_WORKERS = 8
-EPOCHS = 30
-IGNORE_INDEX = 0  # index in images to ignore for jaccard index
-LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
-PATIENCE = 5
-THRESHOLD = 0.01
-WEIGHT_DECAY = 0
-REGULARIZATION_TYPE = None
-REGULARIZATION_WEIGHT = 1.0e-5
-GRADIENT_CLIPPING = False
-CLIP_VALUE = 1.0
+EPOCHS = config.EPOCHS
+IGNORE_INDEX = config.IGNORE_INDEX
+LOSS_FUNCTION = config.LOSS_FUNCTION
+PATIENCE = config.PATIENCE
+THRESHOLD = config.THRESHOLD
+WEIGHT_DECAY = config.WEIGHT_DECAY
+GRADIENT_CLIPPING = config.GRADIENT_CLIPPING
+CLIP_VALUE = config.CLIP_VALUE
 
 # data augmentation
 SPATIAL_AUG_INDICES = [
