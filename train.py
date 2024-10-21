@@ -64,7 +64,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
         trial_num: current trial number
     """
     # set output path and exit run if path already exists
-    exp_trial_name = f"{exp_n}_trial{trial_num}"
+    exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
     if wandb_t:
         os.makedirs(out_root, exist_ok=True)
