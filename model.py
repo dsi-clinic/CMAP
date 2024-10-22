@@ -34,6 +34,7 @@ import segmentation_models_pytorch as smp
 from torchgeo.models import FCN, get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
+import torch.nn as nn
 
 
 class SegmentationModel:
@@ -86,6 +87,7 @@ class SegmentationModel:
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
         self.in_channels = model_config.get("in_channels", 5)
+        self.dropout = model_config.get("dropout", 0.3)
     
         if model != "fcn":
             state_dict = None
@@ -126,6 +128,7 @@ class SegmentationModel:
                     encoder_weights="swsl" if self.weights is True else None,
                     in_channels=self.in_channels,
                     classes=self.num_classes,
+                    aux_params={'dropout': self.dropout}
                 )
 
             elif model == "deeplabv3+":
@@ -136,6 +139,7 @@ class SegmentationModel:
                     ),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
+                    aux_params={'dropout': self.dropout}
                 )
 
         elif model == "fcn":
@@ -165,3 +169,9 @@ class SegmentationModel:
         returns the weights of the model
         """
         return self.weights
+    
+    def __getdroproutrate__(self):
+        """
+        returns the dropout rate of the model
+        """
+        return self.dropout_rate

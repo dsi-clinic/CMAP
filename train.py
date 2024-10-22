@@ -259,6 +259,7 @@ def create_model():
         "backbone": config.BACKBONE,
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
+        "dropout": config.DROPOUT,
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
