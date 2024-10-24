@@ -118,12 +118,15 @@ class RiverDataset(GeoDataset):
         # Add tqdm progress bar
         for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Populating index"):
             minx, miny, maxx, maxy = row["geometry"].bounds
+            # finding bounding box of the river, which is 1 row in gdf file
             x_range = np.arange(minx, maxx, patch_size_in_units)
+            # x axis for grid of patch size units
             y_range = np.arange(miny, maxy, patch_size_in_units)
             for x in x_range:
                 for y in y_range:
                     bbox = box(x, y, x + patch_size_in_units, y + patch_size_in_units)
-                    if row["geometry"].intersects(bbox):
+                    # gets the current patch in the grid
+                    if row["geometry"].intersects(bbox): # if river intersects bounding box/patch, then insert into index
                         coords = (
                             x - context_size,
                             x + patch_size_in_units + context_size,
