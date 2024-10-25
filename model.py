@@ -31,8 +31,9 @@ import importlib
 import os
 
 import segmentation_models_pytorch as smp
-from torchgeo.models import FCN, get_weight
+from torchgeo.models import get_weight
 from torchgeo.trainers import utils
+from utils.custom_fcn import FCN
 from torchvision.models._api import WeightsEnum
 import torch.nn as nn
 
@@ -128,7 +129,8 @@ class SegmentationModel:
                     encoder_weights="swsl" if self.weights is True else None,
                     in_channels=self.in_channels,
                     classes=self.num_classes,
-                    aux_params={'dropout': self.dropout}
+                    aux_params={'classes': self.num_classes,
+                                'dropout': self.dropout}
                 )
 
             elif model == "deeplabv3+":
@@ -139,7 +141,8 @@ class SegmentationModel:
                     ),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
-                    aux_params={'dropout': self.dropout}
+                    aux_params={'classes': self.num_classes,
+                                'dropout': self.dropout}
                 )
 
         elif model == "fcn":
@@ -150,6 +153,7 @@ class SegmentationModel:
                 in_channels=self.in_channels,
                 classes=self.num_classes,
                 num_filters=3,
+                dropout=self.dropout
             )
 
         else:

@@ -20,7 +20,7 @@ BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
-# dropout implementation
+# dropout
 DROPOUT = 0.3
 
 # model hyperparams
