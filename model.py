@@ -89,7 +89,7 @@ class SegmentationModel:
         self.weights = model_config["weights"]
         self.in_channels = model_config.get("in_channels", 5)
         self.dropout = model_config.get("dropout", 0.3)
-    
+        
         if model != "fcn":
             state_dict = None
             # set custom weights
@@ -132,6 +132,9 @@ class SegmentationModel:
                     aux_params={'classes': self.num_classes,
                                 'dropout': self.dropout}
                 )
+                if self.weights and self.weights is not True:
+                    self.model.encoder.load_state_dict(state_dict)
+                    self.model.in_channels = self.in_channels
 
             elif model == "deeplabv3+":
                 self.model = smp.DeepLabV3Plus(
@@ -144,17 +147,20 @@ class SegmentationModel:
                     aux_params={'classes': self.num_classes,
                                 'dropout': self.dropout}
                 )
+                if self.weights and self.weights is not True:
+                    self.model.encoder.load_state_dict(state_dict)
+                    self.model.in_channels = self.in_channels
 
         elif model == "fcn":
-            if self.weights and self.weights is not True:
-                self.model.encoder.load_state_dict(state_dict)
-                self.model.in_channels = self.in_channels
             self.model = FCN(
                 in_channels=self.in_channels,
                 classes=self.num_classes,
                 num_filters=3,
                 dropout=self.dropout
             )
+            if self.weights and self.weights is not True:
+                self.model.encoder.load_state_dict(state_dict)
+                self.model.in_channels = self.in_channels
 
         else:
             raise ValueError(
