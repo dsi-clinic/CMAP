@@ -29,6 +29,7 @@ torchvision~=0.16.2
 torch_utils~=0.1.2
 typing_extensions~=4.7.1
 wandb~=0.13.4
+scikit-image~=0.21.0
 
 # cluster specific
 submitit~=1.4

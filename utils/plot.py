@@ -44,7 +44,7 @@ import torch
 from matplotlib.colors import ListedColormap
 from torch import Tensor
 from torchgeo.datasets.utils import BoundingBox
-
+from skimage import measure
 
 def build_cmap(colors: Dict[int, tuple]):
     """
@@ -115,12 +115,16 @@ def plot_from_tensors(
 
     # Plot each input tensor and gather unique labels
     unique_labels = Tensor()
+    
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
 
         if "image" in name.lower():
-            # Handle RGB image tensors
+            # Plot prediction image
             ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
+        elif "vs" in name.lower():
+            # Plot the combined image of ground truth outline and prediction
+            ax.imshow(tensor.permute(1, 2, 0), cmap=cmap)
         else:
             unique = (
                 tensor[0].unique()
@@ -218,3 +222,62 @@ def find_labels_in_ground_truth(ground_truth: Tensor):
         unique = unique[unique != 0]
 
     return unique.tolist() if unique.numel() > 0 else [15]
+
+def create_outline(mask: torch.Tensor) -> torch.Tensor:
+    """
+    Create an outline for the given mask.
+
+    Args:
+        mask (torch.Tensor): The ground truth mask tensor.
+
+    Returns:
+        torch.Tensor: A binary tensor representing the outline.
+    """
+    # Convert to numpy for contour detection
+    mask_np = mask.cpu().numpy()
+
+    # Detect contours of the binary mask
+    contours = measure.find_contours(mask_np, level=0.5)
+
+    # Create an empty outline mask with the same shape, then add contours
+    outline = np.zeros_like(mask_np)  # Updated this line
+    for contour in contours:
+        contour = np.round(contour).astype(int)
+        outline[contour[:, 0], contour[:, 1]] = 1
+
+    # Convert outline back to a tensor
+    return torch.tensor(outline, dtype=torch.float32).unsqueeze(0)
+
+def combine_images(outline: torch.Tensor, prediction: torch.Tensor, alpha: float = 0.5) -> torch.Tensor:
+    """
+    Combines an outline image with a prediction image.
+
+    Args:
+        outline: A binary tensor representing the outline (shape: [H, W]).
+        prediction: A tensor representing the predicted segmentation (shape: [H, W]).
+        alpha: The transparency factor for the outline overlay. (0 <= alpha <= 1)
+
+    Returns:
+        A tensor representing the combined image.
+    """
+    # Ensure the outline is in the right shape
+    if outline.dim() == 2:  # If the outline is 2D, add a channel dimension
+        outline = outline.unsqueeze(0)  # Shape: [1, H, W]
+    
+    # If prediction is also 2D, add a channel dimension
+    if prediction.dim() == 2:
+        prediction = prediction.unsqueeze(0)  # Shape: [1, H, W]
+
+    # Make sure both have the same shape
+    assert outline.shape == prediction.shape, "Outline and prediction must have the same dimensions"
+
+    # Create a color version of the outline for visualization (e.g., red)
+    outline_color = torch.zeros_like(prediction).repeat(3, 1, 1)  # Shape: [3, H, W]
+    outline_color[0] = outline  # Red channel
+    outline_color[1] = outline * 0  # Green channel
+    outline_color[2] = outline * 0  # Blue channel
+
+    # Combine the images with transparency
+    combined_image = (1 - alpha) * prediction.repeat(3, 1, 1) + alpha * outline_color
+
+    return combined_image
