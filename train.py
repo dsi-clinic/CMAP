@@ -424,7 +424,7 @@ def save_training_images(
     """
     save_dir = os.path.join(
         train_images_root,
-        f"epoch-{epoch}",
+        f"epoch-{epoch}", 
     )
     os.makedirs(save_dir, exist_ok=True)
 
