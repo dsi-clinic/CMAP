@@ -18,7 +18,7 @@
 - **Test Loss:** 0.983615
 
 ## Examples:
-- **False positive:** (CMAP_false_positive_example.png)
-- **False negative:** (CMAP_false_negative_example.png)
+- **False positive:** (output/example_images/CMAP_false_positive_example.png)
+- **False negative:** (output/example_images/CMAP_false_negative_example.png)
 
 
