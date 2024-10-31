@@ -564,6 +564,10 @@ def train_epoch(
 
         # compute prediction error
         outputs = model(x)
+
+        if isinstance(outputs, tuple):
+            outputs = outputs[0]
+
         loss = compute_loss(
             model,
             outputs,
@@ -663,6 +667,8 @@ def test(
 
             # compute prediction error
             outputs = model(x)
+            if isinstance(outputs, tuple):
+                outputs = outputs[0]
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric

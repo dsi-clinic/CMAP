@@ -131,7 +131,10 @@ class SegmentationModel:
                     encoder_weights="swsl" if self.weights is True else None,
                     in_channels=self.in_channels,
                     classes=self.num_classes,
-                    dropout=self.dropout,
+                    aux_params= {
+                        'classes': self.num_classes,
+                        'dropout': self.dropout,
+                    }
                 )
             elif model == "deeplabv3+":
                 self.model = smp.DeepLabV3Plus(
@@ -141,10 +144,10 @@ class SegmentationModel:
                     ),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
-                    # aux_params = {
-                    #     "classes": self.num_classes,
-                    #     "dropout": self.dropout,
-                    # }
+                    aux_params= {
+                        'classes': self.num_classes,
+                        'dropout': self.dropout,
+                    }
                 )
 
         elif model == "fcn":
