@@ -15,7 +15,13 @@ from torch.nn.modules import Module
 class FCN(Module):
     """A simple 5 layer FCN with leaky relus and 'same' padding."""
 
-    def __init__(self, in_channels: int, classes: int, num_filters: int = 64, dropout: float = 0.3) -> None:
+    def __init__(
+            self, 
+            in_channels: int, 
+            classes: int, 
+            num_filters: int = 64, 
+            dropout: float = 0.3,
+        ) -> None:
         """Initializes the 5 layer FCN model.
 
         Args:

@@ -30,7 +30,12 @@ from data.dem import KaneDEM
 from data.kc import KaneCounty
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
-from utils.plot import find_labels_in_ground_truth, plot_from_tensors, create_outline, combine_images
+from utils.plot import (
+    combine_images,
+    create_outline,
+    find_labels_in_ground_truth, 
+    plot_from_tensors,
+)
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 MODEL_DEVICE = (
@@ -678,19 +683,18 @@ def test(
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
-                    outline_mask = create_outline(samp_mask[i])  # Create an outline for the ground truth
-                    combined_image = combine_images(outline_mask.cpu(), preds[i].cpu())
+                    outline_mask = create_outline(samp_mask[i], 3)
+                    combined_image = combine_images(
+                        outline_mask.cpu(), 
+                        preds[i].cpu(), 
+                        kc.colors,
+                    )
                     plot_tensors = {
                         "RGB Image": x_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
-                        "ground_truth_vs_prediction": combined_image  # Add the outline to the plot
+                        "ground_truth_vs_prediction": combined_image,
                     }
-                    # plot_tensors = {
-                    #     "RGB Image": x_scaled[i].cpu(),
-                    #     "ground_truth": samp_mask[i],
-                    #     "prediction": preds[i].cpu(),
-                    # }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
@@ -1041,3 +1045,4 @@ if __name__ == "__main__":
             wandb.finish()
 
     run_trials()
+    
