@@ -39,6 +39,12 @@ MODEL_DEVICE = (
     else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
+def initialize_wandb():
+    """
+    Initializes wandb with sweep configuration.
+    """
+    wandb.init(config = wandb.config)
+    return config
 
 def arg_parsing(argument):
     """
@@ -166,15 +172,15 @@ def build_dataset(naip_set, split_rate):
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
             "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
+            "patch_size": wandb.config.patch_size,
+            "batch_size": wandb.config.batch_size,
         }
     )
     test_sampler = BalancedGridGeoSampler(
         config={
             "dataset": test_dataset,
-            "size": config.PATCH_SIZE,
-            "stride": config.PATCH_SIZE,
+            "size": wandb.config.patch_size,
+            "stride": wandb.config.patch_size,
         }
     )
 
@@ -289,7 +295,7 @@ def create_model():
         average=None,
     ).to(MODEL_DEVICE)
     optimizer = AdamW(
-        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
+        model.parameters(), lr=wandb.config.learning_rate, weight_decay=config.WEIGHT_DECAY
     )
 
     return (
@@ -424,7 +430,7 @@ def save_training_images(
     """
     save_dir = os.path.join(
         train_images_root,
-        f"epoch-{epoch}", 
+        f"epoch-{epoch}",
     )
     os.makedirs(save_dir, exist_ok=True)
 
@@ -1033,3 +1039,16 @@ if __name__ == "__main__":
             wandb.finish()
 
     run_trials()
+
+if __name__ == "__main__":
+    # Ensure wandb is logged in
+    wandb.login()
+
+    # Define the sweep configuration
+    sweep_config = 'sweep_config.yml'
+
+    # Initialize the sweep
+    sweep_id = wandb.sweep(sweep_config, project="CMAP") 
+
+    # Run the sweep agent
+    wandb.agent(sweep_id, function=run_trials, count=2)
