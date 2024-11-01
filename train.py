@@ -18,6 +18,7 @@ from typing import Any, DefaultDict, Tuple
 
 import kornia.augmentation as K
 import torch
+import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -1058,8 +1059,12 @@ if __name__ == "__main__":
     # Ensure wandb is logged in
     wandb.login()
 
-    # Define the sweep configuration
-    sweep_config = "sweep_config.yml"
+    # Define the sweep configuration file path
+    sweep_config_file = "configs/sweep_config.yml"
+
+    # Read and load the sweep configuration
+    with open(sweep_config_file, "r") as file:
+        sweep_config = yaml.safe_load(file)
 
     # Initialize the sweep
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
