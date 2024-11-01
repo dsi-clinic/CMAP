@@ -174,15 +174,15 @@ def build_dataset(naip_set, split_rate):
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
             "dataset": train_dataset,
-            "patch_size": wandb.config.patch_size,
+            "size": wandb.config.patch_size,
             "batch_size": wandb.config.batch_size,
         }
     )
     test_sampler = BalancedGridGeoSampler(
         config={
             "dataset": test_dataset,
-            "size": wandb.config.patch_size,
-            "stride": wandb.config.patch_size,
+            "size": config.PATCH_SIZE,
+            "stride": config.PATCH_SIZE,
         }
     )
 
@@ -1004,10 +1004,20 @@ if __name__ == "__main__":
         Running training for multiple trials
         """
 
+        default_config = {
+            "patch_size": config.PATCH_SIZE,
+            "batch_size": config.BATCH_SIZE,
+            "learning_rate": config.LR,
+        }
+
         if wandb_tune:
-            run = wandb.init(project="cmap_train")
-            vars(args).update(run.config)
+            run = wandb.init(project="cmap_train", config=default_config)
             print("wandb taken over config")
+        else:
+            # Initialize wandb with default configuration but disable logging
+            run = wandb.init(
+                project="cmap_train", config=default_config, mode="disabled"
+            )
 
         train_ious = []
         test_ious = []
@@ -1040,7 +1050,7 @@ if __name__ == "__main__":
 
         if wandb_tune:
             run.log({"average_test_jaccard_index": test_average})
-            wandb.finish()
+        wandb.finish()
 
     run_trials()
 
@@ -1052,7 +1062,7 @@ if __name__ == "__main__":
     sweep_config = "sweep_config.yml"
 
     # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="CMAP")
+    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
 
     # Run the sweep agent
     wandb.agent(sweep_id, function=run_trials, count=2)
