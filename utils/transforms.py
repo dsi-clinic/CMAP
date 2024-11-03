@@ -1,31 +1,7 @@
-"""
-This module provides functions for image augmentation and processing.
-
-Functions:
-- separate_channels(image, rgb_indices): Separates specified RGB channels
-from other channels in an image tensor.
-- combine_channels(rgb, other_channels, rgb_mask, original_shape):
-Recombines the RGB and other channels after augmentation.
-- create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices):
-Creates lists of spatial and color augmentations based on provided indices
-and parameters.
-- apply_augs(spatial_transforms, color_transforms, image, mask, spatial_mode,
-color_mode, rgb_channels=None): Applies spatial and color augmentations to an image
-and its corresponding mask.
-
-Parameters:
-- image (torch.Tensor): The input image tensor.
-- mask (torch.Tensor): The corresponding mask tensor.
-- spatial_aug_indices (list): Indices to select spatial augmentations.
-- color_aug_indices (list): Indices to select color augmentations for RGB channels.
-- spatial_mode (str): Augmentation mode for spatial augmentations -
-'random' for random augmentations or 'all' for all.
-- color_mode (str): Augmentation mode for color augmentations -
-'random' for random augmentations or 'all' for all.
-- rgb_channels (list): Indices of RGB channels in the image tensor.
-"""
+"""This module provides functions for image augmentation and processing."""
 
 import random
+import secrets
 
 import kornia.augmentation as K
 import torch
@@ -33,9 +9,7 @@ import torch
 
 def separate_channels(image, rgb_indices):
     """Separate specified RGB channels from other channels."""
-    rgb_mask = torch.zeros(
-        image.shape[1], dtype=torch.bool, device=image.device
-    )
+    rgb_mask = torch.zeros(image.shape[1], dtype=torch.bool, device=image.device)
     rgb_mask[rgb_indices] = True
 
     rgb = image[:, rgb_mask, :, :]  # Extract RGB channels
@@ -51,28 +25,23 @@ def combine_channels(rgb, other_channels, rgb_mask, original_shape):
     return combined
 
 
-def create_augmentation_pipelines(
-    config, spatial_aug_indices, color_aug_indices
-):
-    """
-    Create lists of spatial and color augmentations based on provided indices
-    and parameters.
+def create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices):
+    """Create lists of spatial and color augmentations.
 
-    Parameters:
-        spatial_aug_indices (list): Indices to select spatial augmentations.
-        color_aug_indices (list): Indices to select color augs for RGB channels.
+    Args:
+        config: configuration parameters for augmentations
+        spatial_aug_indices: indices to select spatial augmentations
+        color_aug_indices: indices to select color augs for RGB channels
 
     Returns:
-        tuple(list): List of spatial and color augmentation objects.
+        tuple containing lists of spatial and color augmentation objects
     """
     # Define all possible spatial augmentations (applied to image and mask)
     all_spatial_transforms = [
         K.RandomHorizontalFlip(p=0.5),
         K.RandomVerticalFlip(p=0.5),
         K.RandomRotation(degrees=config.ROTATION_DEGREES, p=0.5),
-        K.RandomAffine(
-            degrees=45, translate=(0.0625, 0.0625), scale=(0.9, 1.1), p=0.5
-        ),
+        K.RandomAffine(degrees=45, translate=(0.0625, 0.0625), scale=(0.9, 1.1), p=0.5),
         K.RandomElasticTransform(
             kernel_size=(63, 63), sigma=(32.0, 32.0), alpha=(1.0, 1.0), p=0.5
         ),
@@ -112,9 +81,7 @@ def create_augmentation_pipelines(
     selected_spatial_transforms = [
         all_spatial_transforms[i] for i in spatial_aug_indices
     ]
-    selected_color_transforms = [
-        all_color_transforms[i] for i in color_aug_indices
-    ]
+    selected_color_transforms = [all_color_transforms[i] for i in color_aug_indices]
 
     return selected_spatial_transforms, selected_color_transforms
 
@@ -125,8 +92,7 @@ def apply_augs(
     mask,
     rgb_channels=None,
 ):
-    """
-    Apply spatial and color augs to an image and its corresponding mask.
+    """Apply spatial and color augs to an image and its corresponding mask.
 
     Parameters:
         spatial_transforms (list): List of spatial augmentations to apply.
@@ -144,9 +110,7 @@ def apply_augs(
         rgb_channels = [0, 1, 2]
 
     # Create a boolean mask for identifying RGB channels
-    rgb_mask = torch.zeros(
-        image.shape[1], dtype=torch.bool, device=image.device
-    )
+    rgb_mask = torch.zeros(image.shape[1], dtype=torch.bool, device=image.device)
     rgb_mask[rgb_channels] = True
 
     spatial_transforms, color_transforms, spatial_mode, color_mode = aug_config
@@ -175,8 +139,7 @@ def apply_augs(
 
 
 def get_spatial_augmentation(spatial_transforms, mode, image, mask):
-    """
-    Return the image and mask after spatial augmentation
+    """Return the image and mask after spatial augmentation
 
     Parameters:
         spatial_transforms (list): List of spatial augmentations to apply.
@@ -188,7 +151,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
     # Randomly select augmentations if modes are specified
     if mode:
         spatial_augmentations = random.sample(
-            spatial_transforms, k=random.randint(1, len(spatial_transforms))
+            spatial_transforms, k=secrets.randbelow(len(spatial_transforms)) + 1
         )
     else:
         spatial_augmentations = spatial_transforms
@@ -203,8 +166,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
 
 
 def get_augmented_rgb(color_transforms, mode, rgb_only):
-    """
-    Return the RGB channels after color augmentation
+    """Return the RGB channels after color augmentation
 
     Parameters:
         color_transforms (list): List of color augmentations to apply.
@@ -214,7 +176,7 @@ def get_augmented_rgb(color_transforms, mode, rgb_only):
     """
     if mode:
         color_augmentations = random.sample(
-            color_transforms, k=random.randint(1, len(color_transforms))
+            color_transforms, k=secrets.randbelow(len(color_transforms)) + 1
         )
     else:
         color_augmentations = color_transforms
