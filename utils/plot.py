@@ -21,10 +21,9 @@ Functions:
 - plot_from_tensors(
     sample: Dict[str, Tensor],
     save_path: str,
-    mode: str = "row",
     colors: Dict[int, tuple] = None,
     labels: Dict[int, str] = None,
-    coords: BoundingBox = None
+    coords: BoundingBox = None,
 ) -> None:
     Plots a sample from the training dataset and saves to provided file path.
 
@@ -33,6 +32,12 @@ Functions:
 
 - find_labels_in_ground_truth(ground_truth: Tensor) -> List[int]:
     Finds all unique label IDs from a ground truth mask tensor.
+
+- create_outline(
+        mask: torch.Tensor,
+        iterations: int = 1,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    Creates an outline for the given ground truth mask tensor.
 """
 
 from typing import Dict
@@ -169,7 +174,6 @@ def plot_from_tensors(
     plt.savefig(save_path, bbox_inches="tight")
     plt.close()
 
-
 def determine_dominant_label(ground_truth: Tensor) -> int:
     """
     Determines the most common label ID from a ground truth mask tensor.
@@ -229,79 +233,138 @@ def find_labels_in_ground_truth(ground_truth: Tensor):
 def create_outline(
         mask: torch.Tensor,
         iterations: int = 1,
-) -> torch.Tensor:
+) -> tuple[torch.Tensor, torch.Tensor]:
     """
-    Create an outline for the given mask.
+    Creates an outline for the given ground truth mask tensor.
 
     Args:
-        mask (torch.Tensor): The ground truth mask tensor.
+        mask : Tensor
+            The ground truth mask tensor.
+        iterations : int
+            Number of dilation iterations for the outline thickness.
 
     Returns:
-        torch.Tensor: A binary tensor representing the outline.
+    -------
+    tuple [torch.Tensor, torch.Tensor]
+        1. The outline mask with preserved label information.
+        2. The binary outline mask indicating outline positions.
     """
-    # Convert to numpy for contour detection
+    # Convert to numpy for processing
     mask_np = mask.cpu().numpy()
-
-    # Detect contours of the binary mask
-    contours = measure.find_contours(mask_np, level=0.5)
-
-    # Create an empty outline mask with the same shape, then add contours
-    outline = np.zeros_like(mask_np)  # Updated this line
-    for contour in contours:
-        contour = np.round(contour).astype(int)
-        outline[contour[:, 0], contour[:, 1]] = 1
-
-    outline = binary_dilation(outline, iterations=iterations)
-
-    # Convert outline back to a tensor
-    return torch.tensor(outline, dtype=torch.float32).unsqueeze(0)
+    
+    # Initialize outline masks
+    outline_labels = np.zeros_like(mask_np)
+    outline_binary = np.zeros_like(mask_np)
+    
+    # Get unique labels (excluding background if 0 is present)
+    unique_labels = np.unique(mask_np)
+    if 0 in unique_labels:
+        unique_labels = unique_labels[unique_labels != 0]
+        
+    # Process each label separately
+    for label in unique_labels:
+        # Create binary mask for this label
+        label_mask = (mask_np == label)
+        
+        # Find contours for this label
+        contours = measure.find_contours(label_mask, level=0.5)
+        
+        # Draw contours for this label
+        label_outline = np.zeros_like(mask_np)
+        for contour in contours:
+            contour = np.round(contour).astype(int)
+            label_outline[contour[:, 0], contour[:, 1]] = 1
+            
+        # Dilate the outline
+        dilated_outline = binary_dilation(label_outline, iterations=iterations)
+        
+        # Add this label's outline to both masks
+        outline_labels[dilated_outline] = label
+        outline_binary[dilated_outline] = 1
+    
+    # Convert back to tensors
+    return (torch.tensor(outline_labels, dtype=torch.float32).unsqueeze(0),
+            torch.tensor(outline_binary, dtype=torch.float32).unsqueeze(0))
 
 def combine_images(
-        outline: torch.Tensor, 
-        prediction: torch.Tensor, 
+        outline: tuple[torch.Tensor, torch.Tensor],
+        ground_truth: torch.Tensor,
+        prediction: torch.Tensor,
         colors: Dict[int, tuple],
-        alpha: float = 0.5,
+        outline_alpha: float = 1.0,
+        pred_alpha: float = 0.5,
 ) -> torch.Tensor:
     """
-    Combines an outline image with a prediction image.
+    Combines the outline of the ground truth with the prediction image
 
     Args:
-        outline: A binary tensor representing the outline (shape: [H, W]).
-        prediction: A tensor representing the predicted segmentation (shape: [H, W]).
-        colors: A dictionary mapping class indices to RGB tuples.
-        alpha: The transparency factor for the outline overlay. (0 <= alpha <= 1)
+        outline: tuple
+            A tuple containing (outline_labels, outline_binary).
+        ground_truth: Tensor
+            The ground truth mask tensor
+        prediction: Tensor
+            The prediction mask tensor
+        colors: Dict
+            A dictionary containing a color mapping for masks.
+            keys : mask indices
+            values : (r, g, b)
+        outline_alpha: float
+            The transparency factor for the outline (0 to 1).
+        pred_alpha: float
+            The transparency factor for the prediction (0 to 1).
 
     Returns:
-        A tensor representing the combined image.
+        A tensor representing the combined image
     """
-    # Ensure the outline is in the right shape
-    if outline.dim() == 2:  # If the outline is 2D, add a channel dimension
-        outline = outline.unsqueeze(0)  # Shape: [1, H, W]
-
-    # If prediction is also 2D, add a channel dimension
-    if prediction.dim() == 2:
-        prediction = prediction.unsqueeze(0)  # Shape: [1, H, W]
-
-    # Make sure both have the same shape
-    assert outline.shape == prediction.shape, "Outline and prediction must have the same dimensions"
-
-    # Create a color version of the prediction image
-    color_prediction = torch.zeros(3, *prediction.shape[1:])  # Shape: [3, H, W]
+    outline_labels, outline_binary = outline
     
-    # Loop over each class and assign colors
+    if prediction.dim() == 2:
+        prediction = prediction.unsqueeze(0)
+    
+    if ground_truth is None:
+        ground_truth = prediction
+
+    if ground_truth.dim() == 2:
+        ground_truth = ground_truth.unsqueeze(0)
+    
+    # Create color versions of both the prediction and outline
+    color_prediction = torch.ones(3, *prediction.shape[1:])
+    color_outline = torch.ones(3, *prediction.shape[1:]) 
+    
+    # Create masks for colored regions (non-background)
+    pred_colored_mask = prediction[0] != 0 
+    
+    # Color the prediction
     for label_id, color in colors.items():
-        color_prediction[0][prediction[0] == label_id] = color[0] / 255.0  # Red channel
-        color_prediction[1][prediction[0] == label_id] = color[1] / 255.0  # Green channel
-        color_prediction[2][prediction[0] == label_id] = color[2] / 255.0  # Blue channel
-
-    # Create a color version of the outline for visualization (e.g., red)
-    outline_color = torch.zeros_like(color_prediction)  # Shape: [3, H, W]
-    outline_color[0] = outline  # Red channel
-    outline_color[1] = outline * 0  # Green channel
-    outline_color[2] = outline * 0  # Blue channel
-
-    # Combine the images with transparency
-    combined_image = (1 - alpha) * color_prediction + alpha * outline_color
-
+        if label_id == 0:
+            continue
+        mask = prediction[0] == label_id
+        if mask.any():
+            for c in range(3):
+                color_val = color[c] / 255.0
+                # Blend with white background using alpha
+                color_prediction[c][mask] = color_val * pred_alpha + (1 - pred_alpha)
+    
+    # Color the outline using the outline labels
+    outline_mask = outline_binary[0] > 0
+    for label_id, color in colors.items():
+        if label_id == 0: 
+            continue
+        mask = (outline_labels[0] == label_id) & outline_mask
+        if mask.any(): 
+            for c in range(3):
+                color_val = color[c] / 255.0 
+                # Blend with white background using alpha
+                color_outline[c][mask] = color_val * outline_alpha + (1 - outline_alpha)
+    
+    # Combine the images - use outline where it exists
+    combined_image = torch.where(
+        outline_mask.unsqueeze(0),
+        color_outline,
+        color_prediction
+    )
+    
+    # Ensure all values are between 0 and 1
+    combined_image = torch.clamp(combined_image, 0, 1)
+    
     return combined_image
-

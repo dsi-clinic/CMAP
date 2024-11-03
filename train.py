@@ -689,11 +689,17 @@ def test(
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
-                    outline_mask = create_outline(samp_mask[i], 3)
+                    outline_labels, outline_binary = create_outline(
+                        samp_mask[i].cpu(), 
+                        2,
+                    ) 
                     combined_image = combine_images(
-                        outline_mask.cpu(), 
+                        (outline_labels, outline_binary),
+                        samp_mask[i].cpu(),
                         preds[i].cpu(), 
                         kc.colors,
+                        1,
+                        0.8,
                     )
                     plot_tensors = {
                         "RGB Image": x_scaled[i].cpu(),
