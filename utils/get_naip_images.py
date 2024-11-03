@@ -1,16 +1,12 @@
-"""
-The `get_naip_images.py` module is designed for retrieving NAIP imagery based on
-geographic areas defined by shapefiles. It includes functions to read shapefiles,
-transform geometries, search for images in the Planetary Computer's STAC catalog,
-and download images that overlap specified areas.
+"""NAIP image retrieval from shapefiles.
 
-Key functionalities:
-- Process and transform shapefile geometries to standard coordinates.
-- Fetch and download NAIP images with specified overlap or most recent imagery.
+Retrieves NAIP imagery from Planetary Computer's STAC catalog based on shapefile geometries.
+Handles coordinate transformations and downloads images overlapping specified areas.
 """
 
-import os
-from typing import Any, Dict, Iterator
+from collections.abc import Iterator
+from pathlib import Path
+from typing import Any
 
 import fiona
 import geopandas as gpd
@@ -21,9 +17,8 @@ from fiona import transform
 from shapely.geometry import box, shape
 
 
-def get_geometry(fpath: str, layer: int = None) -> Iterator[Dict[str, Any]]:
-    """
-    Read in a shapefile and yield each feature as a dictionary with id and geometry.
+def get_geometry(fpath: str, layer: int = None) -> Iterator[dict[str, Any]]:
+    """Read in a shapefile and yield each feature as a dictionary with id and geometry.
 
     Parameters
     ----------
@@ -33,7 +28,7 @@ def get_geometry(fpath: str, layer: int = None) -> Iterator[Dict[str, Any]]:
     layer : int
         Index of the layer in the shapefile to read in
 
-    Yields
+    Yields:
     ------
     dict
         Dictionary with id and geometry
@@ -51,8 +46,7 @@ def get_geometry(fpath: str, layer: int = None) -> Iterator[Dict[str, Any]]:
 
 
 def get_river_geometry(fpath: str):
-    """
-    Read in a river shapefile and yield each feature as a dictionary.
+    """Read in a river shapefile and yield each feature as a dictionary.
 
     Parameters
     ----------
@@ -62,7 +56,7 @@ def get_river_geometry(fpath: str):
     layer : int
         Optional layer index of the shapefile to read in
 
-    Yields
+    Yields:
     ------
     dict
         Dictionary with id and geometry
@@ -82,10 +76,9 @@ def get_river_geometry(fpath: str):
 
 
 def get_catalog() -> pystac_client.Client:
-    """
-    Get the planetary computer catalog.
+    """Get the planetary computer catalog.
 
-    Returns
+    Returns:
     -------
     pystac_client.Client
         Pystac client for accessing the planetary computer catalog
@@ -98,10 +91,9 @@ def get_catalog() -> pystac_client.Client:
 
 
 def get_token() -> str:
-    """
-    Get a token for accessing naip images on the planetary computer catalog.
+    """Get a token for accessing naip images on the planetary computer catalog.
 
-    Returns
+    Returns:
     -------
     str
         Token for accessing naip images on the planetary computer catalog
@@ -114,10 +106,10 @@ def get_token() -> str:
 
 
 def area_of_overlap(
-    image_geom: Dict[str, Any], area_of_interest: Dict[str, Any]
+    image_geom: dict[str, Any], area_of_interest: dict[str, Any]
 ) -> float:
-    """
-    Calculates the area of overlap between two geometries based based on coordinates.
+    """Calculate the area of overlap between two geometries based based on coordinates.
+
     Used specifically for calculating the percentage overlap between an image and
     area of interest.
 
@@ -130,7 +122,7 @@ def area_of_overlap(
         Geometry of the area of interest. Dictionary contains geometry type and
         coordinates
 
-    Returns
+    Returns:
     -------
     float
         Percentage overlap between the image and area of interest, with area of
@@ -142,8 +134,7 @@ def area_of_overlap(
 
 
 def split_geometry(geometry, max_size=0.01):
-    """
-    Splits the geometry into smaller parts using a grid overlay method.
+    """Splits the geometry into smaller parts using a grid overlay method.
 
     Parameters:
     - geometry: The geometry to split (shapely.geometry).
@@ -177,13 +168,13 @@ def split_geometry(geometry, max_size=0.01):
 
 
 def get_image_url(
-    geometry: Dict[str, Any],
+    geometry: dict[str, Any],
     catalog: pystac_client.Client,
     date_range: str,
     img_type: str,
 ) -> str:
-    """
-    Retrieves NAIP image url corresponding to an area of interest.
+    """Retrieves NAIP image url corresponding to an area of interest.
+
     If an area of interest covers more than one image, the url for the image with
     the most overlap is retrieved.
 
@@ -204,15 +195,13 @@ def get_image_url(
             "rendered_preview" is a preview image in png format
             "image" is the full image in GeoTIFF format
 
-    Returns
+    Returns:
     -------
     str
         URL of the image corresponding to the area of interest
     """
     if img_type not in ["rendered_preview", "image"]:
-        raise ValueError(
-            "img_type must be either 'rendered_preview' or 'image'"
-        )
+        raise ValueError("img_type must be either 'rendered_preview' or 'image'")
 
     search = catalog.search(
         collections=["naip"], intersects=geometry, datetime=date_range
@@ -234,13 +223,12 @@ def get_image_url(
 
 
 def get_image_urls(
-    geometry: Dict[str, Any],
+    geometry: dict[str, Any],
     catalog: pystac_client.Client,
     date_range: str,
     img_type: str,
 ) -> list:
-    """
-    Retrieves NAIP image urls corresponding to an area of interest.
+    """Retrieves NAIP image urls corresponding to an area of interest.
 
     Parameters
     ----------
@@ -257,15 +245,13 @@ def get_image_urls(
     img_type : str
         Type of image to retrieve. Options are "rendered_preview" and "image"
 
-    Returns
+    Returns:
     -------
     list
         List of URLs of the images corresponding to the area of interest
     """
     if img_type not in ["rendered_preview", "image"]:
-        raise ValueError(
-            "img_type must be either 'rendered_preview' or 'image'"
-        )
+        raise ValueError("img_type must be either 'rendered_preview' or 'image'")
 
     # Search for NAIP images that intersect with the geometry
     search = catalog.search(
@@ -285,8 +271,7 @@ def get_image_urls(
 def download_image(
     url: str, save_dir: str, img_type: str, image_id: str = None
 ) -> None:
-    """
-    Downloads images from specified URL.
+    """Downloads images from specified URL.
 
     Parameters
     ----------
@@ -315,29 +300,25 @@ def download_image(
             img_name = url.split("?", 1)[1].split("&")[1][5:]
         else:
             img_name = image_id + ".png"
-    save_fpath = os.path.join(save_dir, img_name)
+    save_fpath = Path(save_dir) / img_name
 
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
+    if not Path.exists(save_dir):
+        Path.mkdir(save_dir)
 
     # retrieve the image and write it to disk; if the request fails, print the error
     res = requests.get(url, stream=True, timeout=10)
-    if res.status_code != 200:
-        print(
-            f"Failed to download image: {res.text}. Status code: {res.status_code}"
-        )
+    failure_code = 200
+    if res.status_code != failure_code:
+        print(f"Failed to download image: {res.text}. Status code: {res.status_code}")
     else:
         print(f"Writing image {img_name} to disk")
-        with open(save_fpath, "wb") as file:
+        with Path.open(save_fpath, "wb") as file:
             for chunk in res.iter_content(chunk_size=8192):
                 file.write(chunk)
 
 
-def get_images(
-    img_type: str, data_fpath: str, save_dir: str, layer: int = None
-):
-    """
-    Retrieves NAIP images overlapping the geometries in a shapefile.
+def get_images(img_type: str, data_fpath: str, save_dir: str, layer: int = None):
+    """Retrieves NAIP images overlapping the geometries in a shapefile.
 
     Parameters
     ----------
@@ -374,8 +355,7 @@ def get_images(
 
 
 def get_river_images(img_type: str, data_fpath: str, save_dir: str):
-    """
-    Retrieves NAIP images overlapping the geometries in a shapefile.
+    """Retrieves NAIP images overlapping the geometries in a shapefile.
 
     Parameters
     ----------
