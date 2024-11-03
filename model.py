@@ -1,34 +1,12 @@
-"""
-This module provides a class for configuring and using segmentation models.
+"""This module provides a class for configuring and using segmentation models.
 
 It includes utilities for selecting different architectures, backbones,
 input channels, number of classes,
 number of filters, and weights to initialize the model.
-
-Attributes:
-    segmentation_models_pytorch (module): A Python package containing implementations
-    of various segmentation models.
-    timm (module): A library for model architectures and pretrained weights from
-    the PyTorch Image Models repository.
-    torchgeo.models (module): Models provided by the TorchGeo library for
-    geospatial data processing.
-    torchgeo.trainers.utils (module): Utilities for training models in the
-    TorchGeo library.
-    torchvision.models._api (module): A module containing model definitions
-    from the torchvision library.
-
-Classes:
-    SegmentationModel: A class for configuring and using segmentation models.
-
-Functions:
-    None
-
-Exceptions:
-    None
 """
 
 import importlib
-import os
+from pathlib import Path
 
 import segmentation_models_pytorch as smp
 from torchgeo.models import get_weight
@@ -38,8 +16,7 @@ from utils.custom_fcn import FCN
 
 
 class SegmentationModel:
-    """
-    This class represents a segmentation model for image segmentation tasks.
+    """This class represents a segmentation model for image segmentation tasks.
 
     It allows configuring various aspects of the model architecture, such as
     the model type, backbone, number of input channels,
@@ -59,8 +36,7 @@ class SegmentationModel:
     """
 
     def __init__(self, model_config):
-        """
-        Initialize the SegmentationModel object with the provided model configuration.
+        """Initialize the SegmentationModel object with the provided model configuration.
 
         Parameters
         ----------
@@ -78,7 +54,7 @@ class SegmentationModel:
                 If True, uses imagenet weights. Can also accept a string path
                 to a weights file, or a WeightsEnum with pretrained weights.
 
-        Returns
+        Returns:
         -------
         None
         """
@@ -118,7 +94,7 @@ class SegmentationModel:
 
                 if isinstance(weights_attribute, WeightsEnum):
                     state_dict = weights_attribute.get_state_dict(progress=True)
-                elif os.path.exists(weights_attribute):
+                elif Path.exists(weights_attribute):
                     _, state_dict = utils.extract_backbone(weights_attribute)
                 else:
                     state_dict = get_weight(weights_attribute).get_state_dict(
@@ -139,9 +115,7 @@ class SegmentationModel:
             elif model == "deeplabv3+":
                 self.model = smp.DeepLabV3Plus(
                     encoder_name=self.backbone,
-                    encoder_weights=(
-                        "imagenet" if self.weights is True else None
-                    ),
+                    encoder_weights=("imagenet" if self.weights is True else None),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
                     aux_params= {
@@ -169,13 +143,9 @@ class SegmentationModel:
         self.model.in_channels = self.in_channels
 
     def __getbackbone__(self):
-        """
-        returns the backbone of the model
-        """
+        """Returns the backbone of the model"""
         return self.backbone
 
     def __getweights__(self):
-        """
-        returns the weights of the model
-        """
+        """Returns the weights of the model"""
         return self.weights

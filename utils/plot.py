@@ -1,5 +1,4 @@
-"""
-Module: plot.py
+"""Module: plot.py
 
 This module provides utility functions for working with image data, including
 building colormaps, plotting images, and analyzing ground truth masks.
@@ -40,8 +39,6 @@ Functions:
     Creates an outline for the given ground truth mask tensor.
 """
 
-from typing import Dict
-
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
@@ -53,9 +50,8 @@ from torch import Tensor
 from torchgeo.datasets.utils import BoundingBox
 
 
-def build_cmap(colors: Dict[int, tuple]):
-    """
-    Build a ListedColormap object from a dictionary.
+def build_cmap(colors: dict[int, tuple]):
+    """Build a ListedColormap object from a dictionary.
 
     Parameters
     ----------
@@ -78,41 +74,40 @@ def build_cmap(colors: Dict[int, tuple]):
 
 
 def plot_from_tensors(
-    sample: Dict[str, Tensor],
+    sample: dict[str, Tensor],
     save_path: str,
-    colors: Dict[int, tuple] = None,
-    labels: Dict[int, str] = None,
+    colors: dict[int, tuple] = None,
+    labels: dict[int, str] = None,
     coords: BoundingBox = None,
 ):
-    """
-    Plots a sample from the training dataset and saves to provided file path.
+    """Plot sample from training dataset and save to file
 
     Parameters
     ----------
     sample : dict
-        A sample from the training dataset containing a dict of names for
-        images and tensors of image data. Each tensor must only contain data
+        sample from training dataset containing dict of names for
+        images and tensors of image data. each tensor must only contain data
         for a single image
 
     save_path : str
-        The path to save the plot to
+        path to save plot to
 
     colors : Dict[int, tuple]
-        A dictionary containing a color mapping for masks
+        color mapping for masks
             keys : mask indices
             values : (r, g, b)
 
     labels : Dict[int, str]
-        A dictionary containing a label mapping for masks
+        label mapping for masks
             keys : mask indices
             values : labels
 
     coords : torchgeo.datasets.utils.BoundingBox
-        The x, y, t coords for the sample taken from a dataloader sample's
-        bbox key
+        x, y, t coords for sample taken from dataloader sample's bbox key
     """
     # Create the colormap
     cmap = build_cmap(colors) if colors is not None else "viridis"
+    min_dims = 2
 
     # Determine the layout and create subplots
     fig, axs = plt.subplots(
@@ -133,13 +128,9 @@ def plot_from_tensors(
             # Plot the combined image of ground truth outline and prediction
             ax.imshow(tensor.permute(1, 2, 0), cmap=cmap)
         else:
-            unique = (
-                tensor[0].unique()
-                if len(tensor.shape) != 2
-                else tensor.unique()
-            )
+            unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
             ax.imshow(
-                tensor[0] if len(tensor.shape) != 2 else tensor,
+                tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
                 vmin=0,
                 vmax=len(cmap.colors) - 1,
@@ -154,8 +145,7 @@ def plot_from_tensors(
     if labels is not None and colors is not None:
         unique_labels = unique_labels.unique().type(torch.int).tolist()
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[i])
-            for i in unique_labels
+            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
         ]
 
         fig.legend(
@@ -175,15 +165,14 @@ def plot_from_tensors(
 
 
 def determine_dominant_label(ground_truth: Tensor) -> int:
-    """
-    Determines the most common label ID from a ground truth mask tensor.
+    """Determines the most common label ID from a ground truth mask tensor.
 
     Parameters
     ----------
     ground_truth : Tensor
         The ground truth mask tensor, which should contain label indices.
 
-    Returns
+    Returns:
     -------
     int
         The ID of the most common label in the ground truth.
@@ -192,16 +181,10 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     # Remove the background label '0' from consideration if present
     if 0 in unique:
         background_index = (unique == 0).nonzero(as_tuple=True)[0].item()
-        unique = torch.cat(
-            [unique[:background_index], unique[background_index + 1 :]]
-        )
-        counts = torch.cat(
-            [counts[:background_index], counts[background_index + 1 :]]
-        )
+        unique = torch.cat([unique[:background_index], unique[background_index + 1 :]])
+        counts = torch.cat([counts[:background_index], counts[background_index + 1 :]])
 
-    if (
-        counts.numel() == 0
-    ):  # Check if there are no labels other than the background
+    if counts.numel() == 0:  # Check if there are no labels other than the background
         return 15  # Return ID for 'UNKNOWN'
 
     most_common_index = counts.argmax()
@@ -210,15 +193,14 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
 
 
 def find_labels_in_ground_truth(ground_truth: Tensor):
-    """
-    Finds all unique label IDs from a ground truth mask tensor.
+    """Finds all unique label IDs from a ground truth mask tensor.
 
     Parameters
     ----------
     ground_truth : Tensor
         The ground truth mask tensor, which should contain label indices.
 
-    Returns
+    Returns:
     -------
     List[int]
         A list of the unique label IDs in the ground truth.
