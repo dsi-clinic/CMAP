@@ -238,13 +238,14 @@ def create_outline(
     """
     Creates an outline for the given ground truth mask tensor.
 
-    Args:
-        mask : Tensor
-            The ground truth mask tensor.
-        iterations : int
-            Number of dilation iterations for the outline thickness.
+    Parameters
+    ----------
+    mask : Tensor
+        The ground truth mask tensor.
+    iterations : int
+        Number of dilation iterations for the outline thickness.
 
-    Returns
+    Returns:
     -------
     Tuple [torch.Tensor, torch.Tensor]
         1. The outline mask with preserved label information.
@@ -301,21 +302,22 @@ def combine_images(
     """
     Combines the outline of the ground truth with the prediction image
 
-    Args:
+    Parameters
+    ----------
         outline: tuple
-            A tuple containing (outline_labels, outline_binary).
-        ground_truth: Tensor
-            The ground truth mask tensor
-        prediction: Tensor
-            The prediction mask tensor
-        colors: Dict
-            A dictionary containing a color mapping for masks.
-            keys : mask indices
-            values : (r, g, b)
-        outline_alpha: float
-            The transparency factor for the outline (0 to 1).
-        pred_alpha: float
-            The transparency factor for the prediction (0 to 1).
+        A tuple containing (outline_labels, outline_binary).
+    ground_truth: Tensor
+        The ground truth mask tensor
+    prediction: Tensor
+        The prediction mask tensor
+    colors: Dict
+        A dictionary containing a color mapping for masks.
+        keys : mask indices
+        values : (r, g, b)
+    outline_alpha: float
+        The transparency factor for the outline (0 to 1).
+    pred_alpha: float
+        The transparency factor for the prediction (0 to 1).
 
     Returns
     -------
@@ -336,9 +338,6 @@ def combine_images(
     color_prediction = torch.ones(3, *prediction.shape[1:])
     color_outline = torch.ones(3, *prediction.shape[1:])
 
-    # Create masks for colored regions (non-background)
-    # pred_colored_mask = prediction[0] != 0
-
     # Color the prediction
     for label_id, color in colors.items():
         if label_id == 0:
@@ -348,9 +347,7 @@ def combine_images(
             for c in range(3):
                 color_val = color[c] / 255.0
                 # Blend with white background using alpha
-                color_prediction[c][mask] = color_val * pred_alpha + (
-                    1 - pred_alpha
-                )
+                color_prediction[c][mask] = color_val * pred_alpha + (1 - pred_alpha)
 
     # Color the outline using the outline labels
     outline_mask = outline_binary[0] > 0
