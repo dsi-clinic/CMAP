@@ -243,9 +243,9 @@ def create_outline(
         iterations : int
             Number of dilation iterations for the outline thickness.
 
-    Returns:
+    Returns
     -------
-    tuple [torch.Tensor, torch.Tensor]
+    Tuple [torch.Tensor, torch.Tensor]
         1. The outline mask with preserved label information.
         2. The binary outline mask indicating outline positions.
     """
@@ -313,8 +313,9 @@ def combine_images(
         pred_alpha: float
             The transparency factor for the prediction (0 to 1).
 
-    Returns:
-        A tensor representing the combined image
+    Returns
+    -------
+    A tensor representing the combined image
     """
     outline_labels, outline_binary = outline
     
@@ -357,7 +358,7 @@ def combine_images(
                 # Blend with white background using alpha
                 color_outline[c][mask] = color_val * outline_alpha + (1 - outline_alpha)
     
-    # Combine the images - use outline where it exists
+    # Combine the images
     combined_image = torch.where(
         outline_mask.unsqueeze(0),
         color_outline,
