@@ -33,7 +33,7 @@ from model import SegmentationModel
 from utils.plot import (
     combine_images,
     create_outline,
-    find_labels_in_ground_truth, 
+    find_labels_in_ground_truth,
     plot_from_tensors,
 )
 from utils.transforms import apply_augs, create_augmentation_pipelines
@@ -690,13 +690,13 @@ def test(
                     os.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     outline_labels, outline_binary = create_outline(
-                        samp_mask[i].cpu(), 
+                        samp_mask[i].cpu(),
                         2,
-                    ) 
+                    )
                     combined_image = combine_images(
                         (outline_labels, outline_binary),
                         samp_mask[i].cpu(),
-                        preds[i].cpu(), 
+                        preds[i].cpu(),
                         kc.colors,
                         1,
                         0.8,
@@ -1057,4 +1057,3 @@ if __name__ == "__main__":
             wandb.finish()
 
     run_trials()
-    
