@@ -516,6 +516,7 @@ def train_epoch(
             - spatial_aug_mode: The mode for spatial augmentations.
             - color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
+        args: Additional arguments for debugging or special training conditions.
     """
     loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
@@ -720,10 +721,8 @@ def train(
     wandb_t,
     args,
     epoch_config,
-) -> Tuple[float, float]:
-    """
-    Train a deep learning model using the specified configuration and parameters.
-
+) -> tuple[float, float]:
+    """Train a deep learning model using the specified configuration and parameters.
 
     Args:
         model: The deep learning model to be trained.
@@ -744,6 +743,8 @@ def train(
                 - test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
         wandb_t: Whether running hyperparameter tuning with wandb.
+        args: Additional arguments for debugging or special training conditions.
+        epoch_config: The configuration for the number of epochs.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -878,8 +879,7 @@ def train(
 
 
 def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
-    """
-    Runing a single trial of training
+    """Runing a single trial of training
 
     Input:
         exp_n: experiment name
