@@ -32,8 +32,8 @@ from data.kc import KaneCounty
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import (
-    create_outline,
     combine_images,
+    create_outline,
     find_labels_in_ground_truth, 
     plot_from_tensors,
 )

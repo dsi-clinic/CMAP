@@ -53,17 +53,16 @@ Functions:
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
 from matplotlib.colors import ListedColormap
 from scipy.ndimage import binary_dilation
 from skimage import measure
 from torch import Tensor
-import torch
 from torchgeo.datasets.utils import BoundingBox
 
 
 def build_cmap(colors: dict[int, tuple]):
-    """
-    Build a ListedColormap object from a dictionary.
+    """Build a ListedColormap object from a dictionary.
 
     Parameters
     ----------
@@ -92,8 +91,7 @@ def plot_from_tensors(
     labels: dict[int, str] = None,
     coords: BoundingBox = None,
 ):
-    """
-    Plots a sample from the training dataset and saves to provided file path.
+    """Plots a sample from the training dataset and saves to provided file path.
 
     Parameters
     ----------
@@ -191,7 +189,7 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     ground_truth : Tensor
         The ground truth mask tensor, which should contain label indices.
 
-    Returns
+    Returns:
     -------
     int
         The ID of the most common label in the ground truth.
@@ -226,7 +224,7 @@ def find_labels_in_ground_truth(ground_truth: Tensor):
     ground_truth : Tensor
         The ground truth mask tensor, which should contain label indices.
 
-    Returns
+    Returns:
     -------
     List[int]
         A list of the unique label IDs in the ground truth.
@@ -243,8 +241,7 @@ def create_outline(
     mask: torch.Tensor,
     iterations: int = 1,
 ) -> tuple[torch.Tensor, torch.Tensor]:
-    """
-    Creates an outline for the given ground truth mask tensor.
+    """Creates an outline for the given ground truth mask tensor.
 
     Parameters
     ----------
@@ -307,8 +304,7 @@ def combine_images(
     outline_alpha: float = 1.0,
     pred_alpha: float = 0.5,
 ) -> torch.Tensor:
-    """
-    Combines the outline of the ground truth with the prediction image
+    """Combines the outline of the ground truth with the prediction image
 
     Parameters
     ----------
@@ -327,7 +323,7 @@ def combine_images(
     pred_alpha: float
         The transparency factor for the prediction (0 to 1).
 
-    Returns
+    Returns:
     -------
     A tensor representing the combined image
     """
