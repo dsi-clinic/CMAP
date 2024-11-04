@@ -1,27 +1,27 @@
-"""
-This module contains configuration settings.
+"""Configuration parameters for model training and data processing
+
+Contains paths to data directories, model architecture settings, hyperparameters,
+and augmentation options used throughout training pipeline.
 """
 
 import os
+from pathlib import Path
 
 # data paths
 DATA_ROOT = "/net/projects/cmap/data"
-KC_SHAPE_ROOT = os.path.join(DATA_ROOT, "kane-county-data")
-KC_IMAGE_ROOT = os.path.join(DATA_ROOT, "KC-images")
-KC_RIVER_ROOT = os.path.join(DATA_ROOT, "KC-river-images")
+KC_SHAPE_ROOT = Path(DATA_ROOT) / "kane-county-data"
+KC_IMAGE_ROOT = Path(DATA_ROOT) / "KC-images"
+KC_RIVER_ROOT = Path(DATA_ROOT) / "KC-river-images"
 KC_DEM_ROOT = None
-# KC_DEM_ROOT = os.path.join(KC_SHAPE_ROOT, "KC_DEM_2017")
-KC_MASK_ROOT = os.path.join(DATA_ROOT, "KC-masks/separate-masks")
-OUTPUT_ROOT = f"/net/projects/cmap/workspaces/{os.environ['USER']}"
+# KC_DEM_ROOT = Path(KC_SHAPE_ROOT) / "KC_DEM_2017"
+KC_MASK_ROOT = Path(DATA_ROOT) / "KC-masks/separate-masks"
+OUTPUT_ROOT = Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}"
 
 # model selection
 MODEL = "deeplabv3+"
-BACKBONE = "resnet18"
+BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
-
-# dropout
-DROPOUT = 0.2
 
 # model hyperparams
 DATASET_MEAN = [
@@ -37,11 +37,11 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 512
+PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-5
+LR = 1e-4
 NUM_WORKERS = 8
-EPOCHS = 10
+EPOCHS = 30
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
