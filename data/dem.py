@@ -1,19 +1,18 @@
-""""
-***************convert .gdb file to .tif file****************
-* must have gdal installed
-* first run
+"""Convert .gdb file to .tif file.
+
+Must have gdal installed. First run:
     gdal_translate -of GTiff "input.gdb" "output.tif" -b <band-number>
 in command line to convert .gdb file into .tif file.
-* replace "input.gdb" and "output.tif" in above code with file paths to
-input a .gdb file and output a .tif file
+
+Replace "input.gdb" and "output.tif" in above code with file paths to
+input a .gdb file and output a .tif file.
 """
 
 from torchgeo.datasets import RasterDataset
 
 
 class KaneDEM(RasterDataset):
-    """
-    A dataset class for handling Kane County Digital Elevation Model (DEM) data.
+    """A dataset class for handling Kane County Digital Elevation Model (DEM) data.
 
     Attributes:
         filename_glob (str): A string representing the pattern
@@ -23,8 +22,7 @@ class KaneDEM(RasterDataset):
     filename_glob = "*2017BE.tif"
 
     def __init__(self, paths, crs=None, res=None, transforms=None):
-        """
-        Initializes a KaneDEM instance.
+        """Initializes a KaneDEM instance.
 
         Args:
             paths (str or List[str]): Path(s) to the DEM data.
@@ -39,8 +37,7 @@ class KaneDEM(RasterDataset):
         self.all_bands = ["elevation"]  # Assuming single band for elevation
 
     def __getitem__(self, query):
-        """
-        Retrieves a specific DEM sample from the dataset.
+        """Retrieves a specific DEM sample from the dataset.
 
         Args:
             query: An index or query to retrieve the DEM sample.
@@ -50,13 +47,9 @@ class KaneDEM(RasterDataset):
         """
         # This method loads the DEM data similar to how other raster data is loaded
         sample = super().__getitem__(query)
-        elevation = sample[
-            "image"
-        ]  # Assuming the elevation data is stored as 'image'
+        elevation = sample["image"]  # Assuming the elevation data is stored as 'image'
         return {"elevation": elevation}
 
     def __getallbands__(self):
-        """
-        Get all bands for this dataset.
-        """
+        """Get all bands for this dataset."""
         return self.all_bands
