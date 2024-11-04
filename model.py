@@ -9,11 +9,11 @@ import importlib
 from pathlib import Path
 
 import segmentation_models_pytorch as smp
-from fcn import FCN
-from torchgeo.models import FCN, get_weight
+from torchgeo.models import get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
-
+ 
+from fcn import FCN
 
 class SegmentationModel:
     """This class represents a segmentation model for image segmentation tasks.
@@ -147,7 +147,7 @@ class SegmentationModel:
     def __getweights__(self):
         """Returns the weights of the model"""
         return self.weights
-    
+
     def __getdropout__(self):
         """Returns the dropout rate of the model"""
         return self.dropout

@@ -2,8 +2,7 @@
 # Licensed under the MIT License.
 # 
 
-"""
-Simple fully convolutional neural network (FCN) implementations that integrates
+"""Simple fully convolutional neural network (FCN) implementations that integrates
 dropout
 """
 
@@ -16,10 +15,10 @@ class FCN(Module):
     """A simple 5 layer FCN with leaky relus and 'same' padding."""
 
     def __init__(
-        self, 
-        in_channels: int, 
-        classes: int, 
-        num_filters: int = 64, 
+        self,
+        in_channels: int,
+        classes: int,
+        num_filters: int = 64,
         dropout: float = 0.3,
     ) -> None:
         """Initializes the 5 layer FCN model.
