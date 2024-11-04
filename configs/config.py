@@ -23,6 +23,9 @@ BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
+# dropout rate
+DROPOUT = 0.3
+
 # model hyperparams
 DATASET_MEAN = [
     0.3281668683529412,
