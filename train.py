@@ -31,7 +31,12 @@ from data.dem import KaneDEM
 from data.kc import KaneCounty
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
-from utils.plot import find_labels_in_ground_truth, plot_from_tensors
+from utils.plot import (
+    create_outline,
+    combine_images,
+    find_labels_in_ground_truth, 
+    plot_from_tensors,
+)
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
 MODEL_DEVICE = (
@@ -638,6 +643,8 @@ def test(
 
             # compute prediction error
             outputs = model(x)
+            if isinstance(outputs, tuple):
+                outputs = outputs[0]
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
@@ -658,10 +665,23 @@ def test(
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
+                    outline_labels, outline_binary = create_outline(
+                        samp_mask[i].cpu(),
+                        2,
+                    )
+                    combined_image = combine_images(
+                        (outline_labels, outline_binary),
+                        samp_mask[i].cpu(),
+                        preds[i].cpu(),
+                        kc.colors,
+                        1,
+                        0.8,
+                    )
                     plot_tensors = {
                         "RGB Image": x_scaled[i].cpu(),
                         "ground_truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
+                        "ground_truth_vs_prediction": combined_image,
                     }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)

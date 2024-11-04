@@ -34,26 +34,34 @@ Functions:
     Finds all unique label IDs from a ground truth mask tensor.
 
 - create_outline(
-        mask: torch.Tensor,
-        iterations: int = 1,
+    mask: torch.Tensor,
+    iterations: int = 1,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     Creates an outline for the given ground truth mask tensor.
-"""
 
-from typing import Dict
+- combine_images(
+    outline: tuple[torch.Tensor, torch.Tensor],
+    ground_truth: torch.Tensor,
+    prediction: torch.Tensor,
+    colors: Dict[int, tuple],
+    outline_alpha: float = 1.0,
+    pred_alpha: float = 0.5,
+) -> torch.Tensor:
+    Combines the outline of the ground truth with the prediction image
+"""
 
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from matplotlib.colors import ListedColormap
 from scipy.ndimage import binary_dilation
 from skimage import measure
 from torch import Tensor
+import torch
 from torchgeo.datasets.utils import BoundingBox
 
 
-def build_cmap(colors: Dict[int, tuple]):
+def build_cmap(colors: dict[int, tuple]):
     """
     Build a ListedColormap object from a dictionary.
 
@@ -78,10 +86,10 @@ def build_cmap(colors: Dict[int, tuple]):
 
 
 def plot_from_tensors(
-    sample: Dict[str, Tensor],
+    sample: dict[str, Tensor],
     save_path: str,
-    colors: Dict[int, tuple] = None,
-    labels: Dict[int, str] = None,
+    colors: dict[int, tuple] = None,
+    labels: dict[int, str] = None,
     coords: BoundingBox = None,
 ):
     """
@@ -295,7 +303,7 @@ def combine_images(
     outline: tuple[torch.Tensor, torch.Tensor],
     ground_truth: torch.Tensor,
     prediction: torch.Tensor,
-    colors: Dict[int, tuple],
+    colors: dict[int, tuple],
     outline_alpha: float = 1.0,
     pred_alpha: float = 0.5,
 ) -> torch.Tensor:
@@ -335,8 +343,8 @@ def combine_images(
         ground_truth = ground_truth.unsqueeze(0)
 
     # Create color versions of both the prediction and outline
-    color_prediction = torch.ones(3, *prediction.shape[1:])
-    color_outline = torch.ones(3, *prediction.shape[1:])
+    color_prediction = torch.zeros(3, *prediction.shape[1:])
+    color_outline = torch.zeros(3, *prediction.shape[1:])
 
     # Color the prediction
     for label_id, color in colors.items():
@@ -347,7 +355,7 @@ def combine_images(
             for c in range(3):
                 color_val = color[c] / 255.0
                 # Blend with white background using alpha
-                color_prediction[c][mask] = color_val * pred_alpha + (1 - pred_alpha)
+                color_prediction[c][mask] = color_val * pred_alpha
 
     # Color the outline using the outline labels
     outline_mask = outline_binary[0] > 0
@@ -359,9 +367,7 @@ def combine_images(
             for c in range(3):
                 color_val = color[c] / 255.0
                 # Blend with white background using alpha
-                color_outline[c][mask] = color_val * outline_alpha + (
-                    1 - outline_alpha
-                )
+                color_outline[c][mask] = color_val * outline_alpha
 
     # Combine the images
     combined_image = torch.where(
