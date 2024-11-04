@@ -1,6 +1,6 @@
-"""
-This module provides a custom PyTorch GeoDataset for working with vector data
-representing labels or features in Kane County, Illinois. The vector data is
+"""This module provides a custom PyTorch GeoDataset for working with vector data.
+
+The vector data represents labels or features in Kane County, Illinois. The data is
 stored as shapes in a GeoDatabase file, and this module allows for retrieving
 samples of labels or features as masks or rasterized images within specified
 bounding boxes.
@@ -113,6 +113,7 @@ class KaneCounty(GeoDataset):
         """Populate the spatial index with data from the GeoDataFrame.
 
         Args:
+            path: directory to the file to load
             gdf: GeoDataFrame containing the data
             context_size: size of the context around shapes for sampling
         """
@@ -188,7 +189,5 @@ class KaneCounty(GeoDataset):
         return sample
 
     def __getlabels__(self):
-        """
-        Returns the labels of the dataset.
-        """
+        """Returns the labels of the dataset."""
         return self.labels
