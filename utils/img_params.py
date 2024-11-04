@@ -1,27 +1,27 @@
-"""
+"""Calculate image stats.
+
 To run:
 > python img_params.py <directory_path>
 """
 
 import argparse
 import os
-from typing import Tuple
+from pathlib import Path
 
 import cv2
 import numpy as np
 from einops import rearrange
 
 
-def calculate_image_stats(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Calculate the mean and standard deviation of an image.
+def calculate_image_stats(file_path: str) -> tuple[np.ndarray, np.ndarray]:
+    """Calculate the mean and standard deviation of an image.
 
     Parameters
     ----------
     file_path : str
         Path to the image file
 
-    Returns
+    Returns:
     -------
     Tuple[np.ndarray, np.ndarray]
         Mean and standard deviation of the image across channels
@@ -34,9 +34,7 @@ def calculate_image_stats(file_path: str) -> Tuple[np.ndarray, np.ndarray]:
 
 
 def main(root: str) -> None:
-    """
-    Calculate and print the mean and standard deviation of all images in a
-    directory.
+    """Calculate the mean and standard deviation of all images in a directory.
 
     Parameters
     ----------
@@ -47,7 +45,7 @@ def main(root: str) -> None:
     stds = []
 
     for filename in os.listdir(root):
-        file_path = os.path.join(root, filename)
+        file_path = Path(root) / filename
         mean, std = calculate_image_stats(file_path)
         means.append(mean)
         stds.append(std)
