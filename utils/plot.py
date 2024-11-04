@@ -91,7 +91,7 @@ def plot_from_tensors(
     labels: dict[int, str] = None,
     coords: BoundingBox = None,
 ):
-    """Plots a sample from the training dataset and saves to provided file path.
+    """Plot sample from training dataset and save to file
 
     Parameters
     ----------
