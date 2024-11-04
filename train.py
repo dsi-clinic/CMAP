@@ -34,7 +34,7 @@ from model import SegmentationModel
 from utils.plot import (
     combine_images,
     create_outline,
-    find_labels_in_ground_truth, 
+    find_labels_in_ground_truth,
     plot_from_tensors,
 )
 from utils.transforms import apply_augs, create_augmentation_pipelines
