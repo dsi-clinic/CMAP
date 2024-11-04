@@ -12,8 +12,9 @@ import segmentation_models_pytorch as smp
 from torchgeo.models import get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
- 
+
 from fcn import FCN
+
 
 class SegmentationModel:
     """This class represents a segmentation model for image segmentation tasks.

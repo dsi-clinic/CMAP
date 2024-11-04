@@ -74,4 +74,3 @@ class FCN(Module):
         x = self.backbone(x)
         x = self.last(x)
         return x
-
