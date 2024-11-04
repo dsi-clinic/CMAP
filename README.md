@@ -84,7 +84,10 @@ cd /home/YOUR_USERNAME/CMAP
 
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
-
+To speed up the development process and troubleshoot issues, you can use debug mode. This mode limits the training to a single epoch and skips subsequent epochs, allowing for faster code validation. To enable debug mode, use the --debug flag in the command:
+```
+python train.py configs.config --debug
+```
 ## Git Usage
 
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
