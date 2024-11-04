@@ -1,9 +1,8 @@
-"""
-This module provides custom samplers used for sampling patches or chips from
-geospatial datasets in a manner that avoids tries to avoid areas of missing
-label. These samplers are designed to handle cases where the bounding boxes in
-the dataset are smaller than the desired patch size, ensuring that both
-background and feature areas are adequately represented in the sampled data.
+"""Custom samplers for sampling patches from geospatial datasets.
+
+Samplers avoid areas with missing labels by handling bounding boxes smaller than
+the patch size. This ensures balanced sampling between background and feature
+areas.
 """
 
 import math
@@ -20,8 +19,7 @@ from torchgeo.samplers.utils import (
 
 
 class BalancedRandomBatchGeoSampler(BatchGeoSampler):
-    """
-    Samples batches of elements from a region of interest randomly.
+    """Samples batches of elements from a region of interest randomly.
 
     This is modified from RandomBatchGeoSampler so it can process bounding boxes
     that are smaller than the given size and thus provide data balanced between
@@ -29,8 +27,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
     """
 
     def __init__(self, config) -> None:
-        """
-        Initialize a new Sampler instance.
+        """Initialize a new Sampler instance.
 
         Args:
             config: A dictionary containing the following keys:
@@ -55,8 +52,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
             self.length = config["length"]
 
     def calculate_hits_and_areas(self):
-        """
-        Calculate hits and areas for the dataset.
+        """Calculate hits and areas for the dataset.
 
         Returns:
             hits: List of hits within the region of interest.
@@ -73,9 +69,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                 bounds.maxx - bounds.minx >= self.size[1]
                 and bounds.maxy - bounds.miny >= self.size[0]
             ):
-                shape_bounds = self.get_shape_bounds(
-                    bounds, context_x, context_y
-                )
+                shape_bounds = self.get_shape_bounds(bounds, context_x, context_y)
                 if (
                     shape_bounds.maxx - shape_bounds.minx >= self.size[1]
                     or shape_bounds.maxy - shape_bounds.miny >= self.size[0]
@@ -94,8 +88,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         return hits, areas_tensor
 
     def get_shape_bounds(self, bounds, context_x, context_y):
-        """
-        Get adjusted shape bounds considering context.
+        """Get adjusted shape bounds considering context.
 
         Args:
             bounds: Original bounding box bounds.
@@ -115,8 +108,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         )
 
     def __iter__(self):
-        """
-        Return a batch of indices of a dataset.
+        """Return a batch of indices of a dataset.
 
         Yields:
             batch of (minx, maxx, miny, maxy, mint, maxt) coordinates to index a dataset
@@ -127,15 +119,12 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
                 idx = torch.multinomial(self.areas, 1)
                 hit = self.hits[idx]
                 bounds = BoundingBox(*hit.bounds)
-                bounding_box = get_random_bounding_box(
-                    bounds, self.size, self.res
-                )
+                bounding_box = get_random_bounding_box(bounds, self.size, self.res)
                 batch.append(bounding_box)
             yield batch
 
     def __len__(self):
-        """
-        Returns the number of samples that this sampler will draw.
+        """Returns the number of samples that this sampler will draw.
 
         Returns:
             int: The length of the sampler.
@@ -144,8 +133,7 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
 
 
 class BalancedGridGeoSampler(GeoSampler):
-    """
-    Samples elements in a grid-like fashion.
+    """Samples elements in a grid-like fashion.
 
     This is modified from GridGeoSampler so it can process bounding boxes
     that are smaller than the given size and thus provide data balanced between
@@ -153,8 +141,7 @@ class BalancedGridGeoSampler(GeoSampler):
     """
 
     def __init__(self, config) -> None:
-        """
-        Initialize a new Sampler instance.
+        """Initialize a new Sampler instance.
 
         Args:
             config: A dictionary containing the following keys:
@@ -175,8 +162,7 @@ class BalancedGridGeoSampler(GeoSampler):
         self.hits, self.length = self.calculate_hits_and_length()
 
     def calculate_hits_and_length(self):
-        """
-        Calculate hits and total length for the dataset.
+        """Calculate hits and total length for the dataset.
 
         Returns:
             hits: List of hits within the region of interest.
@@ -201,8 +187,7 @@ class BalancedGridGeoSampler(GeoSampler):
         return hits, total_length
 
     def get_hit_bounds_and_dimensions(self, bounds, context_x, context_y):
-        """
-        Get adjusted hit bounds and calculate dimensions.
+        """Get adjusted hit bounds and calculate dimensions.
 
         Args:
             bounds: Original bounding box bounds.
@@ -229,8 +214,7 @@ class BalancedGridGeoSampler(GeoSampler):
         return BoundingBox(minx, maxx, miny, maxy, mint, maxt), rows, cols
 
     def calculate_dimension(self, interval, size, stride, context):
-        """
-        Calculate the dimension for sampling.
+        """Calculate the dimension for sampling.
 
         Args:
             interval: Minimum and maximum values of the dimension.
@@ -255,8 +239,7 @@ class BalancedGridGeoSampler(GeoSampler):
         return 0
 
     def __iter__(self):
-        """
-        Return the index of a dataset.
+        """Return the index of a dataset.
 
         Yields:
             (minx, maxx, miny, maxy, mint, maxt) coordinates to index a dataset
@@ -283,8 +266,7 @@ class BalancedGridGeoSampler(GeoSampler):
                     yield BoundingBox(minx, maxx, miny, maxy, mint, maxt)
 
     def get_min_max(self, interval, indices, size, stride):
-        """
-        Get the min and max values for a given dimension.
+        """Get the min and max values for a given dimension.
 
         Args:
             interval: Minimum and maximum values of the dimension.
@@ -304,8 +286,7 @@ class BalancedGridGeoSampler(GeoSampler):
         return min_val, max_val
 
     def __len__(self):
-        """
-        Return the number of samples over the ROI.
+        """Return the number of samples over the ROI.
 
         Returns:
             int: Number of patches that will be sampled.
