@@ -1,9 +1,9 @@
-import geopandas as gpd
-from shapely.geometry import box, Polygon, MultiPolygon
-import numpy as np
-from tqdm import tqdm
-
 import os
+
+import geopandas as gpd
+import numpy as np
+from shapely.geometry import MultiPolygon, Polygon, box
+from tqdm import tqdm
 
 
 def split_polygon_to_patches(geometry, patch_size):
@@ -27,13 +27,13 @@ def split_polygon_to_patches(geometry, patch_size):
                 intersection = geometry.intersection(patch)
                 if isinstance(intersection, Polygon):
                     patches.append(intersection)
-                #elif intersection.geom_type == 'MultiPolygon':
-                    #patches.extend([poly for poly in intersection])
+                # elif intersection.geom_type == 'MultiPolygon':
+                # patches.extend([poly for poly in intersection])
                 elif isinstance(intersection, MultiPolygon):
                     patches.extend([poly for poly in intersection.geoms])
 
-    
     return patches
+
 
 def preprocess_shapefile(input_path, output_path, patch_size):
     """Preprocess the shapefile by splitting polygons into smaller patches.
@@ -44,18 +44,20 @@ def preprocess_shapefile(input_path, output_path, patch_size):
         patch_size: Size of the patches in CRS units.
     """
     # Load the input shapefile
-    gdf = gpd.read_file(f'/vsizip/{input_path}')
+    gdf = gpd.read_file(f"/vsizip/{input_path}")
 
     # List to store the new patches
     new_patches = []
 
     # Split each polygon into smaller patches
-    for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Splitting polygons"):
-        geometry = row['geometry']
+    for _, row in tqdm(
+        gdf.iterrows(), total=len(gdf), desc="Splitting polygons"
+    ):
+        geometry = row["geometry"]
         patches = split_polygon_to_patches(geometry, patch_size)
         for patch in patches:
             new_row = row.copy()
-            new_row['geometry'] = patch
+            new_row["geometry"] = patch
             new_patches.append(new_row)
 
     # Create a new GeoDataFrame with the patches
@@ -64,8 +66,11 @@ def preprocess_shapefile(input_path, output_path, patch_size):
     # Save the new shapefile
     new_gdf.to_file(output_path)
 
+
 if __name__ == "__main__":
-    input_shapefile = os.path.join("/net/projects/cmap/data/kane-county-data/Kane_Co_Open_Water_Layer.zip")
+    input_shapefile = os.path.join(
+        "/net/projects/cmap/data/kane-county-data/Kane_Co_Open_Water_Layer.zip"
+    )
     output_shapefile = f"/net/projects/cmap/workspaces/Output_River_Shapefile"
     patch_size = 256  # Define your patch size here
 

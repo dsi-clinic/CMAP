@@ -16,11 +16,11 @@ from pathlib import Path
 from statistics import mean, stdev
 from typing import Any, DefaultDict, Tuple
 
-
 import kornia.augmentation as K
+import numpy as np
 import torch
-
 import wandb
+from PIL import Image
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -29,19 +29,16 @@ from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
-from data.rd import RiverDataset
 from data.kc import KaneCounty
+from data.rd import RiverDataset
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
-from utils.plot import find_labels_in_ground_truth, plot_from_tensors
-from utils.transforms import apply_augs, create_augmentation_pipelines
-
-from PIL import Image
-import numpy as np
 
 # importing river images
 from retrieve_images import get_kane_county_river_images
 from utils.get_naip_images import get_river_geometry
+from utils.plot import find_labels_in_ground_truth, plot_from_tensors
+from utils.transforms import apply_augs, create_augmentation_pipelines
 
 MODEL_DEVICE = (
     "cuda"
@@ -148,7 +145,7 @@ def initialize_dataset():
 
     labels = KaneCounty(kc_shape_path, dataset_config)
 
-    ''''
+    """'
     if config.KC_RIVER_ROOT is not None:
         river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
         dataset_config = (
@@ -177,7 +174,7 @@ def initialize_dataset():
 
         color_attributes = {**labels.colors, **riverdata.colors}
         labels.colors = color_attributes
-        '''
+        """
     return images, labels
 
 
@@ -408,7 +405,9 @@ def add_extra_channel(
         torch.Tensor: A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -452,7 +451,9 @@ def apply_augmentations(
     return x_aug, y_squeezed
 
 
-def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample, model):
+def save_training_images(
+    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample, model
+):
     """
     Save training sample images.
     """
@@ -482,7 +483,9 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 "ground_truth": samp_mask[i],
                 "prediction": preds[i].cpu(),
             }
-            sample_fname = os.path.join(save_dir, f"train_sample-{epoch}.{i}.png")
+            sample_fname = os.path.join(
+                save_dir, f"train_sample-{epoch}.{i}.png"
+            )
             plot_from_tensors(
                 plot_tensors,
                 sample_fname,
@@ -490,7 +493,6 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 labels.labels_inverse,
                 sample["bbox"][i],
             )
-
 
 
 def train_setup(
@@ -625,7 +627,9 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.CLIP_VALUE
+            )
 
         optimizer.step()
         optimizer.zero_grad()
@@ -720,7 +724,9 @@ def test(
             test_loss += loss.item()
 
             # plot first batch
-            if batch == 0 or (plateau_count == config.PATIENCE - 1 and batch < 10):
+            if batch == 0 or (
+                plateau_count == config.PATIENCE - 1 and batch < 10
+            ):
                 epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
                 if not os.path.exists(epoch_dir):
                     os.mkdir(epoch_dir)
@@ -733,9 +739,10 @@ def test(
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
-
                     for label_id in label_ids:
-                        label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = labels.labels_inverse.get(
+                            label_id, "UNKNOWN"
+                        )
                         save_dir = os.path.join(epoch_dir, label_name)
                         if not os.path.exists(save_dir):
                             os.makedirs(save_dir)
@@ -768,7 +775,9 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
+        logging.info(
+            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
+        )
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -909,10 +918,10 @@ def train(
             writer,
         )
 
-        ''''
+        """'
         # Plot inference images during training
-        #if t % 10 == 0 or t == epoch_config - 1: 
-        if True: 
+        #if t % 10 == 0 or t == epoch_config - 1:
+        if True:
             epoch_dir = os.path.join(test_image_root, f"epoch-{t + 1}")
             print(f"Saving test images to: {epoch_dir}")
             if not os.path.exists(epoch_dir):
@@ -967,8 +976,7 @@ def train(
                                     sample["bbox"][i],
                                 )
                     break  # Break after first batch for brevity
-                    '''
-
+                    """
 
         # Checks for plateau
         if best_loss is None:
@@ -1062,7 +1070,9 @@ if __name__ == "__main__":
         description="Train a segmentation model to predict stormwater storage "
         + "and green infrastructure."
     )
-    parser.add_argument("config", type=str, help="Path to the configuration file")
+    parser.add_argument(
+        "config", type=str, help="Path to the configuration file"
+    )
     parser.add_argument(
         "--experiment_name",
         type=str,
@@ -1110,7 +1120,9 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, naip, split
+            )
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 

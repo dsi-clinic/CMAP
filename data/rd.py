@@ -13,8 +13,8 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
-from torchgeo.datasets import BoundingBox, GeoDataset
 from shapely.geometry import box
+from torchgeo.datasets import BoundingBox, GeoDataset
 from tqdm import tqdm
 
 
@@ -105,28 +105,23 @@ class RiverDataset(GeoDataset):
         return gdf
 
     def _populate_index(self, path, gdf, context_size, patch_size):
-        """Populate the spatial index with data from the GeoDataFrame.
-
-        Args:
-            gdf: GeoDataFrame containing the data
-            context_size: size of the context around shapes for sampling
-            patch_size: size of the patch for the model
-        """
+        """Populate the spatial index with data from the GeoDataFrame."""
         patch_size_in_units = patch_size * self._res
         i = 0
+        self.bounding_boxes = []  # List to store bounding boxes
 
-        # Add tqdm progress bar
-        for _, row in tqdm(gdf.iterrows(), total=len(gdf), desc="Populating index"):
+        for _, row in tqdm(
+            gdf.iterrows(), total=len(gdf), desc="Populating index"
+        ):
             minx, miny, maxx, maxy = row["geometry"].bounds
-            # finding bounding box of the river, which is 1 row in gdf file
             x_range = np.arange(minx, maxx, patch_size_in_units)
-            # x axis for grid of patch size units
             y_range = np.arange(miny, maxy, patch_size_in_units)
             for x in x_range:
                 for y in y_range:
-                    bbox = box(x, y, x + patch_size_in_units, y + patch_size_in_units)
-                    # gets the current patch in the grid
-                    if row["geometry"].intersects(bbox): # if river intersects bounding box/patch, then insert into index
+                    bbox = box(
+                        x, y, x + patch_size_in_units, y + patch_size_in_units
+                    )
+                    if row["geometry"].intersects(bbox):
                         coords = (
                             x - context_size,
                             x + patch_size_in_units + context_size,
@@ -136,7 +131,11 @@ class RiverDataset(GeoDataset):
                             sys.maxsize,
                         )
                         self.index.insert(i, coords, row)
+                        self.bounding_boxes.append(
+                            bbox
+                        )  # Store the bounding box
                         i += 1
+
         if i == 0:
             msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
             raise FileNotFoundError(msg)
@@ -162,35 +161,35 @@ class RiverDataset(GeoDataset):
             )
 
         shapes = []
-        #print("objs in __getitem__:", len(objs))
+        # print("objs in __getitem__:", len(objs))
         for obj in objs:
             shape = obj["geometry"]
             label = self.labels[obj["FCODE"]]
             shapes.append((shape, label))
-        #print("len of shapes in __getitem__:", len(shapes))
+        # print("len of shapes in __getitem__:", len(shapes))
 
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res
-        #print("x range in bounds:", width)
-        #print("query in __getitem__:", query)
-        #print("width in __getitem__:", width)
-        #print("height in __getitem__:", height)
+        # print("x range in bounds:", width)
+        # print("query in __getitem__:", query)
+        # print("width in __getitem__:", width)
+        # print("height in __getitem__:", height)
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
         if shapes and min((round(height), round(width))) != 0:
-            #print("found features")
-            #print("shapes in __getitem__:", shapes)
+            # print("found features")
+            # print("shapes in __getitem__:", shapes)
             masks = rasterio.features.rasterize(
                 shapes,
                 out_shape=(round(height), round(width)),
                 transform=transform,
             )
-            #print("sum of masks in __getitem__:", np.sum(masks))
-            #print("mask shape in __getitem__:", masks.shape)
-            #print("unique entries in mask in __getitem__:", np.unique(masks))
+            # print("sum of masks in __getitem__:", np.sum(masks))
+            # print("mask shape in __getitem__:", masks.shape)
+            # print("unique entries in mask in __getitem__:", np.unique(masks))
         else:
-            #print("no features found in this query")
+            # print("no features found in this query")
             masks = np.zeros((round(height), round(width)), dtype=np.uint8)
 
         sample = {
