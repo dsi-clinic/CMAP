@@ -175,8 +175,8 @@ def build_dataset(naip_set, split_rate):
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
             "dataset": train_dataset,
-            "size": wandb.config.patch_size,
-            "batch_size": wandb.config.batch_size,
+            "size": config.PATCH_SIZE,
+            "batch_size": config.BATCH_SIZE,
         }
     )
     test_sampler = BalancedGridGeoSampler(
@@ -1054,7 +1054,7 @@ if __name__ == "__main__":
     wandb.login()
 
     # Define the sweep configuration file path
-    sweep_config_file = Path("configs/sweep_config.yml")
+    sweep_config_file = str(Path("configs/sweep_config.yml"))
 
     # Read and load the sweep configuration
     with sweep_config_file.open() as file:
@@ -1064,4 +1064,4 @@ if __name__ == "__main__":
     sweep_id = wandb.sweep(sweep_config, project="cmap_train")
 
     # Run the sweep agent
-    wandb.agent(sweep_id, function=run_trials, count=2)
+    wandb.agent(sweep_id, function=run_trials, count=7)
