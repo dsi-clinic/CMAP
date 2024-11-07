@@ -4,22 +4,24 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
-  COLOR_BRIGHTNESS:
+  batch_size:
+    values: [16, 32, 64]
+  learning_rate:
+    values: [0.001, 0.0005, 0.0001]
+  patch_size:
+    values: [32, 64, 128]
+  color_brightness:
+    values: [0.2, 0.3, 0.4, 0.5]
+  gaussian_blur_sigma:
     values:
-      - 0.2
-      - 0.3
-      - 0.4
-      - 0.5
-  GAUSSIAN_BLUR_SIGMA:
+      - [0.1, 0.2]
+      - [0.3, 0.4]
+      - [0.5, 0.6]
+  gaussian_blur_kernel:
     values:
-      - (0.1, 0.2)
-      - (0.3, 0.4)
-      - (0.5, 0.6)
-  GAUSSIAN_BLUR_KERNEL:
-    values:
-      - (3,3)
-      - (5,5)
-      - (7,7)
+      - [3,3]
+      - [5,5]
+      - [7,7]
 
 command:
 - python

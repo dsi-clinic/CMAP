@@ -19,6 +19,7 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
+import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -41,6 +42,12 @@ MODEL_DEVICE = (
     if torch.backends.mps.is_available()
     else "cpu"
 )
+
+
+def initialize_wandb():
+    """Initializes wandb with sweep configuration."""
+    wandb.init(config=wandb.config)
+    return config
 
 
 def arg_parsing(argument):
@@ -168,8 +175,8 @@ def build_dataset(naip_set, split_rate):
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
             "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
+            "size": wandb.config.patch_size,
+            "batch_size": wandb.config.batch_size,
         }
     )
     test_sampler = BalancedGridGeoSampler(
@@ -289,7 +296,9 @@ def create_model():
         average=None,
     ).to(MODEL_DEVICE)
     optimizer = AdamW(
-        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
+        model.parameters(),
+        lr=wandb.config.learning_rate,
+        weight_decay=config.WEIGHT_DECAY,
     )
 
     return (
@@ -718,9 +727,7 @@ def train(
     aug_config,
     path_config: tuple[str, str, str],
     writer: SummaryWriter,
-    wandb_t,
-    args,
-    epoch_config,
+    wandb_t: bool,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -743,8 +750,6 @@ def train(
                 - test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
         wandb_t: Whether running hyperparameter tuning with wandb.
-        args: Additional arguments for debugging or special training conditions.
-        epoch_config: The configuration for the number of epochs.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -878,7 +883,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
+def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
     """Runing a single trial of training
 
     Input:
@@ -1005,18 +1010,17 @@ if __name__ == "__main__":
     def run_trials():
         """Running training for multiple trials"""
         if wandb_tune:
-            run = wandb.init(project="cmap_train")
-            vars(args).update(run.config)
+            run = wandb.init(project="cmap_train", config=config)
             print("wandb taken over config")
+        else:
+            # Initialize wandb with default configuration but disable logging
+            run = wandb.init(project="cmap_train", config=config, mode="disabled")
 
         train_ious = []
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split, args
-            )
-
+            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 
@@ -1041,6 +1045,23 @@ if __name__ == "__main__":
 
         if wandb_tune:
             run.log({"average_test_jaccard_index": test_average})
-            wandb.finish()
+        wandb.finish()
 
     run_trials()
+
+if __name__ == "__main__":
+    # Ensure wandb is logged in
+    wandb.login()
+
+    # Define the sweep configuration file path
+    sweep_config_file = Path("configs/sweep_config.yml")
+
+    # Read and load the sweep configuration
+    with sweep_config_file.open() as file:
+        sweep_config = yaml.safe_load(file)
+
+    # Initialize the sweep
+    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
+
+    # Run the sweep agent
+    wandb.agent(sweep_id, function=run_trials, count=2)
