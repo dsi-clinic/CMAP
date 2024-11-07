@@ -11,9 +11,11 @@
 #SBATCH --mem=128GB
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=8
-source /home/USERNAME/miniconda3/bin/activate cmap
 
-export PATH="/home/USERNAME/miniconda/bin:$PATH"
+# Activate the micromamba environment
+source /home/USERNAME/micromamba/etc/profile.d/micromamba.sh
+micromamba activate cmap
 
+# Navigate to the project directory
 cd ~/cmap
-wandb agent <wandb path> --count 7
+wandb agent dsi-clinic-cmap/CMAP/6l5xz4qw --count 7
