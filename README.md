@@ -62,6 +62,11 @@ Replace the <ExperimentName> with what you want to title the experiment. For exa
 ```python train.py configs.config --experiment_name baseline_v1```
 .Aug_type, split, and num_trial are optional so you can ignore them if you don't have their parameters.
 
+To speed up the development process and troubleshoot issues, you can use debug mode. This mode limits the training to a single epoch and skips subsequent epochs, allowing for faster code validation. To enable debug mode, use the --debug flag in the command:
+```
+python train.py configs.config --debug
+```
+
 ### Example of Training with Slurm
 
 If you have access to Slurm, you can also train model with it. For more information about how to use Slurm, please look at the information [here](https://github.com/uchicago-dsi/core-facility-docs/blob/main/slurm.md).
