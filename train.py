@@ -19,6 +19,7 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
+import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -26,7 +27,6 @@ from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics.classification import MulticlassJaccardIndex
 
-import wandb
 from data.dem import KaneDEM
 from data.kc import KaneCounty
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
