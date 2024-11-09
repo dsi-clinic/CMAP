@@ -112,7 +112,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
-def initialize_dataset():
+def initialize_dataset(config):
     """Load and merge NAIP, KaneCounty, and optional DEM data.
 
     This function loads NAIP (National Agriculture Imagery Program)
@@ -963,7 +963,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset()
+    naip, kc = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
