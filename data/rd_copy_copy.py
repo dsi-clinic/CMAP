@@ -13,9 +13,12 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
+
+# from rtree import index  # or any spatial index you are using
 from shapely.geometry import box
 from torchgeo.datasets import BoundingBox, GeoDataset
-from tqdm import tqdm
+
+# from tqdm import tqdm
 
 
 class RiverDataset(GeoDataset):
@@ -105,42 +108,39 @@ class RiverDataset(GeoDataset):
         return gdf
 
     def _populate_index(self, path, gdf, context_size, patch_size):
-        """Populate the spatial index with data from the GeoDataFrame."""
-        # patch_size_in_units = patch_size * self._res
-        # i = 0
+        """Populate spatial index with chips intersecting geometries in gdf."""
 
         chip_size = 0.005
-        minx, miny, maxx, maxy = gdf.total_bounds
-
         mint, maxt = 0, sys.maxsize
 
         self.bounding_boxes = []
+        i = 0  # initialize chip index counter
 
-        # Create chips over the bounding box
+        # get the total bounds for the entire gdf
+        minx, miny, maxx, maxy = gdf.total_bounds
         x = minx
-        i = 0
 
+        # iterate over the x-axis within the bounds of the gdf
         while x < maxx:
             y = miny
+
+            # iterate over the y-axis within the bounds of the gdf
             while y < maxy:
+                # create a rectangular chip
                 chip = box(x, y, x + chip_size, y + chip_size)
-                self.bounding_boxes.append(chip)
-                print(chip)
-
                 coords = (x, y, x + chip_size, y + chip_size, mint, maxt)
-                self.index.insert(i, coords)
-                y += chip_size
-            x += chip_size
 
-        chips_gdf = gpd.GeoDataFrame(geometry=self.bounding_boxes, crs=gdf.crs)
+                # find intersecting geometries in gdf
+                intersecting_rows = gdf[gdf.intersects(chip)]
+                for _, row in intersecting_rows.iterrows():
+                    # insert only intersecting chips with their corresponding row data
+                    self.index.insert(i, coords, row)
+                    i += 1  # increment the global index for each chip
+                    print(i, coords, row)
 
-        river_chips = gpd.sjoin(
-            chips_gdf, gdf, how="inner", predicate="intersects"
-        )
+                y += chip_size  # move to the next chip in the y-direction
 
-        self.merged_chips = river_chips.dissolve()
-
-        # return merged_chips
+            x += chip_size  # move to the next chip in the x-direction
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
