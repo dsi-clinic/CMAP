@@ -9,13 +9,13 @@ from pathlib import Path
 
 # data paths
 DATA_ROOT = "/net/projects/cmap/data"
-KC_SHAPE_ROOT = Path(DATA_ROOT) / "kane-county-data"
-KC_IMAGE_ROOT = Path(DATA_ROOT) / "KC-images"
-KC_RIVER_ROOT = Path(DATA_ROOT) / "KC-river-images"
+KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
+KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
+KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
 KC_DEM_ROOT = None
-# KC_DEM_ROOT = Path(KC_SHAPE_ROOT) / "KC_DEM_2017"
-KC_MASK_ROOT = Path(DATA_ROOT) / "KC-masks/separate-masks"
-OUTPUT_ROOT = Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}"
+# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
+OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
 # model selection
 MODEL = "deeplabv3+"
@@ -41,7 +41,7 @@ PATCH_SIZE = 256
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-4
 NUM_WORKERS = 8
-EPOCHS = 10
+EPOCHS = 30
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
