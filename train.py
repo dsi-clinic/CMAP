@@ -8,6 +8,7 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
+import json
 import logging
 import random
 import shutil
@@ -19,7 +20,6 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
-import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -295,9 +295,13 @@ def create_model():
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
+
+    # Get the learning rate from wandb.config or use default from config
+    learning_rate = getattr(wandb.config, "LR ", config.LEARNING_RATE)
+
     optimizer = AdamW(
         model.parameters(),
-        lr=wandb.config.learning_rate,
+        lr=learning_rate,
         weight_decay=config.WEIGHT_DECAY,
     )
 
@@ -848,7 +852,6 @@ def train(
             aug_config,
             writer,
             args,
-            args,
         )
 
         test_config = (
@@ -958,8 +961,6 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
         wandb_tune,
         args,
         epoch_config,
-        args,
-        epoch_config,
     )
     writer.close()
     logger.handlers.clear()
@@ -1019,14 +1020,34 @@ if __name__ == "__main__":
 
     naip, kc = initialize_dataset(config)
 
+    def extract_config_dict(config_module):
+        """Convert configuration module into a dictionary"""
+        config_dict = {}
+        for attr in dir(config_module):
+            # Skip private attributes and methods
+            if not attr.startswith("__") and not callable(getattr(config_module, attr)):
+                value = getattr(config_module, attr)
+                # Check if the value is JSON-serializable
+                try:
+                    json.dumps(value)
+                    config_dict[attr] = value
+                except TypeError as e:
+                    logging.warning(
+                        f"Skipping non-serializable config attribute '{attr}': {e}"
+                    )
+        return config_dict
+
     def run_trials():
         """Running training for multiple trials"""
+        # Extract config dictionary from module
+        config_dict = extract_config_dict(config)
+
         if wandb_tune:
-            run = wandb.init(project="cmap_train", config=config)
+            run = wandb.init(project="cmap_train", config=config_dict)
             print("wandb taken over config")
         else:
             # Initialize wandb with default configuration but disable logging
-            run = wandb.init(project="cmap_train", config=config, mode="disabled")
+            run = wandb.init(project="cmap_train", config=config_dict, mode="disabled")
 
         train_ious = []
         test_ious = []
@@ -1062,20 +1083,3 @@ if __name__ == "__main__":
         wandb.finish()
 
     run_trials()
-
-if __name__ == "__main__":
-    # Ensure wandb is logged in
-    wandb.login()
-
-    # Define the sweep configuration file path
-    sweep_config_file = str(Path("configs/sweep_config.yml"))
-
-    # Read and load the sweep configuration
-    with sweep_config_file.open() as file:
-        sweep_config = yaml.safe_load(file)
-
-    # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-
-    # Run the sweep agent
-    wandb.agent(sweep_id, function=run_trials, count=7)
