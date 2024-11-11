@@ -675,7 +675,7 @@ def test(
                         preds[i].cpu(),
                         kc.colors,
                         1,
-                        0.8,
+                        1,
                     )
                     plot_tensors = {
                         "RGB Image": x_scaled[i].cpu(),

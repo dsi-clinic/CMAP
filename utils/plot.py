@@ -32,7 +32,6 @@ Functions:
 - find_labels_in_ground_truth(ground_truth: Tensor) -> List[int]:
     Finds all unique label IDs from a ground truth mask tensor.
 
-<<<<<<< HEAD
 - create_outline(
     mask: torch.Tensor,
     iterations: int = 1,
@@ -50,8 +49,6 @@ Functions:
     Combines the outline of the ground truth with the prediction image
 """
 
-=======
->>>>>>> main
 import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
