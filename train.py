@@ -119,7 +119,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
     return (train_images_root, test_images_root, out_root, writer, logger)
 
 
-def initialize_dataset():
+def initialize_dataset(config):
     """Load and merge NAIP, KaneCounty, and optional DEM data.
 
     This function loads NAIP (National Agriculture Imagery Program)
@@ -526,6 +526,7 @@ def train_epoch(
             - color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
         args: Additional arguments for debugging or special training conditions.
+        args: Additional arguments for debugging or special training conditions.
     """
     loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
@@ -548,6 +549,10 @@ def train_epoch(
             aug_config,
             model,
         )
+        # Break after the first batch in debug mode
+        if args.debug and batch == 0:
+            print("Debug mode: Exiting training loop after first batch.")
+            break
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -728,6 +733,8 @@ def train(
     path_config: tuple[str, str, str],
     writer: SummaryWriter,
     wandb_t: bool,
+    args,
+    epoch_config,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -750,6 +757,8 @@ def train(
                 - test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
         wandb_t: Whether running hyperparameter tuning with wandb.
+        args: Additional arguments for debugging or special training conditions.
+        epoch_config: The configuration for the number of epochs.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -814,6 +823,7 @@ def train(
                 model,
                 test_config,
                 writer,
+                args,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -837,6 +847,7 @@ def train(
             train_config,
             aug_config,
             writer,
+            args,
             args,
         )
 
@@ -883,7 +894,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
+def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
     """Runing a single trial of training
 
     Input:
@@ -947,6 +958,8 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
         wandb_tune,
         args,
         epoch_config,
+        args,
+        epoch_config,
     )
     writer.close()
     logger.handlers.clear()
@@ -997,7 +1010,6 @@ if __name__ == "__main__":
         epoch_config = 1
     else:
         epoch_config = config.EPOCHS
-
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
@@ -1005,7 +1017,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset()
+    naip, kc = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
@@ -1020,7 +1032,9 @@ if __name__ == "__main__":
         test_ious = []
 
         for num in range(num_trials):
-            train_iou, test_iou = one_trial(exp_name, num, wandb_tune, naip, split)
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, naip, split, args
+            )
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
 
