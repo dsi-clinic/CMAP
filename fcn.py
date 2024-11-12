@@ -1,5 +1,5 @@
 # Copyright (c) Microsoft Corporation. All rights reserved.
-# Licensed under the MIT License. 
+# Licensed under the MIT License.
 
 """Simple fully convolutional neural network (FCN) implementations that integrates
 dropout
