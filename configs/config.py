@@ -23,6 +23,8 @@ BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
+DROPOUT = 0.3
+
 # model hyperparams
 DATASET_MEAN = [
     0.3281668683529412,
@@ -37,11 +39,11 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 256
+PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-4
+LR = 1e-5
 NUM_WORKERS = 8
-EPOCHS = 30
+EPOCHS = 10
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
