@@ -646,7 +646,7 @@ def test(
 
             if isinstance(outputs, tuple):
                 outputs = outputs[0]
-            
+
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
