@@ -67,7 +67,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
         wandb_t: whether tuning with wandb
     """
     # set output path and exit run if path already exists
-    exp_trial_name = f"{exp_n}_trial{trial_num}"
+    exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_t:
         Path.mkdir(out_root, exist_ok=True)
@@ -407,10 +407,7 @@ def apply_augmentations(
 
 def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
     """Save training sample images."""
-    save_dir = (
-        Path(train_images_root)
-        / f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}"
-    )
+    save_dir = Path(train_images_root) / f"epoch-{epoch}"
     Path.mkdir(save_dir, exist_ok=True)
 
     for i in range(config.BATCH_SIZE):
