@@ -9,9 +9,11 @@ import importlib
 from pathlib import Path
 
 import segmentation_models_pytorch as smp
-from torchgeo.models import FCN, get_weight
+from torchgeo.models import get_weight
 from torchgeo.trainers import utils
 from torchvision.models._api import WeightsEnum
+
+from fcn import FCN
 
 
 class SegmentationModel:
@@ -62,6 +64,7 @@ class SegmentationModel:
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
         self.in_channels = model_config.get("in_channels")
+        self.dropout = model_config.get("dropout", 0.3)
         if self.in_channels is None:
             self.in_channels = 5
         if model != "fcn":
@@ -103,6 +106,10 @@ class SegmentationModel:
                     encoder_weights="swsl" if self.weights is True else None,
                     in_channels=self.in_channels,
                     classes=self.num_classes,
+                    aux_params={
+                        "classes": self.num_classes,
+                        "dropout": self.dropout,
+                    },
                 )
 
             elif model == "deeplabv3+":
@@ -111,23 +118,28 @@ class SegmentationModel:
                     encoder_weights=("imagenet" if self.weights is True else None),
                     in_channels=self.in_channels,
                     classes=self.num_classes,
+                    aux_params={
+                        "classes": self.num_classes,
+                        "dropout": self.dropout,
+                    },
                 )
 
-            elif model == "fcn":
-                self.model = FCN(
-                    in_channels=self.in_channels,
-                    classes=self.num_classes,
-                    num_filters=3,
-                )
+        elif model == "fcn":
+            self.model = FCN(
+                in_channels=self.in_channels,
+                classes=self.num_classes,
+                num_filters=3,
+                dropout=self.dropout,
+            )
 
-            else:
-                raise ValueError(
-                    f"Model type '{model}' is not valid. "
-                    "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
-                )
-            if self.weights and self.weights is not True:
-                self.model.encoder.load_state_dict(state_dict)
-            self.model.in_channels = self.in_channels
+        else:
+            raise ValueError(
+                f"Model type '{model}' is not valid. "
+                "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
+            )
+        if self.weights and self.weights is not True:
+            self.model.encoder.load_state_dict(state_dict)
+        self.model.in_channels = self.in_channels
 
     def __getbackbone__(self):
         """Returns the backbone of the model"""
@@ -136,3 +148,7 @@ class SegmentationModel:
     def __getweights__(self):
         """Returns the weights of the model"""
         return self.weights
+
+    def __getdropout__(self):
+        """Returns the dropout rate of the model"""
+        return self.dropout
