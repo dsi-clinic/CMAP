@@ -101,7 +101,6 @@ def plot_from_tensors(
     # Create the colormap
     cmap = build_cmap(colors) if colors is not None else "viridis"
     min_dims = 2
-
     # Determine the layout and create subplots
     fig, axs = plt.subplots(
         len(sample) // 2 + len(sample) % 2, min(len(sample), 2), figsize=(8, 8)
@@ -111,13 +110,21 @@ def plot_from_tensors(
     # Plot each input tensor and gather unique labels
     unique_labels = Tensor()
     for i, (name, tensor) in enumerate(sample.items()):
+        print(name)
         ax = axs[i]
 
         if "image" in name.lower():
             # Handle RGB image tensors
             ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
+            # print(tensor.shape)
+            if list(tensor.shape)[0] == 5:
+                ax.imshow(tensor[-1].permute(0, 1))
         else:
-            unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
+            unique = (
+                tensor[0].unique()
+                if tensor.ndim > min_dims
+                else tensor.unique()
+            )
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
@@ -134,7 +141,8 @@ def plot_from_tensors(
     if labels is not None and colors is not None:
         unique_labels = unique_labels.unique().type(torch.int).tolist()
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
+            mpatches.Patch(color=cmap.colors[i], label=labels[i])
+            for i in unique_labels
         ]
 
         fig.legend(
@@ -170,10 +178,16 @@ def determine_dominant_label(ground_truth: Tensor) -> int:
     # Remove the background label '0' from consideration if present
     if 0 in unique:
         background_index = (unique == 0).nonzero(as_tuple=True)[0].item()
-        unique = torch.cat([unique[:background_index], unique[background_index + 1 :]])
-        counts = torch.cat([counts[:background_index], counts[background_index + 1 :]])
+        unique = torch.cat(
+            [unique[:background_index], unique[background_index + 1 :]]
+        )
+        counts = torch.cat(
+            [counts[:background_index], counts[background_index + 1 :]]
+        )
 
-    if counts.numel() == 0:  # Check if there are no labels other than the background
+    if (
+        counts.numel() == 0
+    ):  # Check if there are no labels other than the background
         return 15  # Return ID for 'UNKNOWN'
 
     most_common_index = counts.argmax()
