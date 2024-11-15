@@ -13,6 +13,7 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
+#from rtree import index  # or any spatial index you are using
 from torchgeo.datasets import BoundingBox, GeoDataset
 
 

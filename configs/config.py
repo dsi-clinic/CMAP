@@ -107,14 +107,14 @@ KC_LABELS = {
 RD_LAYER = 1
 RD_LABELS = {
     "BACKGROUND": 0,
-    "STREAM/RIVER": 1,
+    "STREAM/RIVER": 5,
 }
 
 
-# RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
+RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 
 # Updated river shape file with images broken into segments
-RD_SHAPE_FILE = "/net/projects/cmap/workspaces/Output_River_Shapefile/"
+#RD_SHAPE_FILE = "/net/projects/cmap/workspaces/Output_River_Shapefile/"
 
 # for wandb
 WANDB_API = ""

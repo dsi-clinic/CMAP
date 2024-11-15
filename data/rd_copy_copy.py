@@ -90,7 +90,7 @@ class RiverDataset(GeoDataset):
         gdf = gpd.read_file(path)
 
         # debug print
-        print("Initial GeoDataFrame loaded:")
+        print("Initial River GeoDataFrame loaded:")
         print(gdf.head())
 
         # Debug print: Check unique values in FCODE
@@ -105,10 +105,11 @@ class RiverDataset(GeoDataset):
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
+        print("gdf complete")
         return gdf
 
     def _populate_index(self, path, gdf, context_size, patch_size):
-        """Populate spatial index with chips intersecting geometries in gdf."""
+        """Populate spatial index with chips intersecting geometries in gdf"""
 
         chip_size = 0.005
         mint, maxt = 0, sys.maxsize
@@ -132,15 +133,18 @@ class RiverDataset(GeoDataset):
 
                 # find intersecting geometries in gdf
                 intersecting_rows = gdf[gdf.intersects(chip)]
+                #print(len(intersecting_rows))
                 for _, row in intersecting_rows.iterrows():
                     # insert only intersecting chips with their corresponding row data
-                    self.index.insert(i, coords, row)
+                    self.index.insert(i, coords, row[["FCODE", "geometry"]])
                     i += 1  # increment the global index for each chip
-                    print(i, coords, row)
+                    print(i, coords, row[["FCODE", "geometry"]])
 
                 y += chip_size  # move to the next chip in the y-direction
 
             x += chip_size  # move to the next chip in the x-direction
+            # COMMENT: chips and river polygon rows are many-to-many 
+            # (one chip can contain many rivers, vice versa)
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.

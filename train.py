@@ -30,7 +30,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
 from data.kc import KaneCounty
-from data.rd import RiverDataset
+from data.rd_copy_copy import RiverDataset
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 
@@ -145,7 +145,7 @@ def initialize_dataset():
 
     labels = KaneCounty(kc_shape_path, dataset_config)
 
-    """'
+    
     if config.KC_RIVER_ROOT is not None:
         river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
         dataset_config = (
@@ -159,7 +159,7 @@ def initialize_dataset():
         # uncommented is to train river data only
 
         images = NAIP(config.KC_RIVER_ROOT)
-        # labels = RiverDataset(river_shape_path, dataset_config)
+        labels = RiverDataset(river_shape_path, dataset_config)
 
         # images = images | NAIP(config.KC_RIVER_ROOT)
         riverdata = RiverDataset(river_shape_path, dataset_config)
@@ -167,14 +167,14 @@ def initialize_dataset():
         # # kc and rd attributes
         plot_labels = {**labels.labels, **riverdata.labels}
         # labels = kc_labels | riverdata
-        labels = riverdata
+        #labels = riverdata
         # labels = kc_labels
         labels.labels = plot_labels
         labels.labels_inverse = {v: k for k, v in labels.labels.items()}
 
         color_attributes = {**labels.colors, **riverdata.colors}
         labels.colors = color_attributes
-        """
+        
     return images, labels
 
 
