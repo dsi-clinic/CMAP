@@ -15,9 +15,7 @@ KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
 # KC_DEM_ROOT = None
 KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
-OUTPUT_ROOT = str(
-    Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}"
-)
+OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
 # model selection
 MODEL = "deeplabv3+"
