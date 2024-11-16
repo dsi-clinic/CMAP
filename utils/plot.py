@@ -117,7 +117,8 @@ def plot_from_tensors(
             # Handle RGB image tensors
             ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
             # print(tensor.shape)
-            if list(tensor.shape)[0] == 5:
+            first_shape = 5
+            if list(tensor.shape)[0] == first_shape:
                 ax.imshow(tensor[-1].permute(0, 1))
         else:
             unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
