@@ -8,6 +8,7 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
+import json
 import logging
 import random
 import shutil
@@ -19,7 +20,6 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
-import yaml
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -44,12 +44,6 @@ MODEL_DEVICE = (
 )
 
 
-def initialize_wandb():
-    """Initializes wandb with sweep configuration."""
-    wandb.init(config=wandb.config)
-    return config
-
-
 def arg_parsing(argument):
     """Parsing arguments passed in from command line"""
     # if no experiment name provided, set to timestamp
@@ -65,18 +59,18 @@ def arg_parsing(argument):
     return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
 
 
-def writer_prep(exp_n, trial_num, wandb_t):
+def writer_prep(exp_n, trial_num, wandb_tune):
     """Preparing writers and logging for each training trial
 
     Args:
         exp_n: experiment name
         trial_num: current trial number
-        wandb_t: whether tuning with wandb
+        wandb_tnue: whether tuning with wandb
     """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_n}_trial{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
-    if wandb_t:
+    if wandb_tune:
         Path.mkdir(out_root, exist_ok=True)
     else:
         Path.mkdir(out_root, exist_ok=False)
@@ -295,9 +289,12 @@ def create_model():
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
+
+    learning_rate = config.LEARNING_RATE
+
     optimizer = AdamW(
         model.parameters(),
-        lr=wandb.config.learning_rate,
+        lr=learning_rate,
         weight_decay=config.WEIGHT_DECAY,
     )
 
@@ -507,6 +504,7 @@ def train_epoch(
     aug_config,
     writer,
     args,
+    wandb_tune,
 ) -> None:
     """Executes a training step for the model
 
@@ -527,6 +525,7 @@ def train_epoch(
         writer: The TensorBoard writer for logging training metrics.
         args: Additional arguments for debugging or special training conditions.
         args: Additional arguments for debugging or special training conditions.
+        wandb_tnue: whether tuning with wandb
     """
     loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
@@ -549,6 +548,7 @@ def train_epoch(
             aug_config,
             model,
         )
+
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -592,6 +592,17 @@ def train_epoch(
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info("Train Jaccard index: %.4f", final_jaccard)
+
+    if wandb_tune:
+        wandb.log(
+            {
+                "train_loss": loss.item(),
+                "train_jaccard": final_jaccard.item(),
+                "epoch": epoch,
+                "batch": batch,
+            }
+        )
+
     return final_jaccard
 
 
@@ -600,6 +611,7 @@ def test(
     model: Module,
     test_config,
     writer,
+    wandb_tune: bool,
     num_examples: int = 10,
 ) -> float:
     """Executes a testing step for the model and saves sample output images.
@@ -618,6 +630,7 @@ def test(
             - num_classes: The number of labels to predict.
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
+        wandb_tune: wether tune with wandb
         num_examples: The number of examples to save.
 
     Returns:
@@ -711,6 +724,15 @@ def test(
         final_jaccard,
         test_loss,
     )
+
+    if wandb_tune:
+        wandb.log(
+            {
+                "test_loss": test_loss,
+                "test_jaccard": final_jaccard.item(),
+                "epoch": epoch,
+            }
+        )
 
     # Access the labels and their names
     _labels = {}
@@ -848,7 +870,6 @@ def train(
             aug_config,
             writer,
             args,
-            args,
         )
 
         test_config = (
@@ -881,6 +902,17 @@ def train(
                     t,
                     patience,
                 )
+
+        if wandb_tune:
+            wandb.log(
+                {
+                    "epoch": t + 1,
+                    "train_jaccard": epoch_jaccard.item(),
+                    "test_jaccard": t_jaccard.item(),
+                    "test_loss": test_loss,
+                }
+            )
+
         # Break after the first iteration in debug mode
         if args.debug and t == 0:
             print("Debug mode: Skipping the rest of the training loop")
@@ -958,12 +990,56 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
         wandb_tune,
         args,
         epoch_config,
-        args,
-        epoch_config,
     )
     writer.close()
     logger.handlers.clear()
     return train_iou, test_iou
+
+
+def run_trials(wandb_tune):
+    """Running training for multiple trials"""
+    # Extract config dictionary from module
+    config_dict = extract_config_dict(config)
+
+    if wandb_tune:
+        run = wandb.init(project="CMAP", config=config_dict)
+        print("wandb taken over config")
+    else:
+        # Initialize wandb with default configuration but disable logging
+        run = wandb.init(project="CMAP", config=config_dict, mode="disabled")
+
+        train_ious = []
+        test_ious = []
+
+    for num in range(num_trials):
+        train_iou, test_iou = one_trial(
+            exp_name, num, wandb_tune=False, naip_set=naip, split_rate=split, args=args
+        )
+        train_ious.append(float(train_iou))
+        test_ious.append(float(test_iou))
+
+        test_average = mean(test_ious)
+        train_average = mean(train_ious)
+        test_std = 0
+        train_std = 0
+        if num_trials > 1:
+            test_std = stdev(test_ious)
+            train_std = stdev(train_ious)
+
+        print(
+            f"""
+            Training result: {train_ious},
+            average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
+        )
+        print(
+            f"""
+            Test result: {test_ious},
+            average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+        )
+
+        if wandb_tune:
+            run.log({"average_test_jaccard_index": test_average})
+        wandb.finish()
 
 
 if __name__ == "__main__":
@@ -1019,14 +1095,34 @@ if __name__ == "__main__":
 
     naip, kc = initialize_dataset(config)
 
+    def extract_config_dict(config_module):
+        """Convert configuration module into a dictionary"""
+        config_dict = {}
+        for attr in dir(config_module):
+            # Skip private attributes and methods
+            if not attr.startswith("__") and not callable(getattr(config_module, attr)):
+                value = getattr(config_module, attr)
+                # Check if the value is JSON-serializable
+                try:
+                    json.dumps(value)
+                    config_dict[attr] = value
+                except TypeError as e:
+                    logging.warning(
+                        f"Skipping non-serializable config attribute '{attr}': {e}"
+                    )
+        return config_dict
+
     def run_trials():
         """Running training for multiple trials"""
+        # Extract config dictionary from module
+        config_dict = extract_config_dict(config)
+
         if wandb_tune:
-            run = wandb.init(project="cmap_train", config=config)
+            run = wandb.init(project="CMAP", config=config_dict)
             print("wandb taken over config")
         else:
             # Initialize wandb with default configuration but disable logging
-            run = wandb.init(project="cmap_train", config=config, mode="disabled")
+            run = wandb.init(project="CMAP", config=config_dict, mode="disabled")
 
         train_ious = []
         test_ious = []
@@ -1062,20 +1158,3 @@ if __name__ == "__main__":
         wandb.finish()
 
     run_trials()
-
-if __name__ == "__main__":
-    # Ensure wandb is logged in
-    wandb.login()
-
-    # Define the sweep configuration file path
-    sweep_config_file = str(Path("configs/sweep_config.yml"))
-
-    # Read and load the sweep configuration
-    with sweep_config_file.open() as file:
-        sweep_config = yaml.safe_load(file)
-
-    # Initialize the sweep
-    sweep_id = wandb.sweep(sweep_config, project="cmap_train")
-
-    # Run the sweep agent
-    wandb.agent(sweep_id, function=run_trials, count=7)
