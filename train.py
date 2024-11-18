@@ -145,9 +145,10 @@ def initialize_dataset():
 
     labels = KaneCounty(kc_shape_path, dataset_config)
 
-    
     if config.KC_RIVER_ROOT is not None:
-        river_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE)
+        river_shape_path = os.path.join(
+            config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE
+        )
         dataset_config = (
             {"STREAM/RIVER": 1},
             config.PATCH_SIZE,
@@ -167,14 +168,14 @@ def initialize_dataset():
         # # kc and rd attributes
         plot_labels = {**labels.labels, **riverdata.labels}
         # labels = kc_labels | riverdata
-        #labels = riverdata
+        # labels = riverdata
         # labels = kc_labels
         labels.labels = plot_labels
         labels.labels_inverse = {v: k for k, v in labels.labels.items()}
 
         color_attributes = {**labels.colors, **riverdata.colors}
         labels.colors = color_attributes
-        
+
     return images, labels
 
 

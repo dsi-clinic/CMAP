@@ -31,9 +31,10 @@ class RiverDataset(GeoDataset):
     all_colors = {
         0: (0, 0, 0, 0),
         1: (255, 255, 0, 255),
+        2: (255, 255, 255, 255),  # White for background (or other class)
     }
 
-    all_labels = {0: "UNKNOWN", 1: "STREAM/RIVER"}
+    all_labels = {0: "UNKNOWN", 1: "STREAM/RIVER", 2: "BACKGROUND"}
 
     def __init__(self, path: str, configs) -> None:
         """Initialize a new river dataset instance.
@@ -67,7 +68,8 @@ class RiverDataset(GeoDataset):
 
         self._populate_index(path, gdf, context_size, patch_size)
         self.labels = labels
-        self.colors = {i: self.all_colors[i] for i in labels.values()}
+        # Fix the dictionary comprehension to map keys to colors
+        self.colors = {i: self.all_colors[i] for i in labels.keys()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
         # Debug print
@@ -108,43 +110,103 @@ class RiverDataset(GeoDataset):
         print("gdf complete")
         return gdf
 
-    def _populate_index(self, path, gdf, context_size, patch_size):
-        """Populate spatial index with chips intersecting geometries in gdf"""
+    def _populate_index(
+        self,
+        path,
+        gdf,
+        context_size,
+        patch_size,
+        reference_crs=4326,
+        target_chip_size=0.005,
+    ):
+        """Populate spatial index with proportional chips based on CRS bounds."""
 
-        chip_size = 0.005
         mint, maxt = 0, sys.maxsize
 
         self.bounding_boxes = []
         i = 0  # initialize chip index counter
 
-        # get the total bounds for the entire gdf
-        minx, miny, maxx, maxy = gdf.total_bounds
-        x = minx
+        from pyproj import CRS, Transformer
+        from tqdm import tqdm
 
-        # iterate over the x-axis within the bounds of the gdf
-        while x < maxx:
-            y = miny
+        # Get the CRS of the GeoDataFrame
+        gdf_crs = gdf.crs
+        print(f"GeoDataFrame CRS: {gdf_crs}")
 
-            # iterate over the y-axis within the bounds of the gdf
-            while y < maxy:
-                # create a rectangular chip
-                chip = box(x, y, x + chip_size, y + chip_size)
-                coords = (x, y, x + chip_size, y + chip_size, mint, maxt)
+        # Set up transformations if necessary
+        if gdf_crs.to_epsg() != reference_crs:
+            print(f"Transforming bounds to reference CRS {reference_crs}...")
+            transformer = Transformer.from_crs(
+                gdf_crs, CRS.from_epsg(reference_crs), always_xy=True
+            )
+            ref_minx, ref_miny, ref_maxx, ref_maxy = (
+                transformer.transform_bounds(*gdf.total_bounds)
+            )
+        else:
+            ref_minx, ref_miny, ref_maxx, ref_maxy = gdf.total_bounds
 
-                # find intersecting geometries in gdf
+        print(
+            f"CRS bounds: minx={ref_minx}, miny={ref_miny}, \
+                maxx={ref_maxx}, maxy={ref_maxy}"
+        )
+
+        # Calculate the proportion of chip size to the reference CRS bounds
+        ref_x_extent = ref_maxx - ref_minx
+        proportional_factor = (
+            target_chip_size / ref_x_extent
+        )  # Use x_extent for consistency
+
+        print(f"Proportional factor: {proportional_factor}")
+
+        # Transform bounds back to target CRS if needed
+        if gdf_crs.to_epsg() != reference_crs:
+            print(f"Transforming bounds back to target CRS {gdf_crs}...")
+            transformer = Transformer.from_crs(
+                CRS.from_epsg(reference_crs), gdf_crs, always_xy=True
+            )
+            minx, miny, maxx, maxy = transformer.transform_bounds(
+                ref_minx, ref_miny, ref_maxx, ref_maxy
+            )
+        else:
+            minx, miny, maxx, maxy = gdf.total_bounds
+
+        print(
+            f"Target CRS bounds: minx={minx}, miny={miny}, maxx={maxx}, maxy={maxy}"
+        )
+
+        # Calculate the proportional chip size for the target CRS
+        x_extent = maxx - minx
+        y_extent = maxy - miny
+        chip_size_x = x_extent * proportional_factor
+        chip_size_y = y_extent * proportional_factor
+
+        print(
+            f"Chip sizes: chip_size_x={chip_size_x}, chip_size_y={chip_size_y}"
+        )
+
+        # Calculate total number of iterations for progress bar
+        total_iterations = (x_extent / chip_size_x) * (y_extent / chip_size_y)
+
+        # Iterate over the x-axis within the bounds of the gdf
+        for x in tqdm(
+            np.arange(minx, maxx, chip_size_x),
+            desc="Processing x-axis",
+            total=int(total_iterations),
+        ):
+            # Iterate over the y-axis within the bounds of the gdf
+            for y in np.arange(miny, maxy, chip_size_y):
+                # Create a rectangular chip
+                chip = box(x, y, x + chip_size_x, y + chip_size_y)
+                coords = (x, y, x + chip_size_x, y + chip_size_y, mint, maxt)
+
+                # Find intersecting geometries in gdf
                 intersecting_rows = gdf[gdf.intersects(chip)]
-                #print(len(intersecting_rows))
                 for _, row in intersecting_rows.iterrows():
-                    # insert only intersecting chips with their corresponding row data
+                    # Insert only intersecting chips with their corresponding row data
                     self.index.insert(i, coords, row[["FCODE", "geometry"]])
-                    i += 1  # increment the global index for each chip
-                    print(i, coords, row[["FCODE", "geometry"]])
+                    i += 1  # Increment the global index for each chip
 
-                y += chip_size  # move to the next chip in the y-direction
-
-            x += chip_size  # move to the next chip in the x-direction
-            # COMMENT: chips and river polygon rows are many-to-many 
-            # (one chip can contain many rivers, vice versa)
+        print(f"Total chips inserted: {i}")
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
