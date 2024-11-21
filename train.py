@@ -37,9 +37,7 @@ from utils.transforms import apply_augs, create_augmentation_pipelines
 MODEL_DEVICE = (
     "cuda"
     if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
+    else "mps" if torch.backends.mps.is_available() else "cpu"
 )
 
 
@@ -70,9 +68,9 @@ def writer_prep(exp_n, trial_num, wandb_t):
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_t:
-        Path.mkdir(out_root, exist_ok=True)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
     else:
-        Path.mkdir(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
 
     # create directory for output images
     train_images_root = Path(out_root) / "train-images"
@@ -368,7 +366,9 @@ def add_extra_channel(
         torch.Tensor: A modified tensor with added channels
     """
     # Select the source channel to duplicate
-    original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
+    original_channel = image_tensor[
+        :, source_channel : source_channel + 1, :, :
+    ]
 
     # Generate copy of selected channel
     extra_channel = original_channel.clone()
@@ -406,7 +406,9 @@ def apply_augmentations(
     return x_aug, y_squeezed
 
 
-def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample):
+def save_training_images(
+    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
+):
     """Save training sample images."""
     save_dir = Path(train_images_root) / f"epoch-{epoch}"
     Path.mkdir(save_dir, exist_ok=True)
@@ -565,7 +567,9 @@ def train_epoch(
 
         # Gradient clipping
         if config.GRADIENT_CLIPPING:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), config.CLIP_VALUE)
+            torch.nn.utils.clip_grad_norm_(
+                model.parameters(), config.CLIP_VALUE
+            )
 
         optimizer.step()
         optimizer.zero_grad()
@@ -684,7 +688,8 @@ def test(
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
-                            Path(save_dir) / f"test_sample-{epoch}.{batch}.{i}.png"
+                            Path(save_dir)
+                            / f"test_sample-{epoch}.{batch}.{i}.png"
                         )
                         plot_from_tensors(
                             plot_tensors,
@@ -712,7 +717,9 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
+        logging.info(
+            "IoU for %s: %f \n", label_name, final_jaccard_per_class[i]
+        )
 
     # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
@@ -962,7 +969,9 @@ if __name__ == "__main__":
         description="Train a segmentation model to predict stormwater storage "
         + "and green infrastructure."
     )
-    parser.add_argument("config", type=str, help="Path to the configuration file")
+    parser.add_argument(
+        "config", type=str, help="Path to the configuration file"
+    )
     parser.add_argument(
         "--experiment_name",
         type=str,
