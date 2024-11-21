@@ -12,8 +12,8 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
-KC_DEM_ROOT = None
-# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+# KC_DEM_ROOT = None
+KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -39,6 +39,7 @@ DATASET_STD = [
     0.03643713776470588,
 ]
 BATCH_SIZE = 16
+# BATCH_SIZE = 1
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5

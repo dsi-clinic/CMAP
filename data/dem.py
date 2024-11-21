@@ -56,6 +56,9 @@ class KaneDEM(RasterDataset):
             bbox = rasterio.warp.transform_bounds(self.crs, src.crs, *bbox)
             window = src.window(*bbox)
             sample["image"] = src.read(window=window)
+            # FIXME debugging hack
+            if sample["image"].shape != (1, 512, 512):
+                print("sample image shape in dem: ", sample["image"].shape)
         sample["image"] = torch.from_numpy(sample["image"])
         return sample
 

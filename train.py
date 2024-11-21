@@ -72,7 +72,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
     if wandb_t:
         Path.mkdir(out_root, exist_ok=True)
     else:
-        Path.mkdir(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=False, parents=True)
 
     # create directory for output images
     train_images_root = Path(out_root) / "train-images"
@@ -143,7 +143,6 @@ def initialize_dataset(config):
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT)
         naip_dataset = naip_dataset & dem
-        print("naip and dem loaded")
 
     return naip_dataset, kc_dataset
 
@@ -368,6 +367,7 @@ def add_extra_channel(
         torch.Tensor: A modified tensor with added channels
     """
     # Select the source channel to duplicate
+    # shape: (batch, channel, h, w)
     original_channel = image_tensor[:, source_channel : source_channel + 1, :, :]
 
     # Generate copy of selected channel
@@ -413,11 +413,14 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
 
     for i in range(config.BATCH_SIZE):
         plot_tensors = {
-            "RGB Image": x[i].cpu(),
+            "RGB Image": x[i][0:3, :, :].cpu(),
+            "NIR": x[i][3, :, :].cpu(),
             "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i].cpu(),
+            "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
             "Augmented_Mask": y_aug[i].cpu(),
         }
+        if config.KC_DEM_ROOT is not None:
+            plot_tensors["DEM"] = x[i][4, :, :].cpu()
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
             plot_tensors,
@@ -456,7 +459,9 @@ def train_setup(
     spatial_aug_mode, color_aug_mode, spatial_augs, color_augs = aug_config
 
     samp_image = sample["image"]
+    print("samp image shape: ", samp_image.shape)
     samp_mask = sample["mask"]
+    print("samp mask shape: ", samp_mask.shape)
 
     # Add extra channels to image if necessary
     samp_image = add_extra_channels(samp_image, model)
@@ -523,7 +528,11 @@ def train_epoch(
     model.train()
     jaccard.reset()
     train_loss = 0
+    print("about to start training loop")
     for batch, sample in enumerate(dataloader):
+        print("sample keys: ", sample.keys())
+        print("sample image shape: ", sample["image"].shape)
+        print("sample mask shape: ", sample["mask"].shape)
         train_config = (epoch, batch, train_images_root)
         aug_config = (
             spatial_aug_mode,
@@ -799,25 +808,25 @@ def train(
         epoch_config = config.EPOCHS
 
     for t in range(epoch_config):
-        if t == 0:
-            test_config = (
-                loss_fn,
-                test_jaccard,
-                t,
-                plateau_count,
-                test_image_root,
-                writer,
-                num_classes,
-                jaccard_per_class,
-            )
-            test_loss, t_jaccard = test(
-                test_dataloader,
-                model,
-                test_config,
-                writer,
-                args,
-            )
-            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
+        # if t == 0:
+        #     test_config = (
+        #         loss_fn,
+        #         test_jaccard,
+        #         t,
+        #         plateau_count,
+        #         test_image_root,
+        #         writer,
+        #         num_classes,
+        #         jaccard_per_class,
+        #     )
+        #     test_loss, t_jaccard = test(
+        #         test_dataloader,
+        #         model,
+        #         test_config,
+        #         writer,
+        #         args,
+        #     )
+        #     print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info("Epoch %d\n-------------------------------", t + 1)
         train_config = (
