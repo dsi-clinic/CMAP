@@ -35,7 +35,9 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 256
-NUM_CLASSES = 5  # predicting 4 classes + background
+#NUM_CLASSES = 5  # predicting 4 classes + background
+NUM_CLASSES = 6  # predicting 5 classes + background
+
 LR = 1e-4
 NUM_WORKERS = 8
 EPOCHS = 30
@@ -107,7 +109,7 @@ KC_LABELS = {
 RD_LAYER = 1
 RD_LABELS = {
     "BACKGROUND": 0,
-    "STREAM/RIVER": 16,
+    "STREAM/RIVER": 5,
 }
 
 

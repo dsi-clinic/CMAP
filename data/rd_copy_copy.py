@@ -56,18 +56,19 @@ class KaneCounty(GeoDataset):
         2: (49, 102, 80, 255),
         3: (239, 169, 74, 255),
         4: (100, 107, 99, 255),
-        5: (89, 53, 31, 255),
-        6: (2, 86, 105, 255),
-        7: (207, 211, 205, 255),
-        8: (195, 88, 49, 255),
-        9: (144, 70, 132, 255),
-        10: (29, 51, 74, 255),
-        11: (71, 64, 46, 255),
-        12: (114, 20, 34, 255),
-        13: (37, 40, 80, 255),
-        14: (94, 33, 41, 255),
-        15: (255, 255, 255, 255),
-       #16: (255, 255, 0, 255),
+        5: (255, 255, 0, 255),
+        6: (89, 53, 31, 255),
+        7: (2, 86, 105, 255),
+        8: (207, 211, 205, 255),
+        9: (195, 88, 49, 255),
+        10: (144, 70, 132, 255),
+        11: (29, 51, 74, 255),
+        12: (71, 64, 46, 255),
+        13: (114, 20, 34, 255),
+        14: (37, 40, 80, 255),
+        15: (94, 33, 41, 255),
+        16: (255, 255, 255, 255),
+       
     }
     all_labels = {
         0: "BACKGROUND",
@@ -75,18 +76,18 @@ class KaneCounty(GeoDataset):
         2: "WETLAND",
         3: "DRY BOTTOM - TURF",
         4: "DRY BOTTOM - MESIC PRAIRIE",
-        5: "DEPRESSIONAL STORAGE",
-        6: "DRY BOTTOM - WOODED",
-        7: "POND - EXTENDED DRY",
-        8: "PICP PARKING LOT",
-        9: "DRY BOTTOM - GRAVEL",
-        10: "UNDERGROUND",
-        11: "UNDERGROUND VAULT",
-        12: "PICP ALLEY",
-        13: "INFILTRATION TRENCH",
-        14: "BIORETENTION",
-        15: "UNKNOWN",
-        #16: "STREAM/RIVER"
+        #5: "STREAM/RIVER"
+        6: "DEPRESSIONAL STORAGE",
+        7: "DRY BOTTOM - WOODED",
+        8: "POND - EXTENDED DRY",
+        9: "PICP PARKING LOT",
+        10: "DRY BOTTOM - GRAVEL",
+        11: "UNDERGROUND",
+        12: "UNDERGROUND VAULT",
+        13: "PICP ALLEY",
+        14: "INFILTRATION TRENCH",
+        15: "BIORETENTION",
+        16: "UNKNOWN",
     }
 
     def __init__(self, path: str, kc_configs) -> None:
@@ -219,10 +220,10 @@ class RiverDataset(GeoDataset):
 
     all_colors = {
         0: (0, 0, 0, 0),
-        16: (255, 255, 0, 255),
+        5: (255, 255, 0, 255),
     }
 
-    all_labels = {0: "UNKNOWN", 16: "STREAM/RIVER"}
+    all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
 
     def __init__(self, path: str, rd_configs, kc: bool) -> None:
         """Initialize a new river dataset instance.
@@ -268,14 +269,19 @@ class RiverDataset(GeoDataset):
             print("Initialized KC dataset")
 
             # Combine the River dataset and KaneCounty dataset gdfs
-            #self.gdf.rename(columns={"FCODE": "BasinType"}, inplace=True)
+
             self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
+            
+            self.gdf['BasinType'] = self.gdf['BasinType'].fillna(self.gdf['FCODE'])
+
             print(f"Combined GeoDataFrame shape: {self.gdf.shape}")
         
-            KC_LABELS["STREAM/RIVEr"] = 16
+            KC_LABELS["STREAM/RIVER"] = 5
             labels = KC_LABELS
             
-            kc_dataset.colors[16] = (255, 255, 0, 255)
+            self.gdf = self.gdf[self.gdf["BasinType"].isin(labels.keys())]
+            
+            kc_dataset.colors[5] = (255, 255, 0, 255)
             self.all_colors = kc_dataset.colors
 
         
@@ -312,7 +318,9 @@ class RiverDataset(GeoDataset):
 
         # Filter by FCODE to only include labels
         #gdf = gdf[gdf["BasinType"].isin(self.labels.keys())]
-        gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
+        #gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+        
+        #gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
 
         # Debug print
         print("GeoDataFrame after filtering by FCODE:")
@@ -419,7 +427,7 @@ class RiverDataset(GeoDataset):
                 intersecting_rows = gdf[gdf.intersects(chip)]
                 for _, row in intersecting_rows.iterrows():
                     # Insert only intersecting chips with their corresponding row data
-                    self.index.insert(i, coords, row[["FCODE", "geometry"]])
+                    self.index.insert(i, coords, row[["BasinType", "geometry"]]) # replace FCODE with BasinType
                     i += 1  # Increment the global index for each chip
 
         print(f"Total chips inserted: {i}")
@@ -448,8 +456,8 @@ class RiverDataset(GeoDataset):
         # print("objs in __getitem__:", len(objs))
         for obj in objs:
             shape = obj["geometry"]
-            label = self.labels[obj["FCODE"]]
-            #label = self.labels[obj["BasinType"]]
+            #label = self.labels[obj["FCODE"]]
+            label = self.labels[obj["BasinType"]]
             shapes.append((shape, label))
         # print("len of shapes in __getitem__:", len(shapes))
 
