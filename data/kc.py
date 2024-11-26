@@ -129,6 +129,7 @@ class KaneCounty(GeoDataset):
             context_size: size of the context around shapes for sampling
         """
         i = 0
+        print("beginning populate index loop")
         for _, row in gdf.iterrows():
             minx, miny, maxx, maxy = row["geometry"].bounds
             mint, maxt = 0, sys.maxsize
@@ -140,6 +141,9 @@ class KaneCounty(GeoDataset):
                 mint,
                 maxt,
             )
+            print("coords in kc:", coords)
+            print("i", i)
+            print("row", row)
             self.index.insert(i, coords, row)
             i += 1
         if i == 0:

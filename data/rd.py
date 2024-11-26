@@ -13,9 +13,17 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
+
+from pathlib import Path
+
+
+# from rtree import index  # or any spatial index you are using
 from shapely.geometry import box
 from torchgeo.datasets import BoundingBox, GeoDataset
-from tqdm import tqdm
+
+# from tqdm import tqdm
+
+
 
 
 class RiverDataset(GeoDataset):
@@ -64,7 +72,8 @@ class RiverDataset(GeoDataset):
 
         self._populate_index(path, gdf, context_size, patch_size)
         self.labels = labels
-        self.colors = {i: self.all_colors[i] for i in labels.values()}
+        # Fix the dictionary comprehension to map keys to colors
+        self.colors = {label_value: self.all_colors[label_value] for label_value in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
         # Debug print
@@ -87,7 +96,7 @@ class RiverDataset(GeoDataset):
         gdf = gpd.read_file(path)
 
         # debug print
-        print("Initial GeoDataFrame loaded:")
+        print("Initial River GeoDataFrame loaded:")
         print(gdf.head())
 
         # Debug print: Check unique values in FCODE
@@ -102,43 +111,107 @@ class RiverDataset(GeoDataset):
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
+        print("gdf complete")
+        
         return gdf
 
-    def _populate_index(self, path, gdf, context_size, patch_size):
-        """Populate the spatial index with data from the GeoDataFrame."""
-        patch_size_in_units = patch_size * self._res
-        i = 0
-        self.bounding_boxes = []  # List to store bounding boxes
+    def _populate_index(
+        self,
+        path,
+        gdf,
+        context_size,
+        patch_size,
+        reference_crs=4326,
+        target_chip_size=0.005,
+    ):
+        """Populate spatial index with proportional chips based on CRS bounds."""
 
-        for _, row in tqdm(
-            gdf.iterrows(), total=len(gdf), desc="Populating index"
+        mint, maxt = 0, sys.maxsize
+
+        self.bounding_boxes = []
+        i = 0  # initialize chip index counter
+
+        from pyproj import CRS, Transformer
+        from tqdm import tqdm
+
+        # Get the CRS of the GeoDataFrame
+        gdf_crs = gdf.crs
+        print(f"GeoDataFrame CRS: {gdf_crs}")
+
+        # Set up transformations if necessary
+        if gdf_crs.to_epsg() != reference_crs:
+            print(f"Transforming bounds to reference CRS {reference_crs}...")
+            transformer = Transformer.from_crs(
+                gdf_crs, CRS.from_epsg(reference_crs), always_xy=True
+            )
+            ref_minx, ref_miny, ref_maxx, ref_maxy = (
+                transformer.transform_bounds(*gdf.total_bounds)
+            )
+        else:
+            ref_minx, ref_miny, ref_maxx, ref_maxy = gdf.total_bounds
+
+        print(
+            f"CRS bounds: minx={ref_minx}, miny={ref_miny}, \
+                maxx={ref_maxx}, maxy={ref_maxy}"
+        )
+
+        # Calculate the proportion of chip size to the reference CRS bounds
+        ref_x_extent = ref_maxx - ref_minx
+        proportional_factor = (
+            target_chip_size / ref_x_extent
+        )  # Use x_extent for consistency
+
+        print(f"Proportional factor: {proportional_factor}")
+
+        # Transform bounds back to target CRS if needed
+        if gdf_crs.to_epsg() != reference_crs:
+            print(f"Transforming bounds back to target CRS {gdf_crs}...")
+            transformer = Transformer.from_crs(
+                CRS.from_epsg(reference_crs), gdf_crs, always_xy=True
+            )
+            minx, miny, maxx, maxy = transformer.transform_bounds(
+                ref_minx, ref_miny, ref_maxx, ref_maxy
+            )
+        else:
+            minx, miny, maxx, maxy = gdf.total_bounds
+
+        print(
+            f"Target CRS bounds: minx={minx}, miny={miny}, maxx={maxx}, maxy={maxy}"
+        )
+
+        # Calculate the proportional chip size for the target CRS
+        x_extent = maxx - minx
+        y_extent = maxy - miny
+        chip_size_x = x_extent * proportional_factor
+        chip_size_y = y_extent * proportional_factor
+
+        print(
+            f"Chip sizes: chip_size_x={chip_size_x}, chip_size_y={chip_size_y}"
+        )
+
+        # Calculate total number of iterations for progress bar
+        total_iterations = (x_extent / chip_size_x) * (y_extent / chip_size_y)
+
+        # Iterate over the x-axis within the bounds of the gdf
+        for x in tqdm(
+            np.arange(minx, maxx, chip_size_x),
+            desc="Processing x-axis",
+            total=int(total_iterations),
         ):
-            minx, miny, maxx, maxy = row["geometry"].bounds
-            x_range = np.arange(minx, maxx, patch_size_in_units)
-            y_range = np.arange(miny, maxy, patch_size_in_units)
-            for x in x_range:
-                for y in y_range:
-                    bbox = box(
-                        x, y, x + patch_size_in_units, y + patch_size_in_units
-                    )
-                    if row["geometry"].intersects(bbox):
-                        coords = (
-                            x - context_size,
-                            x + patch_size_in_units + context_size,
-                            y - context_size,
-                            y + patch_size_in_units + context_size,
-                            0,
-                            sys.maxsize,
-                        )
-                        self.index.insert(i, coords, row)
-                        self.bounding_boxes.append(
-                            bbox
-                        )  # Store the bounding box
-                        i += 1
+            # Iterate over the y-axis within the bounds of the gdf
+            for y in np.arange(miny, maxy, chip_size_y):
+                # Create a rectangular chip
+                chip = box(x, y, x + chip_size_x, y + chip_size_y)
+                coords = (x, y, x + chip_size_x, y + chip_size_y, mint, maxt)
 
-        if i == 0:
-            msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
-            raise FileNotFoundError(msg)
+                # Find intersecting geometries in gdf
+                intersecting_rows = gdf[gdf.intersects(chip)]
+                for _, row in intersecting_rows.iterrows():
+                    # Insert only intersecting chips with their corresponding row data
+                    self.index.insert(i, coords, row[["FCODE", "geometry"]])
+                    i += 1  # Increment the global index for each chip
+
+        print(f"Total chips inserted: {i}")
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.

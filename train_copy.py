@@ -147,8 +147,8 @@ def initialize_dataset(config):
         naip_dataset.res,
     )
 
-    kc_dataset = KaneCounty(kc_shape_path, kc_config)
-    river_dataset = RiverDataset(rd_shape_path, rd_config)
+    #kc_dataset = KaneCounty(kc_shape_path, kc_config)
+    river_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT)
@@ -271,7 +271,7 @@ def create_model():
         "backbone": config.BACKBONE,
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
+        #"dropout": config.DROPOUT,
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)

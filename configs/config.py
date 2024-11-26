@@ -107,7 +107,7 @@ KC_LABELS = {
 RD_LAYER = 1
 RD_LABELS = {
     "BACKGROUND": 0,
-    "STREAM/RIVER": 5,
+    "STREAM/RIVER": 16,
 }
 
 
