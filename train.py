@@ -262,7 +262,8 @@ def create_model():
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
-    logging.info(model)
+    # logging.info(model)
+    print(model.in_channels)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
@@ -412,16 +413,26 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     Path.mkdir(save_dir, exist_ok=True)
 
     for i in range(config.BATCH_SIZE):
-        plot_tensors = {
-            "RGB Image": x[i][0:3, :, :].cpu(),
-            "NIR": x[i][3, :, :].cpu(),
-            "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
-            "Augmented_Mask": y_aug[i].cpu(),
-        }
+        print(list(x[i].shape))
         if config.KC_DEM_ROOT is not None:
-            plot_tensors["DEM"] = x[i][4, :, :].cpu()
+            print("entered the dem condition")
+            plot_tensors = {
+                "RGB Image": x[i][0:3, :, :].cpu(),
+                "DEM": x[i][-1, :, :].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+            }
+        else:
+            print("entered the non dem condition")
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+            }
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
+        print("kc labels ", kc.labels_inverse)
         plot_from_tensors(
             plot_tensors,
             sample_fname,
@@ -679,11 +690,21 @@ def test(
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
-                    plot_tensors = {
-                        "RGB Image": x_scaled[i].cpu(),
-                        "ground_truth": samp_mask[i],
-                        "prediction": preds[i].cpu(),
-                    }
+                    if config.KC_DEM_ROOT is not None:
+                        print("entered dem portion of the test code")
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i][0:3, :, :].cpu(),
+                            "DEM": x_scaled[i][-1, :, :].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
+                    else:
+                        print("entered non dem portion of the test code")
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
@@ -695,6 +716,7 @@ def test(
                         sample_fname = (
                             Path(save_dir) / f"test_sample-{epoch}.{batch}.{i}.png"
                         )
+                        print("kc labels", kc.labels_inverse)
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,

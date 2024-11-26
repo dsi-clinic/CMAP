@@ -116,6 +116,8 @@ def plot_from_tensors(
         if "image" in name.lower():
             # Handle RGB image tensors
             ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
+        if "DEM" in name:
+            ax.imshow(tensor.permute(0, 1))
         else:
             unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
             ax.imshow(
@@ -132,7 +134,6 @@ def plot_from_tensors(
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
-        unique_labels = unique_labels.unique().type(torch.int).tolist()
         patches = [
             mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
         ]
