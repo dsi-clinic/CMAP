@@ -13,8 +13,17 @@ import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
+import pandas as pd
 
+import sys
 from pathlib import Path
+
+# Add the parent directory (contains both 'configs' and 'data') to sys.path
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+
+# Import from configs
+from configs.config import KC_SHAPE_ROOT, KC_SHAPE_FILENAME, KC_LAYER, KC_LABELS
 
 
 # from rtree import index  # or any spatial index you are using
@@ -25,9 +34,17 @@ from torchgeo.datasets import BoundingBox, GeoDataset
 
 
 
+"""
+This module provides a custom PyTorch GeoDataset for working with vector data
+representing labels or features in Kane County, Illinois. The vector data is
+stored as shapes in a GeoDatabase file, and this module allows for retrieving
+samples of labels or features as masks or rasterized images within specified
+bounding boxes.
+"""
 
-class RiverDataset(GeoDataset):
-    """Vector dataset for river labels stored as shapes in GeoDatabase."""
+
+class KaneCounty(GeoDataset):
+    """Vector ataset for Kane County labels stored as shapes in GeoDatabase."""
 
     all_bands = ["Label"]
     is_image = False
@@ -35,17 +52,50 @@ class RiverDataset(GeoDataset):
     # all colors and labels
     all_colors = {
         0: (0, 0, 0, 0),
-        1: (255, 255, 0, 255),
+        1: (215, 80, 48, 255),
+        2: (49, 102, 80, 255),
+        3: (239, 169, 74, 255),
+        4: (100, 107, 99, 255),
+        5: (255, 255, 0, 255),
+        6: (89, 53, 31, 255),
+        7: (2, 86, 105, 255),
+        8: (207, 211, 205, 255),
+        9: (195, 88, 49, 255),
+        10: (144, 70, 132, 255),
+        11: (29, 51, 74, 255),
+        12: (71, 64, 46, 255),
+        13: (114, 20, 34, 255),
+        14: (37, 40, 80, 255),
+        15: (94, 33, 41, 255),
+        16: (255, 255, 255, 255),
+       
+    }
+    all_labels = {
+        0: "BACKGROUND",
+        1: "POND",
+        2: "WETLAND",
+        3: "DRY BOTTOM - TURF",
+        4: "DRY BOTTOM - MESIC PRAIRIE",
+        #5: "STREAM/RIVER"
+        6: "DEPRESSIONAL STORAGE",
+        7: "DRY BOTTOM - WOODED",
+        8: "POND - EXTENDED DRY",
+        9: "PICP PARKING LOT",
+        10: "DRY BOTTOM - GRAVEL",
+        11: "UNDERGROUND",
+        12: "UNDERGROUND VAULT",
+        13: "PICP ALLEY",
+        14: "INFILTRATION TRENCH",
+        15: "BIORETENTION",
+        16: "UNKNOWN",
     }
 
-    all_labels = {0: "UNKNOWN", 1: "STREAM/RIVER"}
-
-    def __init__(self, path: str, configs) -> None:
-        """Initialize a new river dataset instance.
+    def __init__(self, path: str, kc_configs) -> None:
+        """Initialize a new KaneCounty dataset instance.
 
         Args:
             path: directory to the file to load
-            configs: a tuple containing
+            kc_configs: a tuple containing
                 layer: specifying layer of GPKG
                 labels: a dictionary containing a label mapping for masks
                 patch_size: the patch size used for the model
@@ -57,29 +107,22 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
-        labels, patch_size, dest_crs, res = configs
-        gdf = self._load_and_prepare_data(path, dest_crs)
-        self.gdf = gdf
+        layer, labels, patch_size, dest_crs, res = kc_configs
 
-        # Debug prints
-        print(f"Configs received: {configs}")
-        print(f"Type of labels: {type(labels)}, Content: {labels}")
+        gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
+        self.gdf = gdf
 
         context_size = math.ceil(patch_size / 2 * res)
         self.context_size = context_size
         self._crs = dest_crs
         self._res = res
 
-        self._populate_index(path, gdf, context_size, patch_size)
+        #self._populate_index(path, gdf, context_size)
         self.labels = labels
-        # Fix the dictionary comprehension to map keys to colors
-        self.colors = {label_value: self.all_colors[label_value] for label_value in labels.values()}
+        self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
-        # Debug print
-        print(f"Initializing RiverDataset with configs: {configs}")
-
-    def _load_and_prepare_data(self, path, dest_crs):
+    def _load_and_prepare_data(self, path, layer, labels, dest_crs):
         """Load and prepare the GeoDataFrame.
 
         Args:
@@ -91,21 +134,195 @@ class RiverDataset(GeoDataset):
         Returns:
             gdf: A GeoDataFrame filtered and converted to the target CRS
         """
+        gdf = gpd.read_file(path, layer=layer)[["BasinType", "geometry"]]
+
+        # debug print
+        print("Initial Kane County GeoDataFrame loaded:")
+        print(gdf.head())
+
+        gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+        gdf = gdf.to_crs(dest_crs)
+
+        # debug print
+        print("Kane countys filtered gdf")
+        print(gdf.head())
+
+        return gdf
+
+    def __getitem__(self, query: BoundingBox):
+            """Retrieve image/mask and metadata indexed by query.
+
+            Args:
+                query: (minx, maxx, miny, maxy, mint, maxt) coordinates to index
+
+            Returns:
+                sample of image/mask and metadata at that index
+
+            Raises:
+                IndexError: if query is not found in the index
+            """
+            hits = self.index.intersection(tuple(query), objects=True)
+            objs = [hit.object for hit in hits]
+
+            if not objs:
+                raise IndexError(
+                    f"query: {query} not found in index with bounds: {self.bounds}"
+                )
+
+            shapes = []
+            for obj in objs:
+                shape = obj["geometry"]
+                label = self.labels[obj["BasinType"]]
+                shapes.append((shape, label))
+
+            width = (query.maxx - query.minx) / self._res
+            height = (query.maxy - query.miny) / self._res
+            transform = rasterio.transform.from_bounds(
+                query.minx, query.miny, query.maxx, query.maxy, width, height
+            )
+            if shapes and min((round(height), round(width))) != 0:
+                masks = rasterio.features.rasterize(
+                    shapes,
+                    out_shape=(round(height), round(width)),
+                    transform=transform,
+                )
+            else:
+                # If no features are found in this query, return an empty mask
+                # with the default fill value and dtype used by rasterize
+                masks = np.zeros((round(height), round(width)), dtype=np.uint8)
+
+            sample = {
+                "mask": torch.Tensor(masks).long(),
+                "crs": self.crs,
+                "bbox": query,
+            }
+
+            if self.transforms is not None:
+                sample = self.transforms(sample)
+
+            return sample
+
+    def __getlabels__(self):
+        """
+        Returns the labels of the dataset.
+        """
+        return self.labels
+
+
+
+
+
+class RiverDataset(GeoDataset):
+    """Vector dataset for river labels stored as shapes in GeoDatabase."""
+
+    all_bands = ["Label"]
+    is_image = False
+
+    all_colors = {
+        0: (0, 0, 0, 0),
+        5: (255, 255, 0, 255),
+    }
+
+    all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
+
+    def __init__(self, path: str, rd_configs, kc: bool) -> None:
+        """Initialize a new river dataset instance.
+
+        Args:
+            path: directory to the file to load
+            rd_configs: a tuple containing
+                layer: specifying layer of GPKG
+                labels: a dictionary containing a label mapping for masks
+                patch_size: the patch size used for the model
+                dest_crs: the coordinate reference system (CRS) to convert to
+                res: resolution of the dataset in units of CRS
+
+        Raises:
+            FileNotFoundError: if no files are found in path
+        """
+        super().__init__()
+
+        labels, patch_size, dest_crs, res = rd_configs
+        gdf = self._load_and_prepare_data(path, dest_crs)
+        self.gdf = gdf
+
+        # Debug prints
+        print(f"Configs received: {rd_configs}")
+        print(f"Type of labels: {type(labels)}, Content: {labels}")
+        
+        # Initialize the KaneCounty dataset if kc is True
+        if kc:
+            kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
+            print("Loaded KC shape path")
+            
+            kc_config = (
+                KC_LAYER,
+                KC_LABELS,
+                patch_size,
+                dest_crs,
+                res,
+            )
+            print("Loaded KC config")
+            
+            # Create the KaneCounty dataset instance
+            kc_dataset = KaneCounty(kc_shape_path, kc_config)
+            print("Initialized KC dataset")
+
+            # Combine the River dataset and KaneCounty dataset gdfs
+
+            self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
+            
+            self.gdf['BasinType'] = self.gdf['BasinType'].fillna(self.gdf['FCODE'])
+
+            print(f"Combined GeoDataFrame shape: {self.gdf.shape}")
+        
+            KC_LABELS["STREAM/RIVER"] = 5
+            labels = KC_LABELS
+            
+            self.gdf = self.gdf[self.gdf["BasinType"].isin(labels.keys())]
+            
+            kc_dataset.colors[5] = (255, 255, 0, 255)
+            self.all_colors = kc_dataset.colors
+
+        
+        context_size = math.ceil(patch_size / 2 * res)
+        self.context_size = context_size
+        self._crs = dest_crs
+        self._res = res
+
+        self._populate_index(path, self.gdf, context_size, patch_size)
+        self.labels = labels
+        self.colors = {label_value: self.all_colors[label_value] for label_value in labels.values()}
+        self.labels_inverse = {v: k for k, v in labels.items()}
+
+        # Debug print
+        print(f"Initializing RiverDataset with configs: {rd_configs}")
+
+    def _load_and_prepare_data(self, path, dest_crs):
+        """Load and prepare the GeoDataFrame.
+
+        Args:
+            path: directory to the file to load
+            dest_crs: the coordinate reference system (CRS) to convert to
+
+        Returns:
+            gdf: A GeoDataFrame filtered and converted to the target CRS
+        """
 
         # Read the shapefile into a GeoDataFrame
         gdf = gpd.read_file(path)
 
-        # debug print
+        # Debug print
         print("Initial River GeoDataFrame loaded:")
         print(gdf.head())
 
-        # Debug print: Check unique values in FCODE
-        print(f"Unique FCODE values: {gdf['FCODE'].unique()}")
+        # Filter by FCODE to only include labels
+        #gdf = gdf[gdf["BasinType"].isin(self.labels.keys())]
+        #gdf = gdf[gdf["BasinType"].isin(labels.keys())]
+        
+        #gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
 
-        # Filter by FCODE to only include stream and river
-        gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
-
-        # debug print
+        # Debug print
         print("GeoDataFrame after filtering by FCODE:")
         print(gdf.head())
 
@@ -114,6 +331,8 @@ class RiverDataset(GeoDataset):
         print("gdf complete")
         
         return gdf
+
+
 
     def _populate_index(
         self,
@@ -208,7 +427,7 @@ class RiverDataset(GeoDataset):
                 intersecting_rows = gdf[gdf.intersects(chip)]
                 for _, row in intersecting_rows.iterrows():
                     # Insert only intersecting chips with their corresponding row data
-                    self.index.insert(i, coords, row[["FCODE", "geometry"]])
+                    self.index.insert(i, coords, row[["BasinType", "geometry"]]) # replace FCODE with BasinType
                     i += 1  # Increment the global index for each chip
 
         print(f"Total chips inserted: {i}")
@@ -237,7 +456,8 @@ class RiverDataset(GeoDataset):
         # print("objs in __getitem__:", len(objs))
         for obj in objs:
             shape = obj["geometry"]
-            label = self.labels[obj["FCODE"]]
+            #label = self.labels[obj["FCODE"]]
+            label = self.labels[obj["BasinType"]]
             shapes.append((shape, label))
         # print("len of shapes in __getitem__:", len(shapes))
 

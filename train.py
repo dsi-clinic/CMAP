@@ -1,4 +1,5 @@
-"""
+"""Train a segmentation model.
+
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
     [--split <split>] [--tune]  [--num_trials <num>]
@@ -8,19 +9,17 @@ import argparse
 import datetime
 import importlib.util
 import logging
-import os
 import random
 import shutil
 import sys
+from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
-from typing import Any, DefaultDict, Tuple
+from typing import Any
 
 import kornia.augmentation as K
-import numpy as np
 import torch
 import wandb
-from PIL import Image
 from torch.nn.modules import Module
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -30,13 +29,9 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
 from data.kc import KaneCounty
-from data.rd_copy_copy import RiverDataset
+from data.rd import RiverDataset
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
-
-# importing river images
-from retrieve_images import get_kane_county_river_images
-from utils.get_naip_images import get_river_geometry
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
@@ -48,9 +43,7 @@ MODEL_DEVICE = (
 
 
 def arg_parsing(argument):
-    """
-    Parsing arguments passed in from command line
-    """
+    """Parsing arguments passed in from command line"""
     # if no experiment name provided, set to timestamp
     exp_name_arg = argument.experiment_name
     if exp_name_arg is None:
@@ -65,32 +58,34 @@ def arg_parsing(argument):
 
 
 def writer_prep(exp_n, trial_num, wandb_t):
-    """
-    Preparing writers and logging for each training trial
+    """Preparing writers and logging for each training trial
+
     Args:
+        exp_n: experiment name
         trial_num: current trial number
+        wandb_t: whether tuning with wandb
     """
     # set output path and exit run if path already exists
-    exp_trial_name = f"{exp_n}_trial{trial_num}"
-    out_root = os.path.join(config.OUTPUT_ROOT, exp_trial_name)
+    exp_trial_name = f"{exp_n}_trial_{trial_num}"
+    out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_t:
-        os.makedirs(out_root, exist_ok=True)
+        Path.mkdir(out_root, exist_ok=True)
     else:
-        os.makedirs(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=False)
 
     # create directory for output images
-    train_images_root = os.path.join(out_root, "train-images")
-    test_images_root = os.path.join(out_root, "test-images")
+    train_images_root = Path(out_root) / "train-images"
+    test_images_root = Path(out_root) / "test-images"
 
     try:
-        os.mkdir(train_images_root)
-        os.mkdir(test_images_root)
+        Path.mkdir(train_images_root)
+        Path.mkdir(test_images_root)
 
     except FileExistsError:
         shutil.rmtree(train_images_root)
         shutil.rmtree(test_images_root)
-        os.mkdir(train_images_root)
-        os.mkdir(test_images_root)
+        Path.mkdir(train_images_root)
+        Path.mkdir(test_images_root)
 
     # open tensorboard writer
     writer = SummaryWriter(out_root)
@@ -102,7 +97,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
     # Set up logging
     logger = logging.getLogger()
     logger.setLevel(logging.INFO)
-    log_filename = os.path.join(out_root, "training_log.txt")
+    log_filename = Path(out_root) / "training_log.txt"
     file_handler = logging.FileHandler(log_filename)
     stream_handler = logging.StreamHandler(sys.stdout)
 
@@ -116,11 +111,13 @@ def writer_prep(exp_n, trial_num, wandb_t):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
-def initialize_dataset():
-    """
-    Initialize the dataset by loading NAIP and KaneCounty data.
+def initialize_dataset(config):
+    """Load and merge NAIP, KaneCounty, and optional DEM data.
+
     This function loads NAIP (National Agriculture Imagery Program)
-    data and KaneCounty shapefile data.
+    data and KaneCounty shapefile data. Optionally, if DEM
+    (Digital Elevation Model) data is provided, it is also loaded
+    and merged with NAIP data.
 
     Args:
         config: settings in the configuration file
@@ -131,61 +128,45 @@ def initialize_dataset():
             The first element is the NAIP dataset, and the
             second element is the KaneCounty dataset.
     """
+    naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+    kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+    rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
 
-    images = NAIP(config.KC_IMAGE_ROOT)
-    kc_shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
-
-    dataset_config = (
+    kc_config = (
         config.KC_LAYER,
         config.KC_LABELS,
         config.PATCH_SIZE,
-        images.crs,
-        images.res,
+        naip_dataset.crs,
+        naip_dataset.res,
     )
 
-    labels = KaneCounty(kc_shape_path, dataset_config)
+    rd_config = (
+        config.RD_LABELS,
+        config.PATCH_SIZE,
+        naip_dataset.crs,
+        naip_dataset.res,
+    )
 
-    if config.KC_RIVER_ROOT is not None:
-        river_shape_path = os.path.join(
-            config.KC_SHAPE_ROOT, config.RD_SHAPE_FILE
-        )
-        dataset_config = (
-            {"STREAM/RIVER": 1},
-            config.PATCH_SIZE,
-            images.crs,
-            images.res,
-        )
+    #kc_dataset = KaneCounty(kc_shape_path, kc_config)
+    river_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
-        # commented code is when river data and all images are combined
-        # uncommented is to train river data only
+    if config.KC_DEM_ROOT is not None:
+        dem = KaneDEM(config.KC_DEM_ROOT)
+        naip_dataset = naip_dataset & dem
+        print("naip and dem loaded")
 
-        images = NAIP(config.KC_RIVER_ROOT)
-        labels = RiverDataset(river_shape_path, dataset_config)
+    # combo = kc_dataset | river_dataset
 
-        # images = images | NAIP(config.KC_RIVER_ROOT)
-        riverdata = RiverDataset(river_shape_path, dataset_config)
-
-        # # kc and rd attributes
-        plot_labels = {**labels.labels, **riverdata.labels}
-        # labels = kc_labels | riverdata
-        # labels = riverdata
-        # labels = kc_labels
-        labels.labels = plot_labels
-        labels.labels_inverse = {v: k for k, v in labels.labels.items()}
-
-        color_attributes = {**labels.colors, **riverdata.colors}
-        labels.colors = color_attributes
-
-    return images, labels
+    return naip_dataset, river_dataset
 
 
 def build_dataset(naip_set, split_rate):
-    """
-    Randomly split and load data to be the test and train sets
+    """Randomly split and load data to be the test and train sets
+
     Returns train dataloader and test dataloader
     """
     # record generator seed
-    seed = random.randint(0, sys.maxsize)
+    seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
 
@@ -193,8 +174,8 @@ def build_dataset(naip_set, split_rate):
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & labels
-    test_dataset = test_portion & labels
+    train_dataset = train_portion & kc
+    test_dataset = test_portion & kc
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -225,13 +206,12 @@ def build_dataset(naip_set, split_rate):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
-
     return train_dataloader, test_dataloader
 
 
 def regularization_loss(model, reg_type, weight):
-    """
-    Calculate the regularization loss for the model parameters.
+    """Calculate the regularization loss for the model parameters.
+
     Args:
         model: The PyTorch model for which to calculate the regularization loss.
         reg_type: The type of regularization, either "l1" or "l2".
@@ -251,8 +231,7 @@ def regularization_loss(model, reg_type, weight):
 
 
 def compute_loss(model, mask, y, loss_fn, reg_config):
-    """
-    Compute the total loss optionally the regularization loss.
+    """Compute the total loss optionally the regularization loss.
 
     Args:
         model: The PyTorch model for which to compute the loss.
@@ -275,8 +254,7 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
 
 
 def create_model():
-    """
-    Setting up training model, loss function and measuring metrics
+    """Setting up training model, loss function and measuring metrics
 
     Returns:
         tuple: A tuple containing:
@@ -293,6 +271,7 @@ def create_model():
         "backbone": config.BACKBONE,
         "num_classes": config.NUM_CLASSES,
         "weights": config.WEIGHTS,
+        #"dropout": config.DROPOUT,
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
@@ -337,8 +316,7 @@ def create_model():
 
 
 def copy_first_entry(a_list: list) -> list:
-    """
-    Copies the first entry in a list and appends it to the end.
+    """Copies the first entry in a list and appends it to the end.
 
     Args:
         a_list: The list to modify
@@ -355,8 +333,7 @@ def copy_first_entry(a_list: list) -> list:
 
 
 def normalize_func(model):
-    """
-    Create normalization functions for input data to a given model.
+    """Create normalization functions for input data to a given model.
 
     This function generates normalization functions based on the mean
     and standard deviation specified in the configuration. If the
@@ -377,9 +354,7 @@ def normalize_func(model):
     data_std = config.DATASET_STD
     # add copies of first entry to DATASET_MEAN and DATASET_STD
     # to match data in_channels
-
     if len(data_mean) != model.in_channels:
-
         for _ in range(model.in_channels - len(data_mean)):
             data_mean = copy_first_entry(data_mean)
             data_std = copy_first_entry(data_std)
@@ -394,8 +369,7 @@ def normalize_func(model):
 def add_extra_channel(
     image_tensor: torch.Tensor, source_channel: int = 0
 ) -> torch.Tensor:
-    """
-    Adds an additional channel to an image by copying an existing channel.
+    """Adds an additional channel to an image by copying an existing channel.
 
     Args:
         image_tensor : A tensor containing image data. Expected shape is
@@ -421,18 +395,14 @@ def add_extra_channel(
 
 
 def normalize_and_scale(sample_image, model):
-    """
-    Normalize and scale the sample image.
-    """
+    """Normalize and scale the sample image."""
     normalize, scale = normalize_func(model)
     scaled_image = scale(sample_image)
     return scaled_image, normalize
 
 
 def add_extra_channels(image, model):
-    """
-    Add extra channels to the image if necessary.
-    """
+    """Add extra channels to the image if necessary."""
     while image.size(1) < model.in_channels:
         image = add_extra_channel(image)
     return image
@@ -441,9 +411,7 @@ def add_extra_channels(image, model):
 def apply_augmentations(
     dataset, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
 ):
-    """
-    Apply augmentations to the image and mask.
-    """
+    """Apply augmentations to the image and mask."""
     x_og, y_og = dataset
     aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
     x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
@@ -453,58 +421,36 @@ def apply_augmentations(
 
 
 def save_training_images(
-    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample, model
+    epoch, train_images_root, x, samp_mask, x_aug, y_aug, sample
 ):
-    """
-    Save training sample images.
-    """
-    save_dir = os.path.join(
-        train_images_root,
-        f"-{config.COLOR_CONTRAST}-{config.COLOR_BRIGHTNESS}-epoch-{epoch}",
-    )
-    os.makedirs(save_dir, exist_ok=True)
+    """Save training sample images."""
+    save_dir = Path(train_images_root) / f"epoch-{epoch}"
+    Path.mkdir(save_dir, exist_ok=True)
 
-    model.eval()
-    with torch.no_grad():
-        # Normalize and scale the input
-        normalize, scale = normalize_func(model)
-        x_scaled = scale(x)
-        x_normalized = normalize(x_scaled)
-
-        # Get the model predictions
-        outputs = model(x_normalized.to(MODEL_DEVICE))
-        preds = outputs.argmax(dim=1)
-
-        for i in range(config.BATCH_SIZE):
-            plot_tensors = {
-                "RGB Image": x[i].cpu(),
-                "Mask": samp_mask[i],
-                "Augmented_RGBImage": x_aug[i].cpu(),
-                "Augmented_Mask": y_aug[i].cpu(),
-                "ground_truth": samp_mask[i],
-                "prediction": preds[i].cpu(),
-            }
-            sample_fname = os.path.join(
-                save_dir, f"train_sample-{epoch}.{i}.png"
-            )
-            plot_from_tensors(
-                plot_tensors,
-                sample_fname,
-                labels.colors,
-                labels.labels_inverse,
-                sample["bbox"][i],
-            )
+    for i in range(config.BATCH_SIZE):
+        plot_tensors = {
+            "RGB Image": x[i].cpu(),
+            "Mask": samp_mask[i],
+            "Augmented_RGBImage": x_aug[i].cpu(),
+            "Augmented_Mask": y_aug[i].cpu(),
+        }
+        sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
+        plot_from_tensors(
+            plot_tensors,
+            sample_fname,
+            kc.colors,
+            kc.labels_inverse,
+            sample["bbox"][i],
+        )
 
 
 def train_setup(
-    sample: DefaultDict[str, Any],
+    sample: defaultdict[str, Any],
     train_config,
     aug_config,
     model,
-) -> Tuple[torch.Tensor]:
-    """
-    Sets up for the training step by sending images and masks to device,
-    applying augmentations, and saving training sample images.
+) -> tuple[torch.Tensor]:
+    """Setup for training: sends images to device and applies augmentations.
 
     Args:
         sample: A dataloader sample containing image, mask, and bbox data.
@@ -549,12 +495,11 @@ def train_setup(
         save_training_images(
             epoch,
             train_images_root,
-            x_scaled,
+            x,
             samp_mask,
             x_aug,
             y_squeezed,
             sample,
-            model,
         )
 
     return normalize(x_aug), y_squeezed
@@ -566,9 +511,9 @@ def train_epoch(
     train_config,
     aug_config,
     writer,
+    args,
 ) -> None:
-    """
-    Executes a training step for the model
+    """Executes a training step for the model
 
     Args:
         dataloader: The data loader containing the training data.
@@ -585,8 +530,8 @@ def train_epoch(
             - spatial_aug_mode: The mode for spatial augmentations.
             - color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
+        args: Additional arguments for debugging or special training conditions.
     """
-
     loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
@@ -608,9 +553,17 @@ def train_epoch(
             aug_config,
             model,
         )
+        # Break after the first batch in debug mode
+        if args.debug and batch == 0:
+            print("Debug mode: Exiting training loop after first batch.")
+            break
 
         # compute prediction error
         outputs = model(x)
+
+        if isinstance(outputs, tuple):
+            outputs = outputs[0]
+
         loss = compute_loss(
             model,
             outputs,
@@ -653,9 +606,9 @@ def test(
     model: Module,
     test_config,
     writer,
+    num_examples: int = 10,
 ) -> float:
-    """
-    Executes a testing step for the model and saves sample output images.
+    """Executes a testing step for the model and saves sample output images.
 
     Args:
         dataloader: Dataloader for the testing data.
@@ -671,6 +624,7 @@ def test(
             - num_classes: The number of labels to predict.
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
+        num_examples: The number of examples to save.
 
     Returns:
         float: The test loss for the epoch.
@@ -698,9 +652,7 @@ def test(
             if samp_image.size(1) != model.in_channels:
                 for _ in range(model.in_channels - samp_image.size(1)):
                     samp_image = add_extra_channel(samp_image)
-
             x = samp_image.to(MODEL_DEVICE)
-
             normalize, scale = normalize_func(model)
             x_scaled = scale(x)
             x = normalize(x_scaled)
@@ -712,6 +664,10 @@ def test(
 
             # compute prediction error
             outputs = model(x)
+
+            if isinstance(outputs, tuple):
+                outputs = outputs[0]
+
             loss = loss_fn(outputs, y_squeezed)
 
             # update metric
@@ -726,11 +682,11 @@ def test(
 
             # plot first batch
             if batch == 0 or (
-                plateau_count == config.PATIENCE - 1 and batch < 10
+                plateau_count == config.PATIENCE - 1 and batch < num_examples
             ):
-                epoch_dir = os.path.join(test_image_root, f"epoch-{epoch}")
-                if not os.path.exists(epoch_dir):
-                    os.mkdir(epoch_dir)
+                epoch_dir = Path(test_image_root) / f"epoch-{epoch}"
+                if not Path.exists(epoch_dir):
+                    Path.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "RGB Image": x_scaled[i].cpu(),
@@ -741,20 +697,19 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = labels.labels_inverse.get(
-                            label_id, "UNKNOWN"
-                        )
-                        save_dir = os.path.join(epoch_dir, label_name)
-                        if not os.path.exists(save_dir):
-                            os.makedirs(save_dir)
-                        sample_fname = os.path.join(
-                            save_dir, f"test_sample-{epoch}.{batch}.{i}.png"
+                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        save_dir = Path(epoch_dir) / label_name
+                        if not Path.exists(save_dir):
+                            Path.mkdir(save_dir)
+                        sample_fname = (
+                            Path(save_dir)
+                            / f"test_sample-{epoch}.{batch}.{i}.png"
                         )
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            labels.colors,
-                            labels.labels_inverse,
+                            kc.colors,
+                            kc.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -770,7 +725,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in labels.labels.items():
+    for label_name, label_id in kc.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -788,12 +743,13 @@ def train(
     model: Module,
     train_test_config,
     aug_config,
-    path_config: Tuple[str, str, str],
+    path_config: tuple[str, str, str],
     writer: SummaryWriter,
-    wandb_t,
-) -> Tuple[float, float]:
-    """
-    Train a deep learning model using the specified configuration and parameters.
+    wandb_t: bool,
+    args,
+    epoch_config,
+) -> tuple[float, float]:
+    """Train a deep learning model using the specified configuration and parameters.
 
     Args:
         model: The deep learning model to be trained.
@@ -813,6 +769,9 @@ def train(
                 - train_images_root: Root directory for training images.
                 - test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
+        wandb_t: Whether running hyperparameter tuning with wandb.
+        args: Additional arguments for debugging or special training conditions.
+        epoch_config: The configuration for the number of epochs.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -852,15 +811,15 @@ def train(
     # How many classes we're predicting
     num_classes = config.NUM_CLASSES
 
-    # reducing number of epoch in hyperparameter tuning
-    if wandb_t:
+    # # reducing number of epoch in debugging or hyperparameter tuning
+    if args.debug:
+        epoch_config = 1
+    elif wandb_t:
         epoch_config = 10
-
     else:
         epoch_config = config.EPOCHS
 
     for t in range(epoch_config):
-
         if t == 0:
             test_config = (
                 loss_fn,
@@ -877,6 +836,7 @@ def train(
                 model,
                 test_config,
                 writer,
+                args,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -900,6 +860,7 @@ def train(
             train_config,
             aug_config,
             writer,
+            args,
         )
 
         test_config = (
@@ -918,67 +879,6 @@ def train(
             test_config,
             writer,
         )
-
-        """'
-        # Plot inference images during training
-        #if t % 10 == 0 or t == epoch_config - 1:
-        if True:
-            epoch_dir = os.path.join(test_image_root, f"epoch-{t + 1}")
-            print(f"Saving test images to: {epoch_dir}")
-            if not os.path.exists(epoch_dir):
-                os.makedirs(epoch_dir)
-            model.eval()
-            with torch.no_grad():
-                for batch, sample in enumerate(test_dataloader):
-                    samp_image = sample["image"]
-                    samp_mask = sample["mask"]
-                    if samp_image.size(1) != model.in_channels:
-                        for _ in range(model.in_channels - samp_image.size(1)):
-                            samp_image = add_extra_channel(samp_image)
-
-                    x = samp_image.to(MODEL_DEVICE)
-                    normalize, scale = normalize_func(model)
-                    x_scaled = scale(x)
-                    x = normalize(x_scaled)
-                    y = samp_mask.to(MODEL_DEVICE)
-                    if y.size(0) == 1:
-                        y_squeezed = y
-                    else:
-                        y_squeezed = y.squeeze()
-
-                    outputs = model(x)
-                    preds = outputs.argmax(dim=1)
-
-                    # Plot only the first batch for brevity
-                    if batch == 0:
-                        for i in range(config.BATCH_SIZE):
-                            plot_tensors = {
-                                "RGB Image": x_scaled[i].cpu(),
-                                "ground_truth": samp_mask[i],
-                                "prediction": preds[i].cpu(),
-                            }
-                            ground_truth = samp_mask[i]
-                            label_ids = find_labels_in_ground_truth(ground_truth)
-
-                            for label_id in label_ids:
-                                label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
-                                save_dir = os.path.join(epoch_dir, label_name)
-                                if not os.path.exists(save_dir):
-                                    os.makedirs(save_dir)
-                                sample_fname = os.path.join(
-                                    save_dir, f"train_sample-{t + 1}.{batch}.{i}.png"
-                                )
-                                #print(f"Saving image: {sample_fname}")
-                                plot_from_tensors(
-                                    plot_tensors,
-                                    sample_fname,
-                                    labels.colors,
-                                    labels.labels_inverse,
-                                    sample["bbox"][i],
-                                )
-                    break  # Break after first batch for brevity
-                    """
-
         # Checks for plateau
         if best_loss is None:
             best_loss = test_loss
@@ -993,19 +893,23 @@ def train(
                     t,
                     patience,
                 )
-                break
+            # Break after the first iteration in debug mode
+        if args.debug and t == 0:
+            print("Debug mode: Skipping the rest of the training loop")
+
+            break
 
     print("Done!")
 
-    torch.save(model.state_dict(), os.path.join(out_root, "model.pth"))
+    torch.save(model.state_dict(), Path(out_root) / "model.pth")
     logging.info("Saved PyTorch Model State to %s", out_root)
 
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
-    """
-    Runing a single trial of training
+def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
+    """Runing a single trial of training
+
     Input:
         exp_n: experiment name
         num: current number of trial
@@ -1018,6 +922,12 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
         writer,
         logger,
     ) = writer_prep(exp_n, num, wandb_t)
+    # Set 'epoch_config' based on debug mode
+    if args.debug:
+        epoch_config = 1
+    else:
+        epoch_config = config.EPOCHS
+
     # randomly splitting the data at every trial
     train_dataloader, test_dataloader = build_dataset(naip_set, split_rate)
     (
@@ -1059,6 +969,8 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate):
         path_config,
         writer,
         wandb_tune,
+        args,
+        epoch_config,
     )
     writer.close()
     logger.handlers.clear()
@@ -1098,20 +1010,28 @@ if __name__ == "__main__":
         help="Please enter the number of trial for each train",
         default="1",
     )
-
+    parser.add_argument(
+        "--debug", action="store_true", help="Enable debug mode", default=False
+    )
     args = parser.parse_args()
     config = importlib.import_module(args.config)
+
+    # enable debug mode
+    if args.debug:
+        epoch_config = 1
+    else:
+        epoch_config = config.EPOCHS
+    # Enable debug mode in config
+    config.DEBUG_MODE = args.debug
+
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, labels = initialize_dataset()
+    naip, kc = initialize_dataset(config)
 
     def run_trials():
-        """
-        Running training for multiple trials
-        """
-
+        """Running training for multiple trials"""
         if wandb_tune:
             run = wandb.init(project="cmap_train")
             vars(args).update(run.config)
@@ -1122,7 +1042,7 @@ if __name__ == "__main__":
 
         for num in range(num_trials):
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split
+                exp_name, num, wandb_tune, naip, split, args
             )
             train_ious.append(float(train_iou))
             test_ious.append(float(test_iou))
