@@ -143,6 +143,7 @@ def initialize_dataset(config):
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT)
         naip_dataset = naip_dataset & dem
+        print("naip and dem loaded")
 
     return naip_dataset, kc_dataset
 
