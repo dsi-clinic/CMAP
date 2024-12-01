@@ -8,6 +8,7 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
+import json
 import logging
 import random
 import shutil
@@ -1053,6 +1054,23 @@ if __name__ == "__main__":
     logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset(config)
+
+    def extract_config_dict(config_module):
+        """Convert configuration module into a dictionary"""
+        config_dict = {}
+        for attr in dir(config_module):
+            # Skip private attributes and methods
+            if not attr.startswith("__") and not callable(getattr(config_module, attr)):
+                value = getattr(config_module, attr)
+                # Check if the value is JSON-serializable
+                try:
+                    json.dumps(value)
+                    config_dict[attr] = value
+                except TypeError as e:
+                    logging.warning(
+                        f"Skipping non-serializable config attribute '{attr}': {e}"
+                    )
+        return config_dict
 
     def run_trials():
         """Running training for multiple trials"""
