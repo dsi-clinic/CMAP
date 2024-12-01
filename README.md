@@ -89,6 +89,62 @@ cd /home/YOUR_USERNAME/CMAP
 
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
+### Running Hyperparameter Sweep with SLURM and Weights & Biases
+This guide provides step-by-step instructions to set up and run a hyperparameter sweep using **SLURM** and **Weights & Biases (W&B)** in a micromamba environment.
+#### Prerequisites
+
+1. **Create a Weights & Biases Account**  
+   Sign up for a free W&B account at [https://wandb.ai](https://wandb.ai) if you don’t have one already.
+
+2. **Install Micromamba**  
+   Ensure micromamba is installed, and your environment is set up with all dependencies.
+
+3. **Install Weights & Biases (wandb)**  
+   Install W&B in your micromamba environment by running:
+
+   ```
+   micromamba install -c conda-forge wandb
+   ```
+4. **Log in to W&B**
+    Log into your W&B account by running:
+   ```
+   micromamba install -c conda-forge wandb
+   ```
+
+#### Initialize the Sweep in W&B:
+Run the following command to create a sweep ID in W&B:
+```
+wandb sweep /home/<YOUR-USERNAME>/CMAP/configs/sweep_config.yml
+```
+
+#### Running a Sweep Directly from the Terminal
+
+If you prefer to run a hyperparameter sweep directly from the terminal instead of submitting it as a SLURM job, use the following command:
+
+```
+wandb agent <W&B_organization_name>/<project_name>/<sweep_ID> --count <number_of_trials>
+```
+Example:
+```
+wandb agent dsi-clinic-cmap/CMAP/6tmqjcu4 --count 5
+```
+In this example:
+dsi-clinic-cmap is the organization name in W&B.
+CMAP is the project name.
+6tmqjcu4 is the sweep ID.
+--count 5 specifies that the agent should run 5 trials.
+This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
+
+#### Running a Sweep using a SLURM Job Script
+1. **Edit the sweep.job file** : 
+   - Replace <YOUR-USERNAME> with your username
+   - Replace <W&B_organization_name> and <sweep_id> with the sweep ID obtained from W&B. 
+2. **Submit the sweep.job and Monitor the Job Status**: 
+```
+sbatch sweep.job
+squeue -u <YOUR-USERNAME>
+```
+
 ## Git Usage
 
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.

@@ -5,6 +5,8 @@ metric:
   name: average_test_jaccard_index
 
 parameters:
+  agency_count:
+    values: 10 
   batch_size:
     values: [16, 32, 64]
   learning_rate:
