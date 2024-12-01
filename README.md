@@ -108,7 +108,7 @@ This guide provides step-by-step instructions to set up and run a hyperparameter
 4. **Log in to W&B**
     Log into your W&B account by running:
    ```
-   micromamba install -c conda-forge wandb
+   wandb login
    ```
 
 #### Initialize the Sweep in W&B:
