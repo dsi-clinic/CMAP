@@ -412,12 +412,21 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     Path.mkdir(save_dir, exist_ok=True)
 
     for i in range(config.BATCH_SIZE):
-        plot_tensors = {
-            "RGB Image": x[i].cpu(),
-            "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i].cpu(),
-            "Augmented_Mask": y_aug[i].cpu(),
-        }
+        if config.KC_DEM_ROOT is None:
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+            }
+        else:
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "DEM": x[i][-1, :, :].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+            }
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
             plot_tensors,
@@ -670,11 +679,19 @@ def test(
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
-                    plot_tensors = {
-                        "RGB Image": x_scaled[i].cpu(),
-                        "ground_truth": samp_mask[i],
-                        "prediction": preds[i].cpu(),
-                    }
+                    if config.KC_DEM_ROOT is None:
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
+                    else:
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i][0:3, :, :].cpu(),
+                            "DEM": x_scaled[i][-1, :, :].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
