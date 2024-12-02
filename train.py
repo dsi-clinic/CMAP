@@ -70,9 +70,9 @@ def writer_prep(exp_n, trial_num, wandb_t):
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_t:
-        Path.mkdir(out_root, exist_ok=True)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
     else:
-        Path.mkdir(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
 
     # create directory for output images
     train_images_root = Path(out_root) / "train-images"
