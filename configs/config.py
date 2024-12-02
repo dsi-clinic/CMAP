@@ -108,5 +108,15 @@ KC_LABELS = {
     "DRY BOTTOM - MESIC PRAIRIE": 4,
 }
 
+# River data
+RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
+RD_LAYER = 1
+RD_LABELS = {
+    "BACKGROUND": 0,
+    "STREAM/RIVER": 5,
+}
+
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
+
 # for wandb
 WANDB_API = ""

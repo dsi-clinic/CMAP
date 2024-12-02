@@ -51,7 +51,6 @@ class KaneCounty(GeoDataset):
         2: (49, 102, 80, 255),
         3: (239, 169, 74, 255),
         4: (100, 107, 99, 255),
-        5: (255, 255, 0, 255),  # this corresponds to RIVER/STREAM objects
         6: (89, 53, 31, 255),
         7: (2, 86, 105, 255),
         8: (207, 211, 205, 255),
@@ -70,7 +69,6 @@ class KaneCounty(GeoDataset):
         2: "WETLAND",
         3: "DRY BOTTOM - TURF",
         4: "DRY BOTTOM - MESIC PRAIRIE",
-        # 5: "STREAM/RIVER" # this line is not necessary as it is added again later
         6: "DEPRESSIONAL STORAGE",
         7: "DRY BOTTOM - WOODED",
         8: "POND - EXTENDED DRY",
@@ -111,7 +109,6 @@ class KaneCounty(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-        # self._populate_index(path, gdf, context_size)
         self.labels = labels
         self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
@@ -241,13 +238,12 @@ class RiverDataset(GeoDataset):
         self.gdf = gdf
 
         # Debug prints
-        print(f"Configs received: {rd_configs}")
-        print(f"Type of labels: {type(labels)}, Content: {labels}")
+        # print(f"Configs received: {rd_configs}")
+        # print(f"Type of labels: {type(labels)}, Content: {labels}")
 
         # Initialize the KaneCounty dataset if kc is True
         if kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-            print("Loaded KC shape path")
 
             kc_config = (
                 KC_LAYER,
@@ -256,17 +252,14 @@ class RiverDataset(GeoDataset):
                 dest_crs,
                 res,
             )
-            print("Loaded KC config")
 
             # Create the KaneCounty dataset instance
             kc_dataset = KaneCounty(kc_shape_path, kc_config)
-            print("Initialized KC dataset")
+            print(f"Initialized KC dataset with {kc_config}")
 
             # Combine the River dataset and KaneCounty dataset gdfs
             self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
             self.gdf["BasinType"] = self.gdf["BasinType"].fillna(self.gdf["FCODE"])
-
-            print(f"Combined GeoDataFrame shape: {self.gdf.shape}")
 
             KC_LABELS["STREAM/RIVER"] = (
                 5  # add the river labels to the existing KC labels
@@ -290,7 +283,7 @@ class RiverDataset(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-        self._populate_index(path, self.gdf, context_size, patch_size)
+        self._populate_index(self.gdf)
         self.labels = labels
         self.colors = {
             label_value: self.all_colors[label_value] for label_value in labels.values()
@@ -298,7 +291,7 @@ class RiverDataset(GeoDataset):
         self.labels_inverse = {v: k for k, v in labels.items()}
 
         # Debug print
-        print(f"Initializing RiverDataset with configs: {rd_configs}")
+        print(f"Initialized RiverDataset with configs: {rd_configs}")
 
     def _load_and_prepare_data(self, path, dest_crs):
         """Load and prepare the GeoDataFrame.
@@ -313,26 +306,14 @@ class RiverDataset(GeoDataset):
         # Read the shapefile into a GeoDataFrame
         gdf = gpd.read_file(path)
 
-        # Debug print
-        print("Initial River GeoDataFrame loaded:")
-        print(gdf.head())
-
-        # Debug print
-        print("GeoDataFrame after filtering by FCODE:")
-        print(gdf.head())
-
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
-        print("gdf complete")
 
         return gdf
 
     def _populate_index(
         self,
-        path,
         gdf,
-        context_size,
-        patch_size,
         reference_crs=4326,  # this is the original CRS
         target_chip_size=0.005,
     ):
@@ -351,7 +332,6 @@ class RiverDataset(GeoDataset):
 
         # Set up transformations
         if gdf_crs.to_epsg() != reference_crs:
-            print(f"Transforming bounds to reference CRS {reference_crs}...")
             transformer = Transformer.from_crs(
                 gdf_crs, CRS.from_epsg(reference_crs), always_xy=True
             )
@@ -360,11 +340,6 @@ class RiverDataset(GeoDataset):
             )
         else:
             ref_minx, ref_miny, ref_maxx, ref_maxy = gdf.total_bounds
-
-        print(
-            f"CRS bounds: minx={ref_minx}, miny={ref_miny}, \
-                maxx={ref_maxx}, maxy={ref_maxy}"
-        )
 
         # Calculate the proportion of chip size to the reference CRS bounds
         ref_x_extent = ref_maxx - ref_minx
@@ -376,7 +351,6 @@ class RiverDataset(GeoDataset):
 
         # Transform bounds back to target CRS if needed
         if gdf_crs.to_epsg() != reference_crs:
-            print(f"Transforming bounds back to target CRS {gdf_crs}...")
             transformer = Transformer.from_crs(
                 CRS.from_epsg(reference_crs), gdf_crs, always_xy=True
             )
@@ -415,9 +389,7 @@ class RiverDataset(GeoDataset):
                 intersecting_rows = gdf[gdf.intersects(chip)]
                 for _, row in intersecting_rows.iterrows():
                     # Insert only intersecting chips with their corresponding row data
-                    self.index.insert(
-                        i, coords, row[["BasinType", "geometry"]]
-                    )  # replace FCODE with BasinType
+                    self.index.insert(i, coords, row[["BasinType", "geometry"]])
                     i += 1  # Increment the global index for each chip
 
         print(f"Total chips inserted: {i}")  # chips and polygons are many-to-many
