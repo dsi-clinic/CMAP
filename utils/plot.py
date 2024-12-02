@@ -114,11 +114,12 @@ def plot_from_tensors(
         ax = axs[i]
 
         if "image" in name.lower():
-            # Handle RGB image tensors
+            # handle RGB image tensors
             ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
-        if "DEM" in name:
+        elif "dem" in name.upper():
             ax.imshow(tensor.permute(0, 1))
         else:
+            # only collect unique labels from mask tensors
             unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
@@ -127,23 +128,28 @@ def plot_from_tensors(
                 vmax=len(cmap.colors) - 1,
                 interpolation="none",
             )
-            unique_labels = torch.cat((unique, unique_labels))
+            unique_labels = torch.cat((unique_labels, unique))
 
         ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
+        # convert unique_labels to integers and remove duplicates
+        unique_labels = unique_labels.unique().long()
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
+            mpatches.Patch(color=cmap.colors[i], label=labels[i])
+            for i in unique_labels
+            if i in labels
         ]
 
-        fig.legend(
-            handles=patches,
-            bbox_to_anchor=(1.05, 0.5),
-            loc="center left",
-            borderaxespad=0.0,
-        )
+        if patches:  # only add legend if there are valid patches
+            fig.legend(
+                handles=patches,
+                bbox_to_anchor=(1.05, 0.5),
+                loc="center left",
+                borderaxespad=0.0,
+            )
 
     # Add bounding box coords to the plot if provided
     if coords is not None:
