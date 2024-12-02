@@ -496,7 +496,7 @@ def train_setup(
         save_training_images(
             epoch,
             train_images_root,
-            x,
+            x_scaled,
             samp_mask,
             x_aug,
             y_squeezed,
