@@ -414,18 +414,23 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     for i in range(config.BATCH_SIZE):
         if config.KC_DEM_ROOT is None:
             plot_tensors = {
-                "RGB Image": x[i].cpu(),
-                "Mask": samp_mask[i],
-                "Augmented_RGBImage": x_aug[i].cpu(),
-                "Augmented_Mask": y_aug[i].cpu(),
+                "RGB image": x[i][0:3, :, :].cpu(),
+                "mask": samp_mask[i],
+                "augmented RGB image": x_aug[i][0:3, :, :].cpu(),
+                "augmented mask": y_aug[i].cpu(),
+                "NIR": x[i][-1, :, :].cpu(),
+                "augmented NIR": x_aug[i][-1, :, :].cpu(),
             }
         else:
             plot_tensors = {
-                "RGB Image": x[i].cpu(),
+                "RGB image": x[i][0:3, :, :].cpu(),
+                "augmented RGB image": x_aug[i][0:3, :, :].cpu(),
+                "mask": samp_mask[i],
+                "augmented mask": y_aug[i].cpu(),
                 "DEM": x[i][-1, :, :].cpu(),
-                "Mask": samp_mask[i],
-                "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
-                "Augmented_Mask": y_aug[i].cpu(),
+                "augmented DEM": x_aug[i][-1, :, :].cpu(),
+                "NIR": x[i][-2, :, :].cpu(),
+                "augmented NIR": x_aug[i][-2, :, :].cpu(),
             }
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
@@ -546,6 +551,8 @@ def train_epoch(
             aug_config,
             model,
         )
+        x = x.to(MODEL_DEVICE)
+        y = y.to(MODEL_DEVICE)
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -681,15 +688,15 @@ def test(
                 for i in range(config.BATCH_SIZE):
                     if config.KC_DEM_ROOT is None:
                         plot_tensors = {
-                            "RGB Image": x_scaled[i].cpu(),
-                            "ground_truth": samp_mask[i],
+                            "RGB image": x[i][0:3, :, :].cpu(),
+                            "ground truth": samp_mask[i],
                             "prediction": preds[i].cpu(),
                         }
                     else:
                         plot_tensors = {
-                            "RGB Image": x_scaled[i][0:3, :, :].cpu(),
-                            "DEM": x_scaled[i][-1, :, :].cpu(),
-                            "ground_truth": samp_mask[i],
+                            "RGB image": x[i][0:3, :, :].cpu(),
+                            "DEM": x[i][-1, :, :].cpu(),
+                            "ground truth": samp_mask[i],
                             "prediction": preds[i].cpu(),
                         }
                     ground_truth = samp_mask[i]
