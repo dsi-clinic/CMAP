@@ -422,10 +422,11 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         else:
             plot_tensors = {
                 "RGB Image": x[i].cpu(),
-                "DEM": x[i][-1, :, :].cpu(),
-                "Mask": samp_mask[i],
                 "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
+                "Mask": samp_mask[i],
                 "Augmented_Mask": y_aug[i].cpu(),
+                "DEM": x[i][-1, :, :].cpu(),
+                "Augmented_DEM": x_aug[i][-1, :, :].cpu(),
             }
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
