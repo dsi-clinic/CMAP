@@ -26,18 +26,23 @@ WEIGHTS = True
 DROPOUT = 0.3
 
 # model hyperparams
-DATASET_MEAN = [
-    0.3281668683529412,
-    0.4208941459215686,
-    0.4187784871764706,
-    0.5470313711372549,
-]
-DATASET_STD = [
-    0.030595504117647058,
-    0.02581302749019608,
-    0.025523325960784313,
-    0.03643713776470588,
-]
+# mean/std of imagenet for pretrained model
+DATASET_MEAN = [0.485, 0.456, 0.406, 0.449]  # Last value is average of RGB for NIR
+DATASET_STD = [0.229, 0.224, 0.225, 0.226]  # Last value is average of RGB for NIR
+
+# mean/std of NAIP data
+# DATASET_MEAN = [
+#     0.328,
+#     0.420,
+#     0.418,
+#     0.547,
+# ]
+# DATASET_STD = [
+#     0.030,
+#     0.025,
+#     0.025,
+#     0.036,
+# ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
@@ -72,19 +77,19 @@ IMAGE_AUG_INDICES = [
     2,  # Gaussian Noise
     3,  # Gaussian Blur0
     # 4,  # Plasma Brightness
-    5,  # Saturation
+    # 5,  # Saturation
     # 6,  # Channel Shuffle
     # 7,  # Gamma
 ]
 
 # Augmentation
 ROTATION_DEGREES = 360
-COLOR_CONTRAST = 0.3  # tuned
-COLOR_BRIGHTNESS = 0.3  # tuned
+COLOR_CONTRAST = 0.1
+COLOR_BRIGHTNESS = 0.1
 RESIZED_CROP_SIZE = (PATCH_SIZE, PATCH_SIZE)
 GAUSSIAN_NOISE_PROB = 0.5  # tuned
-GAUSSIAN_NOISE_STD = 0.1  # tuned
-GAUSSIAN_BLUR_SIGMA = (0.3, 0.4)  # tuned
+GAUSSIAN_NOISE_STD = 0.05
+GAUSSIAN_BLUR_SIGMA = (0.3, 0.4)
 GAUSSIAN_BLUR_KERNEL = (7, 7)  # tuned
 PLASMA_ROUGHNESS = (0.0, 0.2)
 PLASMA_BRIGHTESS = (0.1, 0.3)
