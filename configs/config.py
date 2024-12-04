@@ -12,8 +12,8 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
-KC_DEM_ROOT = None
-# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+# KC_DEM_ROOT = None
+KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -27,21 +27,23 @@ DROPOUT = 0.3
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
-DATASET_MEAN = [0.485, 0.456, 0.406, 0.449]  # Last value is average of RGB for NIR
-DATASET_STD = [0.229, 0.224, 0.225, 0.226]  # Last value is average of RGB for NIR
+DATASET_MEAN = [0.485, 0.456, 0.406, 0.449, 0.0]  # Last value is average of RGB for NIR
+DATASET_STD = [0.229, 0.224, 0.225, 0.226, 1.0]  # Last value is average of RGB for NIR
 
-# mean/std of NAIP data
+# mean/std of NAIP data + DEM
 # DATASET_MEAN = [
-#     0.328,
-#     0.420,
-#     0.418,
-#     0.547,
+#     0.328,  # R
+#     0.420,  # G
+#     0.418,  # B
+#     0.547,  # NIR
+#     0.0,  # DEM - already centered by preprocessing
 # ]
 # DATASET_STD = [
-#     0.030,
-#     0.025,
-#     0.025,
-#     0.036,
+#     0.30,  # R
+#     0.25,  # G
+#     0.25,  # B
+#     0.36,  # NIR
+#     1.0,  # DEM - already scaled by preprocessing
 # ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512

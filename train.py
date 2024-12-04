@@ -139,7 +139,7 @@ def initialize_dataset(config):
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
     if config.KC_DEM_ROOT is not None:
-        dem = KaneDEM(config.KC_DEM_ROOT)
+        dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         print("naip and dem loaded")
 
@@ -357,11 +357,11 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     if len(data_mean) < x_aug.size(1):  # Extend mean/std if needed
         data_mean = data_mean + [data_mean[0]] * (x_aug.size(1) - len(data_mean))
         data_std = data_std + [data_std[0]] * (x_aug.size(1) - len(data_std))
-        
+
     mean = torch.tensor(data_mean).view(-1, 1, 1)
     std = torch.tensor(data_std).view(-1, 1, 1)
     x_aug_denorm = x_aug * std.to(x_aug.device) + mean.to(x_aug.device)
-    
+
     for i in range(config.BATCH_SIZE):
         if config.KC_DEM_ROOT is None:
             plot_tensors = {
@@ -435,7 +435,7 @@ def train_setup(
 
     # Extend mean/std if needed
     data_mean = config.DATASET_MEAN  # ImageNet mean
-    data_std = config.DATASET_STD    # ImageNet std
+    data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
         data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
         data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
@@ -664,9 +664,11 @@ def test(
                 data_mean = config.DATASET_MEAN
                 data_std = config.DATASET_STD
                 if len(data_mean) < x.size(1):  # Extend mean/std if needed
-                    data_mean = data_mean + [data_mean[0]] * (x.size(1) - len(data_mean))
+                    data_mean = data_mean + [data_mean[0]] * (
+                        x.size(1) - len(data_mean)
+                    )
                     data_std = data_std + [data_std[0]] * (x.size(1) - len(data_std))
-                    
+
                 mean = torch.tensor(data_mean).view(-1, 1, 1)
                 std = torch.tensor(data_std).view(-1, 1, 1)
                 x_denorm = x * std.to(x.device) + mean.to(x.device)
