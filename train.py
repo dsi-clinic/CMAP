@@ -495,7 +495,7 @@ def train_setup(
             sample,
         )
 
-    return normalize(x_aug), y_squeezed
+    return normalize(x_aug).to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 
 
 def train_epoch(
