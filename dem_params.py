@@ -1,3 +1,5 @@
+"""Calculates a sample mean and standard deviation for DEM data"""
+
 import itertools
 import os
 from pathlib import Path
@@ -42,10 +44,7 @@ def calculate_image_stats(dem_image):
 
 
 def main():
-    '''Calculate the mean and standard deviation of a DEM file.
-
-    """
-    '''
+    """Calculate the mean and standard deviation of a DEM file."""
     means = []
     stds = []
     naip_dataset = NAIP(KC_IMAGE_ROOT)
