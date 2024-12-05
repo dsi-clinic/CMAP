@@ -12,8 +12,8 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
-KC_DEM_ROOT = None
-# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+USE_NIR = False
+KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -23,27 +23,34 @@ BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
-DROPOUT = 0.3
+DROPOUT = 0.0
 
 # model hyperparams
-DATASET_MEAN = [
-    0.3281668683529412,
-    0.4208941459215686,
-    0.4187784871764706,
-    0.5470313711372549,
-]
-DATASET_STD = [
-    0.030595504117647058,
-    0.02581302749019608,
-    0.025523325960784313,
-    0.03643713776470588,
-]
+# mean/std of imagenet for pretrained model
+DATASET_MEAN = [0.485, 0.456, 0.406]  # RGB only
+DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
+
+# mean/std of NAIP data + DEM
+# DATASET_MEAN = [
+#     0.328,  # R
+#     0.420,  # G
+#     0.418,  # B
+#     0.547,  # NIR (optional)
+#     0.0,    # DEM (optional)
+# ]
+# DATASET_STD = [
+#     0.30,  # R
+#     0.25,  # G
+#     0.25,  # B
+#     0.36,  # NIR (optional)
+#     1.0,   # DEM (optional)
+# ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
-EPOCHS = 2
+EPOCHS = 4
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
@@ -72,19 +79,19 @@ IMAGE_AUG_INDICES = [
     2,  # Gaussian Noise
     3,  # Gaussian Blur0
     # 4,  # Plasma Brightness
-    5,  # Saturation
+    # 5,  # Saturation
     # 6,  # Channel Shuffle
     # 7,  # Gamma
 ]
 
 # Augmentation
 ROTATION_DEGREES = 360
-COLOR_CONTRAST = 0.3  # tuned
-COLOR_BRIGHTNESS = 0.3  # tuned
+COLOR_CONTRAST = 0.1
+COLOR_BRIGHTNESS = 0.1
 RESIZED_CROP_SIZE = (PATCH_SIZE, PATCH_SIZE)
 GAUSSIAN_NOISE_PROB = 0.5  # tuned
-GAUSSIAN_NOISE_STD = 0.1  # tuned
-GAUSSIAN_BLUR_SIGMA = (0.3, 0.4)  # tuned
+GAUSSIAN_NOISE_STD = 0.05
+GAUSSIAN_BLUR_SIGMA = (0.3, 0.4)
 GAUSSIAN_BLUR_KERNEL = (7, 7)  # tuned
 PLASMA_ROUGHNESS = (0.0, 0.2)
 PLASMA_BRIGHTESS = (0.1, 0.3)
@@ -107,6 +114,16 @@ KC_LABELS = {
     "DRY BOTTOM - TURF": 3,
     "DRY BOTTOM - MESIC PRAIRIE": 4,
 }
+
+# River data
+RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
+RD_LAYER = 1
+RD_LABELS = {
+    "BACKGROUND": 0,
+    "STREAM/RIVER": 5,
+}
+
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
 # for wandb
 WANDB_API = ""

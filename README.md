@@ -89,120 +89,16 @@ cd /home/YOUR_USERNAME/CMAP
 
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
-### Running Hyperparameter Sweep with SLURM and Weights & Biases
-This guide provides step-by-step instructions to set up and run a hyperparameter sweep using **SLURM** and **Weights & Biases (W&B)** in a micromamba environment.
-#### Prerequisites
 
-1. **Create a Weights & Biases Account**  
-   Sign up for a free W&B account at [https://wandb.ai](https://wandb.ai) if you don’t have one already.
 
-2. **Install Micromamba**  
-   Ensure micromamba is installed, and your environment is set up with all dependencies.
+## RiverDataset Information
 
-3. **Install Weights & Biases (wandb)**  
-   Install W&B in your micromamba environment by running:
+To include RiverDataset in training:
+* Set config.USE_RIVER_DATASET to True
+* This will include BOTH KaneCounty and RiverDataset in train.py
 
-   ```
-   micromamba install -c conda-forge wandb
-   ```
-4. **Log in to W&B**
-    Log into your W&B account by running:
-   ```
-   wandb login
-   ```
+*When USE_RIVER_DATASET is set to True, train.py becomes stuck after correctly loading the KC and RD datasets. **This needs to be debugged.***
 
-#### Initialize the Sweep in W&B:
-Run the following command to create a sweep ID in W&B:
-```
-wandb sweep /home/<YOUR-USERNAME>/CMAP/configs/sweep_config.yml
-```
-
-#### Running a Sweep Directly from the Terminal
-
-If you prefer to run a hyperparameter sweep directly from the terminal instead of submitting it as a SLURM job, use the following command:
-
-```
-wandb agent <W&B_organization_name>/<project_name>/<sweep_ID> --count <number_of_trials>
-```
-Example:
-```
-wandb agent dsi-clinic-cmap/CMAP/6tmqjcu4 --count 5
-```
-In this example:
-dsi-clinic-cmap is the organization name in W&B.
-CMAP is the project name.
-6tmqjcu4 is the sweep ID.
---count 5 specifies that the agent should run 5 trials.
-This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
-
-#### Running a Sweep using a SLURM Job Script
-1. **Edit the sweep.job file** : 
-   - Replace <YOUR-USERNAME> with your username
-   - Replace <W&B_organization_name> and <sweep_id> with the sweep ID obtained from W&B. 
-2. **Submit the sweep.job and Monitor the Job Status**: 
-```
-sbatch sweep.job
-squeue -u <YOUR-USERNAME>
-```
-
-## Git Usage
-
-Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
-
-## Repository Structure
-### main repository
-
-* train.py: code for training models
-* model.py: code defining model used for training
-* retrieve_images.py: code for obtaining image data used for training
-
-### utils
-
-Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
-
-### notebooks
-
-Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
-
-### data
-
-Contains details of acquiring all raw data used in repository. If data is small (<50MB) then it is okay to save it to the repo, making sure to clearly document how to the data is obtained.
-
-If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory.
-
-Source attribution and descriptions included in the [README](data/README.md) file.
-
-### output
-
-Contains example model output images.
-
-## Final Results
-The below results were obtained with these specifications:
-* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
-* Batch size: 16
-* Patch size: 512
-* Learning rate: 1E-5
-* Number of workers: 8
-* Epochs: 30 (maximum; early termination feature has been turned on)
-* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
-* Number of trails: 5
-
-Test Jaccard: mean: 0.589, standard deviation:0.075
-Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
-
-### example outputs
-The model can detect ponds fairly accurately:
-![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
-![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
-![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
-
-There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
-![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
-![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
-
-There also needs to be adjustments made to the model to account for false positives:
-![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
-![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
 
 ## Git Usage
 
@@ -233,13 +129,96 @@ Project python code. Contains various utility functions and scripts which suppor
 
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
 
-### data
-Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory.
-
-
 ### output
 
 Contains example model output images.
+
+### data
+
+Contains details of acquiring all raw data used in repository. If data is small (<50MB) then it is okay to save it to the repo, making sure to clearly document how to the data is obtained.
+
+If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory.
+
+Source attribution and descriptions included in the [README](data/README.md) file.
+
+## Final Results
+The below results were obtained with these specifications:
+* Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
+* Batch size: 16
+* Patch size: 512
+* Learning rate: 1E-5
+* Number of workers: 8
+* Epochs: 30 (maximum; early termination feature has been turned on)
+* Augmentation: Random Contrast, Random Brightness, Gaussian Blur, Gaussian Noise, Random Satuation
+* Number of trails: 5
+
+Test Jaccard: mean: 0.589, standard deviation:0.075
+Please refer to [experiment_report.md](https://github.com/dsi-clinic/2024-winter-cmap/blob/cleaning_code/experiment_result.md) for more experiments results
+
+### example outputs
+The model can detect ponds fairly accurately:
+![output_image1](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.0.png)
+![output_image2](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.7.png)
+![output_image3](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.8.png)
+
+There needs to be some tweaks for the model to better identify wetlands and dry bottom turf stormwater infrastructure:
+![output_image4](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.2.png)
+![output_image5](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.0.5.png)
+
+There also needs to be adjustments made to the model to account for false positives:
+![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
+![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
+
+### Running Hyperparameter Sweep with SLURM and Weights & Biases
+This guide provides step-by-step instructions to set up and run a hyperparameter sweep using **SLURM** and **Weights & Biases (W&B)** in a micromamba environment.
+#### Prerequisites
+
+1. **Create a Weights & Biases Account**  
+   Sign up for a free W&B account at [https://wandb.ai](https://wandb.ai) if you don’t have one already.
+
+2. **Install Micromamba**  
+   Ensure micromamba is installed, and your environment is set up with all dependencies.
+
+3. **Install Weights & Biases (wandb)**  
+   Install W&B in your micromamba environment by running:
+
+   ```
+   micromamba install -c conda-forge wandb
+   ```
+4. **Log in to W&B**
+    Log into your W&B account by running:
+   ```
+   wandb login
+   ```
+
+#### Initialize the Sweep in W&B:
+Run the following command to create a sweep ID in W&B:
+```
+wandb sweep /home/<YOUR-USERNAME>/CMAP/configs/sweep_config.yml
+```
+#### View Sweep in W&B:
+After running wandb sweep command above, a sweep ID will be generated and you can click the link shown in terminal to view the sweep in W&B interface.
+
+#### Running a Sweep Directly from the Terminal
+If you prefer to run a hyperparameter sweep directly from the terminal instead of submitting it as a SLURM job, use the following command:
+
+```
+wandb agent <W&B_organization_name>/<project_name>/<sweep_ID> --count <number_of_experiments>
+```
+Example:
+```
+wandb agent dsi-clinic-cmap/CMAP/6tmqjcu4 --count 5
+```
+In this example:
+dsi-clinic-cmap is the organization name in W&B.
+CMAP is the project name.
+6tmqjcu4 is the sweep ID.
+--count 5 specifies that the agent should conduct 5 runs(experiments).
+This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
+
+## Running a Sweep using a SLURM Job Script
+Please refer to [future-work documentation](future-work.md) for more information.
+
 
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
@@ -248,9 +227,9 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
-- Xiaoyue Wei - xiaoyue1@uchicago.edu
-
 
 ## Collaborators- Fall 2024
 - Anna Poon - annapoon@uchicago.edu
+- Collin Kim - collinkim415@uchicago.edu
 - Mohit Kumar Sathishkumar - mohitk@uchicago.edu
+- Xiaoyue Wei - xiaoyue1@uchicago.edu

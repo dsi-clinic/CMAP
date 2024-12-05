@@ -8,7 +8,6 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
-import json
 import logging
 import random
 import shutil
@@ -30,6 +29,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
 from data.kc import KaneCounty
+from data.rd import RiverDataset
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
@@ -71,17 +71,18 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_tune:
-        Path.mkdir(out_root, exist_ok=True)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
+        Path.mkdir(out_root, parents=True, exist_ok=True)
     else:
-        Path.mkdir(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
 
     # create directory for output images
     train_images_root = Path(out_root) / "train-images"
     test_images_root = Path(out_root) / "test-images"
 
     try:
-        Path.mkdir(train_images_root)
-        Path.mkdir(test_images_root)
+        Path.mkdir(train_images_root, parents=True, exist_ok=True)
+        Path.mkdir(test_images_root, parents=True, exist_ok=True)
 
     except FileExistsError:
         shutil.rmtree(train_images_root)
@@ -97,8 +98,10 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     shutil.copy(Path(config.__file__).resolve(), out_root)
 
     # Set up logging
-    logger = logging.getLogger()
+    logger = logging.getLogger("train")
     logger.setLevel(logging.INFO)
+    logger.handlers.clear()
+
     log_filename = Path(out_root) / "training_log.txt"
     file_handler = logging.FileHandler(log_filename)
     stream_handler = logging.StreamHandler(sys.stdout)
@@ -110,27 +113,28 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
 
-    return (train_images_root, test_images_root, out_root, writer, logger)
+    # Prevent propagation to root logger to avoid duplicate messages
+    logger.propagate = False
+
+    return train_images_root, test_images_root, out_root, writer, logger
 
 
 def initialize_dataset(config):
-    """Load and merge NAIP, KaneCounty, and optional DEM data.
+    """Load and merge NAIP, KaneCounty, and optional DEM data."""
+    if not config.USE_NIR:
 
-    This function loads NAIP (National Agriculture Imagery Program)
-    data and KaneCounty shapefile data. Optionally, if DEM
-    (Digital Elevation Model) data is provided, it is also loaded
-    and merged with NAIP data.
+        class RGBOnlyNAIP(NAIP):
+            def __getitem__(self, query):
+                sample = super().__getitem__(query)
+                sample["image"] = sample["image"][:3]  # Keep only RGB channels
+                return sample
 
-    Args:
-        config: settings in the configuration file
+        naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
+        config.DATASET_MEAN = config.DATASET_MEAN[:3]
+        config.DATASET_STD = config.DATASET_STD[:3]
+    else:
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    Returns:
-        tuple: A tuple containing the loaded NAIP and KaneCounty
-            datasets.
-            The first element is the NAIP dataset, and the
-            second element is the KaneCounty dataset.
-    """
-    naip_dataset = NAIP(config.KC_IMAGE_ROOT)
     shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
     dataset_config = (
         config.KC_LAYER,
@@ -142,11 +146,52 @@ def initialize_dataset(config):
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
     if config.KC_DEM_ROOT is not None:
-        dem = KaneDEM(config.KC_DEM_ROOT)
+        dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
+        if not config.USE_NIR:
+            config.DATASET_MEAN.append(0.0)  # DEM mean
+            config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+    if config.USE_RIVERDATASET:
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
 
-    return naip_dataset, kc_dataset
+        config.NUM_CLASSES = 6  # predicting 5 classes + background
+
+        rd_config = (
+            config.RD_LABELS,
+            config.PATCH_SIZE,
+            naip_dataset.crs,
+            naip_dataset.res,
+        )
+
+        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+
+        if config.KC_DEM_ROOT is not None:
+            dem = KaneDEM(config.KC_DEM_ROOT)
+            naip_dataset = naip_dataset & dem
+            print("naip and dem loaded")
+
+        return naip_dataset, combined_dataset
+
+    else:  # this is the default; uses KC only
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        dataset_config = (
+            config.KC_LAYER,
+            config.KC_LABELS,
+            config.PATCH_SIZE,
+            naip_dataset.crs,
+            naip_dataset.res,
+        )
+        kc_dataset = KaneCounty(shape_path, dataset_config)
+
+        if config.KC_DEM_ROOT is not None:
+            dem = KaneDEM(config.KC_DEM_ROOT, config)
+            naip_dataset = naip_dataset & dem
+            print("naip and dem loaded")
+
+        return naip_dataset, kc_dataset
 
 
 def build_dataset(naip_set, split_rate):
@@ -293,7 +338,7 @@ def create_model():
 
     optimizer = AdamW(
         model.parameters(),
-        learning_rate=config.LEARNING_RATE,
+        lr=config.LEARNING_RATE,
         weight_decay=config.WEIGHT_DECAY,
     )
 
@@ -305,57 +350,6 @@ def create_model():
         jaccard_per_class,
         optimizer,
     )
-
-
-def copy_first_entry(a_list: list) -> list:
-    """Copies the first entry in a list and appends it to the end.
-
-    Args:
-        a_list: The list to modify
-
-    Returns:
-        list: The modified list
-    """
-    first_entry = a_list[0]
-
-    # Append the copy to the end
-    a_list.append(first_entry)
-
-    return a_list
-
-
-def normalize_func(model):
-    """Create normalization functions for input data to a given model.
-
-    This function generates normalization functions based on the mean
-    and standard deviation specified in the configuration. If the
-    number of channels in the model input does not match the length of
-    the mean and standard deviation lists, it replicates the first entry
-    of each list to match the number of input channels.
-
-    Args:
-        model: The model for which the normalization functions are created.
-
-    Returns:
-        tuple: A tuple containing two normalization functions.
-               The first function normalizes input data using the specified
-               mean and standard deviation.
-               The second function scales input data to a range between 0 and 255.
-    """
-    data_mean = config.DATASET_MEAN
-    data_std = config.DATASET_STD
-    # add copies of first entry to DATASET_MEAN and DATASET_STD
-    # to match data in_channels
-    if len(data_mean) != model.in_channels:
-        for _ in range(model.in_channels - len(data_mean)):
-            data_mean = copy_first_entry(data_mean)
-            data_std = copy_first_entry(data_std)
-
-    scale_mean = torch.tensor(0.0)
-    scale_std = torch.tensor(255.0)
-    normalize = K.Normalize(mean=data_mean, std=data_std)
-    scale = K.Normalize(mean=scale_mean, std=scale_std)
-    return normalize, scale
 
 
 def add_extra_channel(
@@ -384,13 +378,6 @@ def add_extra_channel(
     return augmented_tensor
 
 
-def normalize_and_scale(sample_image, model):
-    """Normalize and scale the sample image."""
-    normalize, scale = normalize_func(model)
-    scaled_image = scale(sample_image)
-    return scaled_image, normalize
-
-
 def add_extra_channels(image, model):
     """Add extra channels to the image if necessary."""
     while image.size(1) < model.in_channels:
@@ -415,13 +402,51 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     save_dir = Path(train_images_root) / f"epoch-{epoch}"
     Path.mkdir(save_dir, exist_ok=True)
 
+    # Denormalize augmented images for plotting
+    data_mean = config.DATASET_MEAN
+    data_std = config.DATASET_STD
+    if len(data_mean) < x_aug.size(1):
+        data_mean = data_mean + [data_mean[0]] * (x_aug.size(1) - len(data_mean))
+        data_std = data_std + [data_std[0]] * (x_aug.size(1) - len(data_std))
+
+    mean = torch.tensor(data_mean).view(-1, 1, 1)
+    std = torch.tensor(data_std).view(-1, 1, 1)
+    x_aug_denorm = x_aug * std.to(x_aug.device) + mean.to(x_aug.device)
+
     for i in range(config.BATCH_SIZE):
         plot_tensors = {
-            "RGB Image": x[i].cpu(),
-            "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i].cpu(),
-            "Augmented_Mask": y_aug[i].cpu(),
+            "RGB image": x[i][0:3, :, :].cpu() / 255.0,
+            "augmented RGB image": x_aug_denorm[i][0:3, :, :].cpu().clip(0, 1),
+            "mask": samp_mask[i],
+            "augmented mask": y_aug[i].cpu(),
         }
+
+        # Add NIR if enabled
+        if config.USE_NIR:
+            nir_idx = 3  # NIR is always after RGB
+            plot_tensors.update(
+                {
+                    "NIR": x[i][nir_idx : nir_idx + 1, :, :].cpu() / 255.0,
+                    "augmented NIR": x_aug_denorm[i][nir_idx : nir_idx + 1, :, :]
+                    .cpu()
+                    .clip(0, 1),
+                }
+            )
+
+        # Add DEM if enabled
+        if config.KC_DEM_ROOT is not None:
+            dem_idx = (
+                3 if not config.USE_NIR else 4
+            )  # DEM is after NIR if NIR is enabled
+            plot_tensors.update(
+                {
+                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
+                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
+                    .cpu()
+                    .clip(0, 1),
+                }
+            )
+
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
             plot_tensors,
@@ -432,30 +457,24 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         )
 
 
+def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
+    """Log statistics for each channel of the input tensor."""
+    for i in range(tensor.size(1)):
+        channel = tensor[:, i]
+        logger.info(
+            f"{name} channel {i} - min: {channel.min().item():.3f}, "
+            f"max: {channel.max().item():.3f}, mean: {channel.mean().item():.3f}, "
+            f"std: {channel.std().item():.3f}"
+        )
+
+
 def train_setup(
     sample: defaultdict[str, Any],
     train_config,
     aug_config,
     model,
 ) -> tuple[torch.Tensor]:
-    """Setup for training: sends images to device and applies augmentations.
-
-    Args:
-        sample: A dataloader sample containing image, mask, and bbox data.
-        train_config: a tuple of
-            - epoch: The current epoch.
-            - batch: The current batch.
-            - train_images_root: The root path for saving training sample images.
-        aug_config: a tuple of
-            - spatial_aug_mode: The mode for spatial augmentations.
-            - color_aug_mode: The mode for color augmentations.
-            - spatial_augs: The sequence of spatial augmentations.
-            - color_augs: The sequence of color augmentations.
-        model: The PyTorch model instance.
-
-    Returns:
-        A tuple of augmented image and mask tensors to be used in the train step
-    """
+    """Setup for training: sends images to device and applies augmentations."""
     epoch, batch, train_images_root = train_config
     spatial_aug_mode, color_aug_mode, spatial_augs, color_augs = aug_config
 
@@ -469,28 +488,51 @@ def train_setup(
     x = samp_image.to(MODEL_DEVICE)
     y = samp_mask.type(torch.float32).to(MODEL_DEVICE)
 
-    # Normalize and scale image
-    x_scaled, normalize = normalize_and_scale(x, model)
+    if batch == 0:  # Log stats for first batch only
+        log_channel_stats(x, "raw input", logging.getLogger())
 
-    img_data = (x_scaled, y)
+    # Scale to [0,1]
+    x = x / 255.0
+
+    if batch == 0:  # Log stats for first batch only
+        log_channel_stats(x, "scaled input", logging.getLogger())
+
+    # Extend mean/std if needed
+    data_mean = config.DATASET_MEAN  # ImageNet mean
+    data_std = config.DATASET_STD  # ImageNet std
+    if len(data_mean) < model.in_channels:
+        data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
+        data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+
+    # Normalize using ImageNet statistics
+    normalize = K.Normalize(mean=data_mean, std=data_std)
+    x_norm = normalize(x)
+
+    if batch == 0:  # Log stats for first batch only
+        log_channel_stats(x_norm, "normalized input", logging.getLogger())
+
+    img_data = (x_norm, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
         img_data, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
     )
+
+    if batch == 0:  # Log stats for first batch only
+        log_channel_stats(x_aug, "augmented input", logging.getLogger())
 
     # Save training sample images if first batch
     if batch == 0:
         save_training_images(
             epoch,
             train_images_root,
-            x,
+            samp_image,  # Save original images
             samp_mask,
             x_aug,
             y_squeezed,
             sample,
         )
 
-    return normalize(x_aug), y_squeezed
+    return x_aug.to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 
 
 def train_epoch(
@@ -544,11 +586,8 @@ def train_epoch(
             aug_config,
             model,
         )
-
-        # Break after the first batch in debug mode
-        if args.debug and batch == 0:
-            print("Debug mode: Exiting training loop after first batch.")
-            break
+        x = x.to(MODEL_DEVICE)
+        y = y.to(MODEL_DEVICE)
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -585,7 +624,7 @@ def train_epoch(
         train_loss += loss.item()
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
-            logging.info("loss: %7.7f  [%5d/%5d]", loss, current, num_batches)
+            logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
@@ -655,14 +694,40 @@ def test(
         for batch, sample in enumerate(dataloader):
             samp_image = sample["image"]
             samp_mask = sample["mask"]
+
             # add an extra channel to the images and masks
             if samp_image.size(1) != model.in_channels:
-                for _ in range(model.in_channels - samp_image.size(1)):
-                    samp_image = add_extra_channel(samp_image)
+                samp_image = add_extra_channel(samp_image)
+
             x = samp_image.to(MODEL_DEVICE)
-            normalize, scale = normalize_func(model)
-            x_scaled = scale(x)
-            x = normalize(x_scaled)
+
+            if batch == 0:  # Log stats for first batch only
+                log_channel_stats(x, "test raw input", logging.getLogger())
+
+            # Scale to [0,1] before normalization
+            x = x / 255.0
+
+            if batch == 0:  # Log stats for first batch only
+                log_channel_stats(x, "test scaled input", logging.getLogger())
+
+            # Extend mean/std if needed
+            data_mean = config.DATASET_MEAN
+            data_std = config.DATASET_STD
+            if len(data_mean) < model.in_channels:
+                data_mean = data_mean + [data_mean[0]] * (
+                    model.in_channels - len(data_mean)
+                )
+                data_std = data_std + [data_std[0]] * (
+                    model.in_channels - len(data_std)
+                )
+
+            # Normalize
+            normalize = K.Normalize(mean=data_mean, std=data_std)
+            x = normalize(x)
+
+            if batch == 0:  # Log stats for first batch only
+                log_channel_stats(x, "test normalized input", logging.getLogger())
+
             y = samp_mask.to(MODEL_DEVICE)
             if y.size(0) == 1:
                 y_squeezed = y
@@ -694,12 +759,38 @@ def test(
                 epoch_dir = Path(test_image_root) / f"epoch-{epoch}"
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
+
+                # Denormalize for plotting
+                data_mean = config.DATASET_MEAN
+                data_std = config.DATASET_STD
+                if len(data_mean) < x.size(1):  # Extend mean/std if needed
+                    data_mean = data_mean + [data_mean[0]] * (
+                        x.size(1) - len(data_mean)
+                    )
+                    data_std = data_std + [data_std[0]] * (x.size(1) - len(data_std))
+
+                mean = torch.tensor(data_mean).view(-1, 1, 1)
+                std = torch.tensor(data_std).view(-1, 1, 1)
+                x_denorm = x * std.to(x.device) + mean.to(x.device)
+
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
-                        "RGB Image": x_scaled[i].cpu(),
-                        "ground_truth": samp_mask[i],
+                        "RGB image": x_denorm[i][0:3, :, :].cpu().clip(0, 1),
+                        "ground truth": samp_mask[i],
                         "prediction": preds[i].cpu(),
                     }
+
+                    # Add DEM if enabled
+                    if config.KC_DEM_ROOT is not None:
+                        dem_idx = 3 if not config.USE_NIR else 4
+                        plot_tensors.update(
+                            {
+                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
+                                .cpu()
+                                .clip(0, 1),
+                            }
+                        )
+
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
@@ -723,11 +814,10 @@ def test(
     final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
-    logging.info(
-        "\nTest error: \n Jaccard index: %4f, \nTest avg loss: %4f \n",
-        final_jaccard,
-        test_loss,
-    )
+    logger = logging.getLogger()
+    logger.info("Test error:")
+    logger.info(f"Jaccard index: {final_jaccard:.3f}")
+    logger.info(f"Test avg loss: {test_loss:.3f}")
 
     if wandb_tune:
         wandb.log(
@@ -746,9 +836,8 @@ def test(
             break
 
     for i, label_name in _labels.items():
-        logging.info("IoU for %s: %f \n", label_name, final_jaccard_per_class[i])
+        logger.info(f"IoU for {label_name}: {final_jaccard_per_class[i]:.3f}")
 
-    # Now returns test_loss such that it can be compared against previous losses
     return test_loss, final_jaccard
 
 
@@ -853,7 +942,7 @@ def train(
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
-        logging.info("Epoch %d\n-------------------------------", t + 1)
+        logging.info(f"Epoch {t + 1}\n-------------------------------")
         train_config = (
             loss_fn,
             train_jaccard,
@@ -904,9 +993,7 @@ def train(
             plateau_count += 1
             if plateau_count >= patience:
                 logging.info(
-                    "Loss Plateau: %d epochs, reached patience of %d",
-                    t,
-                    patience,
+                    f"Loss Plateau: {t} epochs, reached patience of {patience}"
                 )
 
         if wandb_tune:
@@ -1054,23 +1141,6 @@ if __name__ == "__main__":
     logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset(config)
-
-    def extract_config_dict(config_module):
-        """Convert configuration module into a dictionary"""
-        config_dict = {}
-        for attr in dir(config_module):
-            # Skip private attributes and methods
-            if not attr.startswith("__") and not callable(getattr(config_module, attr)):
-                value = getattr(config_module, attr)
-                # Check if the value is JSON-serializable
-                try:
-                    json.dumps(value)
-                    config_dict[attr] = value
-                except TypeError as e:
-                    logging.warning(
-                        f"Skipping non-serializable config attribute '{attr}': {e}"
-                    )
-        return config_dict
 
     def run_trials():
         """Running training for multiple trials"""
