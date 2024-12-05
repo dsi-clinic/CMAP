@@ -48,7 +48,7 @@ DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
-LR = 1e-5
+LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 4
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
@@ -114,6 +114,16 @@ KC_LABELS = {
     "DRY BOTTOM - TURF": 3,
     "DRY BOTTOM - MESIC PRAIRIE": 4,
 }
+
+# River data
+RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
+RD_LAYER = 1
+RD_LABELS = {
+    "BACKGROUND": 0,
+    "STREAM/RIVER": 5,
+}
+
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
 # for wandb
 WANDB_API = ""

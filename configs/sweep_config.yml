@@ -1,3 +1,4 @@
+program: train.py
 method: bayes
 metric:
   goal: maximize
@@ -5,11 +6,11 @@ metric:
 
 parameters:
   batch_size:
-    values: [16, 32, 64]
+    values: [8, 16, 32]
   learning_rate:
-    values: [0.001, 0.0005, 0.0001]
+    values: [1e-4, 1e-5, 1e-6]
   patch_size:
-    values: [32, 64, 128]
+    values: [256, 512, 768]
   color_brightness:
     values: [0.2, 0.3, 0.4, 0.5]
   gaussian_blur_sigma:
@@ -22,13 +23,12 @@ parameters:
       - [3,3]
       - [5,5]
       - [7,7]
-
 command:
 - python
 - train.py
 - configs.config
 - --tune 
 - --num_trials
-- 2
+- 5
 
 
