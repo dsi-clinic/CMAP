@@ -207,7 +207,7 @@ CMAP is the project name.
 This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
 
 ## Running a Sweep using a SLURM Job Script
-Please refer to [future-work documentation] (/future-work.md) for more information.
+Please refer to [future-work documentation](future-work.md) for more information.
 
 
 ## Collaborators
