@@ -52,25 +52,26 @@ def arg_parsing(argument):
 
     split_arg = float(int(argument.split) / 100)
     # tuning with wandb
-    wandb_tune_arg = argument.tune
+    wandb_tune = argument.tune
     num_trials_arg = int(argument.num_trials)
 
-    return exp_name_arg, split_arg, wandb_tune_arg, num_trials_arg
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
 
 
-def writer_prep(exp_n, trial_num, wandb_t):
+def writer_prep(exp_n, trial_num, wandb_tune):
     """Preparing writers and logging for each training trial
 
     Args:
         exp_n: experiment name
         trial_num: current trial number
-        wandb_t: whether tuning with wandb
+        wandb_tune: whether tuning with wandb
     """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
-    if wandb_t:
+    if wandb_tune:
         Path.mkdir(out_root, exist_ok=True, parents=True)
+        Path.mkdir(out_root, parents=True, exist_ok=True)
     else:
         Path.mkdir(out_root, exist_ok=True, parents=True)
 
@@ -79,8 +80,8 @@ def writer_prep(exp_n, trial_num, wandb_t):
     test_images_root = Path(out_root) / "test-images"
 
     try:
-        Path.mkdir(train_images_root)
-        Path.mkdir(test_images_root)
+        Path.mkdir(train_images_root, parents=True, exist_ok=True)
+        Path.mkdir(test_images_root, parents=True, exist_ok=True)
 
     except FileExistsError:
         shutil.rmtree(train_images_root)
@@ -109,7 +110,7 @@ def writer_prep(exp_n, trial_num, wandb_t):
     logger.addHandler(file_handler)
     logger.addHandler(stream_handler)
 
-    return train_images_root, test_images_root, out_root, writer, logger
+    return (train_images_root, test_images_root, out_root, writer, logger)
 
 
 def initialize_dataset(config):
@@ -289,8 +290,11 @@ def create_model():
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
+
     optimizer = AdamW(
-        model.parameters(), lr=config.LR, weight_decay=config.WEIGHT_DECAY
+        model.parameters(),
+        lr=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
     )
 
     return (
@@ -506,6 +510,7 @@ def train_epoch(
     aug_config,
     writer,
     args,
+    wandb_tune,
 ) -> None:
     """Executes a training step for the model
 
@@ -525,6 +530,8 @@ def train_epoch(
             - color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
         args: Additional arguments for debugging or special training conditions.
+        args: Additional arguments for debugging or special training conditions.
+        wandb_tune: whether tuning with wandb
     """
     loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
@@ -547,6 +554,11 @@ def train_epoch(
             aug_config,
             model,
         )
+
+        # Break after the first batch in debug mode
+        if args.debug and batch == 0:
+            print("Debug mode: Exiting training loop after first batch.")
+            break
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -590,6 +602,17 @@ def train_epoch(
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
     logging.info("Train Jaccard index: %.4f", final_jaccard)
+
+    if wandb_tune:
+        wandb.log(
+            {
+                "train_loss": train_loss,
+                "train_jaccard": final_jaccard.item(),
+                "epoch": epoch,
+                "batch": batch,
+            }
+        )
+
     return final_jaccard
 
 
@@ -598,6 +621,7 @@ def test(
     model: Module,
     test_config,
     writer,
+    wandb_tune: bool,
     num_examples: int = 10,
 ) -> float:
     """Executes a testing step for the model and saves sample output images.
@@ -616,6 +640,7 @@ def test(
             - num_classes: The number of labels to predict.
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
+        wandb_tune: whether tune with wandb
         num_examples: The number of examples to save.
 
     Returns:
@@ -722,6 +747,15 @@ def test(
         test_loss,
     )
 
+    if wandb_tune:
+        wandb.log(
+            {
+                "test_loss": test_loss,
+                "test_jaccard": final_jaccard.item(),
+                "epoch": epoch,
+            }
+        )
+
     # Access the labels and their names
     _labels = {}
     for label_name, label_id in kc.labels.items():
@@ -742,9 +776,9 @@ def train(
     aug_config,
     path_config: tuple[str, str, str],
     writer: SummaryWriter,
-    wandb_t: bool,
+    wandb_tune: bool,
     args,
-    epoch_config,
+    epoch,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -766,9 +800,9 @@ def train(
                 - train_images_root: Root directory for training images.
                 - test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
-        wandb_t: Whether running hyperparameter tuning with wandb.
+        wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
-        epoch_config: The configuration for the number of epochs.
+        epoch: The configuration for the number of epochs.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -808,15 +842,15 @@ def train(
     # How many classes we're predicting
     num_classes = config.NUM_CLASSES
 
-    # # reducing number of epoch in debugging or hyperparameter tuning
+    # reducing number of epoch in debugging or hyperparameter tuning
     if args.debug:
-        epoch_config = 1
-    elif wandb_t:
-        epoch_config = 10
+        epoch = 1
+    elif wandb_tune:
+        epoch = 10
     else:
-        epoch_config = config.EPOCHS
+        epoch = config.EPOCHS
 
-    for t in range(epoch_config):
+    for t in range(epoch):
         if t == 0:
             test_config = (
                 loss_fn,
@@ -858,6 +892,7 @@ def train(
             aug_config,
             writer,
             args,
+            wandb_tune,
         )
 
         test_config = (
@@ -875,6 +910,7 @@ def train(
             model,
             test_config,
             writer,
+            wandb_tune,
         )
         # Checks for plateau
         if best_loss is None:
@@ -890,10 +926,20 @@ def train(
                     t,
                     patience,
                 )
-            # Break after the first iteration in debug mode
+
+        if wandb_tune:
+            wandb.log(
+                {
+                    "epoch": t + 1,
+                    "train_jaccard": epoch_jaccard.item(),
+                    "test_jaccard": t_jaccard.item(),
+                    "test_loss": test_loss,
+                }
+            )
+
+        # Break after the first iteration in debug mode
         if args.debug and t == 0:
             print("Debug mode: Skipping the rest of the training loop")
-
             break
 
     print("Done!")
@@ -904,13 +950,13 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
+def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     """Runing a single trial of training
 
     Input:
         exp_n: experiment name
         num: current number of trial
-        wandb_t: whether tuning with wandb
+        wandb_tune: whether tuning with wandb
     """
     (
         train_images_root,
@@ -918,13 +964,12 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
         out_root,
         writer,
         logger,
-    ) = writer_prep(exp_n, num, wandb_t)
-    # Set 'epoch_config' based on debug mode
+    ) = writer_prep(exp_n, num, wandb_tune)
+    # Set 'epoch' based on debug mode
     if args.debug:
-        epoch_config = 1
+        epoch = 1
     else:
-        epoch_config = config.EPOCHS
-
+        epoch = config.EPOCHS
     # randomly splitting the data at every trial
     train_dataloader, test_dataloader = build_dataset(naip_set, split_rate)
     (
@@ -959,6 +1004,7 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
         train_images_root,
         test_image_root,
     )
+
     train_iou, test_iou = train(
         model,
         train_test_config,
@@ -967,7 +1013,7 @@ def one_trial(exp_n, num, wandb_t, naip_set, split_rate, args):
         writer,
         wandb_tune,
         args,
-        epoch_config,
+        epoch,
     )
     writer.close()
     logger.handlers.clear()
@@ -1008,14 +1054,16 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug mode", default=False
     )
+
     args = parser.parse_args()
+
     config = importlib.import_module(args.config)
 
     # enable debug mode
     if args.debug:
-        epoch_config = 1
+        epoch = 1
     else:
-        epoch_config = config.EPOCHS
+        epoch = config.EPOCHS
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
@@ -1027,10 +1075,14 @@ if __name__ == "__main__":
 
     def run_trials():
         """Running training for multiple trials"""
+        # Extract config dictionary from module
+
         if wandb_tune:
-            run = wandb.init(project="cmap_train")
-            vars(args).update(run.config)
+            wandb.init(project="CMAP")
             print("wandb taken over config")
+        else:
+            # Initialize wandb with default configuration but disable logging
+            wandb.init(project="CMAP", config=config, mode="disabled")
 
         train_ious = []
         test_ious = []
@@ -1062,7 +1114,7 @@ if __name__ == "__main__":
         )
 
         if wandb_tune:
-            run.log({"average_test_jaccard_index": test_average})
+            wandb.run.summary["average_test_jaccard_index"] = test_average
             wandb.finish()
 
     run_trials()

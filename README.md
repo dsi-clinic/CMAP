@@ -96,18 +96,32 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 
 ## Repository Structure
 ### main repository
+* **train.py**: containing code for training models
+* **model.py**: defining the model framework used in training
+* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
+* **sweep.job**: script used to run tuning with Wandb
+* **requirements.txt**: containing required packages' information
 
-* train.py: code for training models
-* model.py: code defining model used for training
-* retrieve_images.py: code for obtaining image data used for training
+### configs
+containing config information
+* **config.py**: default config for model training
+* **sweep_config.yml**: config used for wandb sweep
 
 ### utils
 
 Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
+* **get_naip_images.py**
+* **img_params.py** calculating images stats
+* **plot.py** plotting image with labels
+* **transform.py** Creating augmentation pipeline
 
 ### notebooks
 
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
+
+### output
+
+Contains example model output images.
 
 ### data
 
@@ -116,10 +130,6 @@ Contains details of acquiring all raw data used in repository. If data is small 
 If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory.
 
 Source attribution and descriptions included in the [README](data/README.md) file.
-
-### output
-
-Contains example model output images.
 
 ## Final Results
 The below results were obtained with these specifications:
@@ -149,42 +159,56 @@ There also needs to be adjustments made to the model to account for false positi
 ![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
 ![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
 
-## Git Usage
+### Running Hyperparameter Sweep with SLURM and Weights & Biases
+This guide provides step-by-step instructions to set up and run a hyperparameter sweep using **SLURM** and **Weights & Biases (W&B)** in a micromamba environment.
+#### Prerequisites
 
-Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
+1. **Create a Weights & Biases Account**  
+   Sign up for a free W&B account at [https://wandb.ai](https://wandb.ai) if you don’t have one already.
 
-## Repository Structure
-### main repository
-* **train.py**: containing code for training models
-* **model.py**: defining the model framework used in training
-* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
-* **sweep.job**: script used to run tuning with Wandb
-* **requirements.txt**: containing required packages' information
+2. **Install Micromamba**  
+   Ensure micromamba is installed, and your environment is set up with all dependencies.
 
-### configs
-containing config information
-* **config.py**: default config for model training
-* **sweep_config.yml**: config used for wandb sweep
+3. **Install Weights & Biases (wandb)**  
+   Install W&B in your micromamba environment by running:
 
-### utils
+   ```
+   micromamba install -c conda-forge wandb
+   ```
+4. **Log in to W&B**
+    Log into your W&B account by running:
+   ```
+   wandb login
+   ```
 
-Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
-* **get_naip_images.py**
-* **img_params.py** calculating images stats
-* **plot.py** plotting image with labels
-* **transform.py** Creating augmentation pipeline
+#### Initialize the Sweep in W&B:
+Run the following command to create a sweep ID in W&B:
+```
+wandb sweep /home/<YOUR-USERNAME>/CMAP/configs/sweep_config.yml
+```
+#### View Sweep in W&B:
+After running wandb sweep command above, a sweep ID will be generated and you can click the link shown in terminal to view the sweep in W&B interface.
 
-### notebooks
+#### Running a Sweep Directly from the Terminal
+If you prefer to run a hyperparameter sweep directly from the terminal instead of submitting it as a SLURM job, use the following command:
 
-Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
+```
+wandb agent <W&B_organization_name>/<project_name>/<sweep_ID> --count <number_of_experiments>
+```
+Example:
+```
+wandb agent dsi-clinic-cmap/CMAP/6tmqjcu4 --count 5
+```
+In this example:
+dsi-clinic-cmap is the organization name in W&B.
+CMAP is the project name.
+6tmqjcu4 is the sweep ID.
+--count 5 specifies that the agent should conduct 5 runs(experiments).
+This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
 
-### data
-Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory.
+## Running a Sweep using a SLURM Job Script
+Please refer to [future-work documentation](future-work.md) for more information.
 
-
-### output
-
-Contains example model output images.
 
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
@@ -193,9 +217,9 @@ Contains example model output images.
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
-- Xiaoyue Wei - xiaoyue1@uchicago.edu
-
 
 ## Collaborators- Fall 2024
 - Anna Poon - annapoon@uchicago.edu
+- Collin Kim - collinkim415@uchicago.edu
 - Mohit Kumar Sathishkumar - mohitk@uchicago.edu
+- Xiaoyue Wei - xiaoyue1@uchicago.edu
