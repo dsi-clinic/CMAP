@@ -1,22 +1,26 @@
 #!/bin/bash
 #
-#SBATCH --mail-user=xiaoyue1@cs.uchicago.edu
+#SBATCH --mail-user=<USERNAME>@cs.uchicago.edu
 #SBATCH --mail-type=ALL
-#SBATCH --output=/home/xiaoyue1/slurm/out/%j.%N.stdout
-#SBATCH --error=/home/xiaoyue1/slurm/out/%j.%N.stderr
-#SBATCH --chdir=/home/xiaoyue1/slurm
+#SBATCH --output=/home/<USERNAME>/slurm/out/%j.%N.stdout
+#SBATCH --error=/home/<USERNAME>/slurm/out/%j.%N.stderr
+#SBATCH --chdir=/home/<USERNAME>/slurm
 #SBATCH --partition=general
 #SBATCH --job-name=cmap
 #SBATCH --time=12:00:00
 #SBATCH --mem=512GB
-#SBATCH --gres=gpu:2
+#SBATCH --ntasks=4 
+#SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=10
 
 # Activate the micromamba environment
-source /home/xiaoyue1/micromamba/etc/profile.d/micromamba.sh
+export PATH="/home/<USERNAME>/micromamba/bin:$PATH" 
+source /home/<USERNAME>/micromamba/etc/profile.d/micromamba.sh
 micromamba activate cmap
 
+
 # Navigate to the project directory
-cd /home/xiaoyue1/CMAP
-CUDA_VISIBLE_DEVICES=0 wandb agent dsi-clinic-cmap/CMAP/6tmqjcu4 --count 5 &
-CUDA_VISIBLE_DEVICES=1 wandb agent dsi-clinic-cmap/CMAP/70rgtvc0 --count 5
+cd /home/<USERNAME>/CMAP
+wandb agent <W&B_organization_name>/<W&B_project_name>/<sweep_ID> --count <number_of_experiments>
+
+wait

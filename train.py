@@ -71,6 +71,7 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_tune:
         Path.mkdir(out_root, exist_ok=True, parents=True)
+        Path.mkdir(out_root, parents=True, exist_ok=True)
     else:
         Path.mkdir(out_root, exist_ok=True, parents=True)
 
@@ -79,8 +80,8 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     test_images_root = Path(out_root) / "test-images"
 
     try:
-        Path.mkdir(train_images_root)
-        Path.mkdir(test_images_root)
+        Path.mkdir(train_images_root, parents=True, exist_ok=True)
+        Path.mkdir(test_images_root, parents=True, exist_ok=True)
 
     except FileExistsError:
         shutil.rmtree(train_images_root)
