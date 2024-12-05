@@ -95,7 +95,7 @@ Bayesian search will iteratively refine the parameter selection based on previou
      max: 32
    ```
 ### Monitoring and Interpreting Results
-output/tuning_output_1.png
+(/output/tuning_output_1.png)
 
 #### Observing the Plots
 The provided graph displays several key metrics, including `train_jaccard`, `train_loss`, `test_jaccard`, `test_loss`, `batch`, and `epoch`, plotted against the step count. These plots provide critical insights into model performance during hyperparameter tuning.
@@ -107,7 +107,7 @@ The provided graph displays several key metrics, including `train_jaccard`, `tra
 #### Monitoring Final Metrics with Parallel Coordinate Plot
 The parallel coordinate plot below visualizes the relationship between hyperparameters and the final metric `average_test_jaccard_index` across multiple trials in one experiment:
 
-output/tuning_output_2.png
+(/output/tuning_output_2.png)
 
 - Each line in the plot represents run(experiment).
 - The color gradient indicates the `average_test_jaccard_index` for each run, with brighter lines showing higher values.
