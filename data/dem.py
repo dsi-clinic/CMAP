@@ -8,7 +8,11 @@ Replace "input.gdb" and "output.tif" in above code with file paths to
 input a .gdb file and output a .tif file.
 """
 
-from torchgeo.datasets import RasterDataset
+from pathlib import Path
+
+import rasterio
+import torch
+from torchgeo.datasets import BoundingBox, RasterDataset
 
 
 class KaneDEM(RasterDataset):
@@ -19,7 +23,7 @@ class KaneDEM(RasterDataset):
         for matching DEM file names.
     """
 
-    filename_glob = "*2017BE.tif"
+    filename_glob = "Kane2017BE.tif"
 
     def __init__(self, paths, crs=None, res=None, transforms=None):
         """Initializes a KaneDEM instance.
@@ -36,7 +40,7 @@ class KaneDEM(RasterDataset):
         super().__init__(paths, crs, res, transforms=transforms)
         self.all_bands = ["elevation"]  # Assuming single band for elevation
 
-    def __getitem__(self, query):
+    def __getitem__(self, query: BoundingBox):
         """Retrieves a specific DEM sample from the dataset.
 
         Args:
@@ -46,9 +50,14 @@ class KaneDEM(RasterDataset):
             dict: A dictionary containing the elevation data.
         """
         # This method loads the DEM data similar to how other raster data is loaded
-        sample = super().__getitem__(query)
-        elevation = sample["image"]  # Assuming the elevation data is stored as 'image'
-        return {"elevation": elevation}
+        sample = dict.fromkeys(["image"])
+        with rasterio.open(str(self.paths) / Path(self.filename_glob)) as src:
+            bbox = (query.minx, query.miny, query.maxx, query.maxy)
+            bbox = rasterio.warp.transform_bounds(self.crs, src.crs, *bbox)
+            window = src.window(*bbox)
+            sample["image"] = src.read(window=window)
+        sample["image"] = torch.from_numpy(sample["image"])
+        return sample
 
     def __getallbands__(self):
         """Get all bands for this dataset."""
