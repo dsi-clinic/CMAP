@@ -23,7 +23,7 @@ BACKBONE = "resnet101"
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
-DROPOUT = 0.3
+DROPOUT = 0.0
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
@@ -50,7 +50,7 @@ PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
-EPOCHS = 3
+EPOCHS = 4
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
