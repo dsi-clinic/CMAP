@@ -124,7 +124,7 @@ def apply_augs(
     fully_augmented_image = torch.where(
         rgb_mask.view(1, -1, 1, 1).to(augmented_image.device),
         fully_augmented_image * mask,  # Apply mask only to RGB channels
-        augmented_image  # Keep original values for non-RGB channels
+        augmented_image,  # Keep original values for non-RGB channels
     )
 
     return fully_augmented_image, augmented_mask
