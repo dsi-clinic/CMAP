@@ -92,22 +92,9 @@ def apply_augs(
     mask,
     rgb_channels=None,
 ):
-    """Apply spatial and color augs to an image and its corresponding mask.
-
-    Parameters:
-        spatial_transforms (list): List of spatial augmentations to apply.
-        color_transforms (list): List of color augmentations for RGB channels.
-        image (torch.Tensor): The input image tensor.
-        mask (torch.Tensor): The corresponding mask tensor.
-        rgb_channels (list): Indices of RGB channels in the image tensor.
-
-    Returns:
-        torch.Tensor: The augmented image.
-        torch.Tensor: The augmented mask, spatially transformed
-                      in sync with the image.
-    """
+    """Apply spatial and color augs to an image and its corresponding mask."""
     if rgb_channels is None:
-        rgb_channels = [0, 1, 2]
+        rgb_channels = [0, 1, 2]  # Only apply color augs to RGB channels
 
     # Create a boolean mask for identifying RGB channels
     rgb_mask = torch.zeros(image.shape[1], dtype=torch.bool, device=image.device)
@@ -132,8 +119,13 @@ def apply_augs(
     )
 
     # Generate a mask of non-padded areas in the augmented image
-    # and ensure color augmentations do not affect zero-padded areas
-    fully_augmented_image *= augmented_image.any(dim=1, keepdim=True)
+    # and ensure color augmentations do not affect non-RGB channels
+    mask = augmented_image.any(dim=1, keepdim=True).to(augmented_image.device)
+    fully_augmented_image = torch.where(
+        rgb_mask.view(1, -1, 1, 1).to(augmented_image.device),
+        fully_augmented_image * mask,  # Apply mask only to RGB channels
+        augmented_image,  # Keep original values for non-RGB channels
+    )
 
     return fully_augmented_image, augmented_mask
 

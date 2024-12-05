@@ -38,6 +38,7 @@ import matplotlib.patches as mpatches
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
+from einops import rearrange
 from matplotlib.colors import ListedColormap
 from torch import Tensor
 from torchgeo.datasets.utils import BoundingBox
@@ -114,12 +115,12 @@ def plot_from_tensors(
         ax = axs[i]
 
         if "image" in name.lower():
-            # Handle RGB image tensors
-            ax.imshow(tensor[0:3, :, :].permute(1, 2, 0))
-        elif "dem" in name.lower():
-            ax.imshow(tensor.permute(0, 1))
+            ax.imshow(rearrange(tensor, "c h w -> h w c"))
+        elif "dem" in name.lower() or "nir" in name.lower():
+            # Squeeze out the channel dimension for DEM/NIR visualization
+            ax.imshow(tensor.squeeze(0), cmap="viridis")
         else:
-            unique = tensor[0].unique() if tensor.ndim > min_dims else tensor.unique()
+            unique = tensor.unique() if tensor.ndim > min_dims else tensor.unique()
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
