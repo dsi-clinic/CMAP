@@ -187,7 +187,7 @@ def initialize_dataset(config):
         kc_dataset = KaneCounty(shape_path, dataset_config)
 
         if config.KC_DEM_ROOT is not None:
-            dem = KaneDEM(config.KC_DEM_ROOT)
+            dem = KaneDEM(config.KC_DEM_ROOT, config)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
 
