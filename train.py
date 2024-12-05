@@ -29,6 +29,7 @@ from torchmetrics.classification import MulticlassJaccardIndex
 
 from data.dem import KaneDEM
 from data.kc import KaneCounty
+from data.rd import RiverDataset
 from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
@@ -130,23 +131,46 @@ def initialize_dataset(config):
             The first element is the NAIP dataset, and the
             second element is the KaneCounty dataset.
     """
-    naip_dataset = NAIP(config.KC_IMAGE_ROOT)
-    shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-    dataset_config = (
-        config.KC_LAYER,
-        config.KC_LABELS,
-        config.PATCH_SIZE,
-        naip_dataset.crs,
-        naip_dataset.res,
-    )
-    kc_dataset = KaneCounty(shape_path, dataset_config)
+    if config.USE_RIVERDATASET:  # from config file
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
 
-    if config.KC_DEM_ROOT is not None:
-        dem = KaneDEM(config.KC_DEM_ROOT)
-        naip_dataset = naip_dataset & dem
-        print("naip and dem loaded")
+        config.NUM_CLASSES = 6  # predicting 5 classes + background
 
-    return naip_dataset, kc_dataset
+        rd_config = (
+            config.RD_LABELS,
+            config.PATCH_SIZE,
+            naip_dataset.crs,
+            naip_dataset.res,
+        )
+
+        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+
+        if config.KC_DEM_ROOT is not None:
+            dem = KaneDEM(config.KC_DEM_ROOT)
+            naip_dataset = naip_dataset & dem
+            print("naip and dem loaded")
+
+        return naip_dataset, combined_dataset
+
+    else:  # this is the default; uses KC only
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        dataset_config = (
+            config.KC_LAYER,
+            config.KC_LABELS,
+            config.PATCH_SIZE,
+            naip_dataset.crs,
+            naip_dataset.res,
+        )
+        kc_dataset = KaneCounty(shape_path, dataset_config)
+
+        if config.KC_DEM_ROOT is not None:
+            dem = KaneDEM(config.KC_DEM_ROOT)
+            naip_dataset = naip_dataset & dem
+            print("naip and dem loaded")
+
+        return naip_dataset, kc_dataset
 
 
 def build_dataset(naip_set, split_rate):

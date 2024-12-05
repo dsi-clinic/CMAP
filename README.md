@@ -90,6 +90,16 @@ cd /home/YOUR_USERNAME/CMAP
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
 
+
+## RiverDataset Information
+
+To include RiverDataset in training:
+* Set config.USE_RIVER_DATASET to True
+* This will include BOTH KaneCounty and RiverDataset in train.py
+
+*When USE_RIVER_DATASET is set to True, train.py becomes stuck after correctly loading the KC and RD datasets. **This needs to be debugged.***
+
+
 ## Git Usage
 
 Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
