@@ -96,18 +96,32 @@ Before pushing changes to git, ensure that you're running `pre-commit run --all`
 
 ## Repository Structure
 ### main repository
+* **train.py**: containing code for training models
+* **model.py**: defining the model framework used in training
+* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
+* **sweep.job**: script used to run tuning with Wandb
+* **requirements.txt**: containing required packages' information
 
-* train.py: code for training models
-* model.py: code defining model used for training
-* retrieve_images.py: code for obtaining image data used for training
+### configs
+containing config information
+* **config.py**: default config for model training
+* **sweep_config.yml**: config used for wandb sweep
 
 ### utils
 
 Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
+* **get_naip_images.py**
+* **img_params.py** calculating images stats
+* **plot.py** plotting image with labels
+* **transform.py** Creating augmentation pipeline
 
 ### notebooks
 
 Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
+
+### output
+
+Contains example model output images.
 
 ### data
 
@@ -116,10 +130,6 @@ Contains details of acquiring all raw data used in repository. If data is small 
 If the data is larger than 50MB than you should not add it to the repo and instead document how to get the data in the README.md file in the data directory.
 
 Source attribution and descriptions included in the [README](data/README.md) file.
-
-### output
-
-Contains example model output images.
 
 ## Final Results
 The below results were obtained with these specifications:
@@ -148,10 +158,6 @@ There needs to be some tweaks for the model to better identify wetlands and dry 
 There also needs to be adjustments made to the model to account for false positives:
 ![output_image6](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.6.png)
 ![output_image7](/output/example_images/DL_ResNet50_imagenet_v1/epoch-14/test_sample-14.1.10.png)
-
-## Git Usage
-
-Before pushing changes to git, ensure that you're running `pre-commit run --all` to check your code against the linter.
 
 ### Running Hyperparameter Sweep with SLURM and Weights & Biases
 This guide provides step-by-step instructions to set up and run a hyperparameter sweep using **SLURM** and **Weights & Biases (W&B)** in a micromamba environment.
@@ -203,38 +209,6 @@ This is particularly useful for quick tests or for running sweeps locally withou
 ## Running a Sweep using a SLURM Job Script
 Please refer to [future-work documentation] (/future-work.md) for more information.
 
-## Repository Structure
-### main repository
-* **train.py**: containing code for training models
-* **model.py**: defining the model framework used in training
-* **experiment_result.md**: containing literauture review and experiments with differennt augmentation, backbone, and weights
-* **sweep.job**: script used to run tuning with Wandb
-* **requirements.txt**: containing required packages' information
-
-### configs
-containing config information
-* **config.py**: default config for model training
-* **sweep_config.yml**: config used for wandb sweep
-
-### utils
-
-Project python code. Contains various utility functions and scripts which support the main functionalities of the project and are designed to be reusable.
-* **get_naip_images.py**
-* **img_params.py** calculating images stats
-* **plot.py** plotting image with labels
-* **transform.py** Creating augmentation pipeline
-
-### notebooks
-
-Contains short, clean notebooks to demonstrate analysis. Documentation and descriptions included in the [README](notebooks/README.md) file.
-
-### data
-Source attribution and instructions on how to get the data used in the repository can be found in the README.md file under this directory.
-
-
-### output
-
-Contains example model output images.
 
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
