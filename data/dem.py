@@ -31,15 +31,14 @@ class KaneDEM(RasterDataset):
 
         Args:
             paths: A list of paths to the DEM files.
-            config: Configuration object containing PATCH_SIZE.
+            config: Configuration object containing PATCH_SIZE and USE_NIR.
             crs: The CRS of the DEM.
             res: The resolution of the DEM.
             transforms: The transforms to apply to the DEM.
         """
         super().__init__(paths, crs=crs, res=res, transforms=transforms)
-
-        # Store patch size from config
         self.patch_size = config.PATCH_SIZE
+        self.use_nir = config.USE_NIR
 
     def __getitem__(self, query: BoundingBox):
         """Retrieves a specific DEM sample from the dataset."""
@@ -65,14 +64,12 @@ class KaneDEM(RasterDataset):
                 )
                 temp[:h, :w] = dem_chunk[:h, :w]
                 dem_chunk = temp
-                # Update mask for resized chunk
                 temp_mask = np.zeros_like(temp, dtype=bool)
                 temp_mask[:h, :w] = mask[:h, :w]
                 mask = temp_mask
 
             # Calculate statistics only on valid data
             if np.any(mask):
-                # Calculate mean and std on valid data only
                 valid_data = dem_chunk[mask]
                 chunk_mean = np.nanmean(valid_data)
 
@@ -91,12 +88,12 @@ class KaneDEM(RasterDataset):
                 )
 
                 # Normalize using chunk statistics, ensuring std is not zero
-                if chunk_std > 1e-6:  # Small threshold to avoid division by very small numbers
+                if chunk_std > 1e-6:
                     dem_chunk = np.where(mask, (dem_chunk - chunk_mean) / chunk_std, 0)
                 else:
-                    dem_chunk = np.where(mask, dem_chunk - chunk_mean, 0)  # Just center if no variance
+                    dem_chunk = np.where(mask, dem_chunk - chunk_mean, 0)
 
-            # Add channel dimension and convert to tensor
+            # Add channel dimension to make shape [B, 1, H, W]
             sample["image"] = torch.from_numpy(dem_chunk[np.newaxis, ...]).float()
             return sample
 

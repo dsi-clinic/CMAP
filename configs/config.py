@@ -12,7 +12,7 @@ DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
-# KC_DEM_ROOT = None
+USE_NIR = False
 KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
@@ -27,30 +27,30 @@ DROPOUT = 0.3
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
-DATASET_MEAN = [0.485, 0.456, 0.406, 0.449, 0.0]  # Last value is average of RGB for NIR
-DATASET_STD = [0.229, 0.224, 0.225, 0.226, 1.0]  # Last value is average of RGB for NIR
+DATASET_MEAN = [0.485, 0.456, 0.406]  # RGB only
+DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 
 # mean/std of NAIP data + DEM
 # DATASET_MEAN = [
 #     0.328,  # R
 #     0.420,  # G
 #     0.418,  # B
-#     0.547,  # NIR
-#     0.0,  # DEM - already centered by preprocessing
+#     0.547,  # NIR (optional)
+#     0.0,    # DEM (optional)
 # ]
 # DATASET_STD = [
 #     0.30,  # R
 #     0.25,  # G
 #     0.25,  # B
-#     0.36,  # NIR
-#     1.0,  # DEM - already scaled by preprocessing
+#     0.36,  # NIR (optional)
+#     1.0,   # DEM (optional)
 # ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LR = 1e-5
 NUM_WORKERS = 8
-EPOCHS = 10
+EPOCHS = 3
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5

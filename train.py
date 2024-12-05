@@ -111,23 +111,21 @@ def writer_prep(exp_n, trial_num, wandb_t):
 
 
 def initialize_dataset(config):
-    """Load and merge NAIP, KaneCounty, and optional DEM data.
+    """Load and merge NAIP, KaneCounty, and optional DEM data."""
+    if not config.USE_NIR:
 
-    This function loads NAIP (National Agriculture Imagery Program)
-    data and KaneCounty shapefile data. Optionally, if DEM
-    (Digital Elevation Model) data is provided, it is also loaded
-    and merged with NAIP data.
+        class RGBOnlyNAIP(NAIP):
+            def __getitem__(self, query):
+                sample = super().__getitem__(query)
+                sample["image"] = sample["image"][:3]  # Keep only RGB channels
+                return sample
 
-    Args:
-        config: settings in the configuration file
+        naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
+        config.DATASET_MEAN = config.DATASET_MEAN[:3]
+        config.DATASET_STD = config.DATASET_STD[:3]
+    else:
+        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    Returns:
-        tuple: A tuple containing the loaded NAIP and KaneCounty
-            datasets.
-            The first element is the NAIP dataset, and the
-            second element is the KaneCounty dataset.
-    """
-    naip_dataset = NAIP(config.KC_IMAGE_ROOT)
     shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
     dataset_config = (
         config.KC_LAYER,
@@ -141,6 +139,9 @@ def initialize_dataset(config):
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
+        if not config.USE_NIR:
+            config.DATASET_MEAN.append(0.0)  # DEM mean
+            config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
 
     return naip_dataset, kc_dataset
@@ -354,7 +355,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     # Denormalize augmented images for plotting
     data_mean = config.DATASET_MEAN
     data_std = config.DATASET_STD
-    if len(data_mean) < x_aug.size(1):  # Extend mean/std if needed
+    if len(data_mean) < x_aug.size(1):
         data_mean = data_mean + [data_mean[0]] * (x_aug.size(1) - len(data_mean))
         data_std = data_std + [data_std[0]] * (x_aug.size(1) - len(data_std))
 
@@ -363,26 +364,39 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     x_aug_denorm = x_aug * std.to(x_aug.device) + mean.to(x_aug.device)
 
     for i in range(config.BATCH_SIZE):
-        if config.KC_DEM_ROOT is None:
-            plot_tensors = {
-                "RGB image": x[i][0:3, :, :].cpu() / 255.0,  # Scale raw input to [0,1]
-                "mask": samp_mask[i],
-                "augmented RGB image": x_aug_denorm[i][0:3, :, :].cpu().clip(0, 1),
-                "augmented mask": y_aug[i].cpu(),
-                "NIR": x[i][-1, :, :].cpu() / 255.0,  # Scale raw input to [0,1]
-                "augmented NIR": x_aug_denorm[i][-1, :, :].cpu().clip(0, 1),
-            }
-        else:
-            plot_tensors = {
-                "RGB image": x[i][0:3, :, :].cpu() / 255.0,
-                "augmented RGB image": x_aug_denorm[i][0:3, :, :].cpu().clip(0, 1),
-                "mask": samp_mask[i],
-                "augmented mask": y_aug[i].cpu(),
-                "DEM": x[i][-1, :, :].cpu() / 255.0,
-                "augmented DEM": x_aug_denorm[i][-1, :, :].cpu().clip(0, 1),
-                "NIR": x[i][-2, :, :].cpu() / 255.0,
-                "augmented NIR": x_aug_denorm[i][-2, :, :].cpu().clip(0, 1),
-            }
+        plot_tensors = {
+            "RGB image": x[i][0:3, :, :].cpu() / 255.0,
+            "augmented RGB image": x_aug_denorm[i][0:3, :, :].cpu().clip(0, 1),
+            "mask": samp_mask[i],
+            "augmented mask": y_aug[i].cpu(),
+        }
+
+        # Add NIR if enabled
+        if config.USE_NIR:
+            nir_idx = 3  # NIR is always after RGB
+            plot_tensors.update(
+                {
+                    "NIR": x[i][nir_idx : nir_idx + 1, :, :].cpu() / 255.0,
+                    "augmented NIR": x_aug_denorm[i][nir_idx : nir_idx + 1, :, :]
+                    .cpu()
+                    .clip(0, 1),
+                }
+            )
+
+        # Add DEM if enabled
+        if config.KC_DEM_ROOT is not None:
+            dem_idx = (
+                3 if not config.USE_NIR else 4
+            )  # DEM is after NIR if NIR is enabled
+            plot_tensors.update(
+                {
+                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
+                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
+                    .cpu()
+                    .clip(0, 1),
+                }
+            )
+
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
             plot_tensors,
@@ -674,19 +688,23 @@ def test(
                 x_denorm = x * std.to(x.device) + mean.to(x.device)
 
                 for i in range(config.BATCH_SIZE):
-                    if config.KC_DEM_ROOT is None:
-                        plot_tensors = {
-                            "RGB image": x_denorm[i][0:3, :, :].cpu().clip(0, 1),
-                            "ground truth": samp_mask[i],
-                            "prediction": preds[i].cpu(),
-                        }
-                    else:
-                        plot_tensors = {
-                            "RGB image": x_denorm[i][0:3, :, :].cpu().clip(0, 1),
-                            "DEM": x_denorm[i][-1, :, :].cpu().clip(0, 1),
-                            "ground truth": samp_mask[i],
-                            "prediction": preds[i].cpu(),
-                        }
+                    plot_tensors = {
+                        "RGB image": x_denorm[i][0:3, :, :].cpu().clip(0, 1),
+                        "ground truth": samp_mask[i],
+                        "prediction": preds[i].cpu(),
+                    }
+
+                    # Add DEM if enabled
+                    if config.KC_DEM_ROOT is not None:
+                        dem_idx = 3 if not config.USE_NIR else 4
+                        plot_tensors.update(
+                            {
+                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
+                                .cpu()
+                                .clip(0, 1),
+                            }
+                        )
+
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
