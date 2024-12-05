@@ -8,7 +8,6 @@ To run: from repo directory (2024-winter-cmap)
 import argparse
 import datetime
 import importlib.util
-import json
 import logging
 import random
 import shutil
@@ -71,9 +70,9 @@ def writer_prep(exp_n, trial_num, wandb_tune):
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
     out_root = Path(config.OUTPUT_ROOT) / exp_trial_name
     if wandb_tune:
-        Path.mkdir(out_root, exist_ok=True)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
     else:
-        Path.mkdir(out_root, exist_ok=False)
+        Path.mkdir(out_root, exist_ok=True, parents=True)
 
     # create directory for output images
     train_images_root = Path(out_root) / "train-images"
@@ -293,7 +292,7 @@ def create_model():
 
     optimizer = AdamW(
         model.parameters(),
-        learning_rate=config.LEARNING_RATE,
+        lr=config.LEARNING_RATE,
         weight_decay=config.WEIGHT_DECAY,
     )
 
@@ -416,12 +415,22 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
     Path.mkdir(save_dir, exist_ok=True)
 
     for i in range(config.BATCH_SIZE):
-        plot_tensors = {
-            "RGB Image": x[i].cpu(),
-            "Mask": samp_mask[i],
-            "Augmented_RGBImage": x_aug[i].cpu(),
-            "Augmented_Mask": y_aug[i].cpu(),
-        }
+        if config.KC_DEM_ROOT is None:
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_RGBImage": x_aug[i].cpu(),
+                "Augmented_Mask": y_aug[i].cpu(),
+            }
+        else:
+            plot_tensors = {
+                "RGB Image": x[i].cpu(),
+                "Augmented_RGBImage": x_aug[i][0:3, :, :].cpu(),
+                "Mask": samp_mask[i],
+                "Augmented_Mask": y_aug[i].cpu(),
+                "DEM": x[i][-1, :, :].cpu(),
+                "Augmented_DEM": x_aug[i][-1, :, :].cpu(),
+            }
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
             plot_tensors,
@@ -483,7 +492,7 @@ def train_setup(
         save_training_images(
             epoch,
             train_images_root,
-            x,
+            x_scaled,
             samp_mask,
             x_aug,
             y_squeezed,
@@ -695,11 +704,19 @@ def test(
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
                 for i in range(config.BATCH_SIZE):
-                    plot_tensors = {
-                        "RGB Image": x_scaled[i].cpu(),
-                        "ground_truth": samp_mask[i],
-                        "prediction": preds[i].cpu(),
-                    }
+                    if config.KC_DEM_ROOT is None:
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
+                    else:
+                        plot_tensors = {
+                            "RGB Image": x_scaled[i][0:3, :, :].cpu(),
+                            "DEM": x_scaled[i][-1, :, :].cpu(),
+                            "ground_truth": samp_mask[i],
+                            "prediction": preds[i].cpu(),
+                        }
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
@@ -1054,23 +1071,6 @@ if __name__ == "__main__":
     logging.info("Using %s device", MODEL_DEVICE)
 
     naip, kc = initialize_dataset(config)
-
-    def extract_config_dict(config_module):
-        """Convert configuration module into a dictionary"""
-        config_dict = {}
-        for attr in dir(config_module):
-            # Skip private attributes and methods
-            if not attr.startswith("__") and not callable(getattr(config_module, attr)):
-                value = getattr(config_module, attr)
-                # Check if the value is JSON-serializable
-                try:
-                    json.dumps(value)
-                    config_dict[attr] = value
-                except TypeError as e:
-                    logging.warning(
-                        f"Skipping non-serializable config attribute '{attr}': {e}"
-                    )
-        return config_dict
 
     def run_trials():
         """Running training for multiple trials"""
