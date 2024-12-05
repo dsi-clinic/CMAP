@@ -26,7 +26,9 @@ class KaneDEM(RasterDataset):
 
     filename_glob = "Kane2017BE.tif"
 
-    def __init__(self, paths, config, crs=None, res=None, transforms=None):
+    def __init__(
+        self, paths, config, crs=None, res=None, transforms=None, epsilon=1e-6
+    ):
         """Initializes a KaneDEM instance.
 
         Args:
@@ -35,10 +37,12 @@ class KaneDEM(RasterDataset):
             crs: The CRS of the DEM.
             res: The resolution of the DEM.
             transforms: The transforms to apply to the DEM.
+            epsilon: A small value to prevent division by zero.
         """
         super().__init__(paths, crs=crs, res=res, transforms=transforms)
         self.patch_size = config.PATCH_SIZE
         self.use_nir = config.USE_NIR
+        self.epsilon = epsilon
 
     def __getitem__(self, query: BoundingBox):
         """Retrieves a specific DEM sample from the dataset."""
@@ -88,7 +92,7 @@ class KaneDEM(RasterDataset):
                 )
 
                 # Normalize using chunk statistics, ensuring std is not zero
-                if chunk_std > 1e-6:
+                if chunk_std > self.epsilon:
                     dem_chunk = np.where(mask, (dem_chunk - chunk_mean) / chunk_std, 0)
                 else:
                     dem_chunk = np.where(mask, dem_chunk - chunk_mean, 0)
