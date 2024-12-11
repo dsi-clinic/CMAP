@@ -9,7 +9,7 @@ import configs.config as config
 
 def export_filled_dem(diff_dem, grid, output_path):
     """Exports difference DEM to file
-    
+
     Args:
         diff_dem: DEM containing difference between filled and original DEM
         grid: PySheds grid object
@@ -24,10 +24,10 @@ def export_filled_dem(diff_dem, grid, output_path):
 
 def fill_analysis(tiff_path):
     """Loads DEM tiff file, performs fill analysis, and finds the difference
-    
+
     Args:
         tiff_path: file path to DEM tiff file
-    
+
     Returns:
         diff_dem: DEM containing difference between filled and original DEM
         grid: PySheds grid object
