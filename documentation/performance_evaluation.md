@@ -1,8 +1,8 @@
-# Model Evaluation Results
+# Model Evaluation Results: baseline 2024 Fall 
 
 ## Overall Accuracy
-- **Training Jaccard Index (IoU):** 0.5844 (58.4%)
-- **Test Jaccard Index (IoU):** 0.5190 (51.9%)
+- **Training Jaccard Index (IoU):** 0.5844 (std:0.042)
+- **Test Jaccard Index (IoU):** 0.5130 (std:0.053)
 
 ## Class-Specific Accuracy (IoU):
 | Class                | IoU Value  | Accuracy (%) |

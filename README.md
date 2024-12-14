@@ -131,7 +131,7 @@ Contains short, clean notebooks to demonstrate analysis. Documentation and descr
 
 ### output
 
-Contains example model output images.
+Contains example model output images and W&B tuning output plots.
 
 ### data
 
@@ -217,8 +217,16 @@ CMAP is the project name.
 This is particularly useful for quick tests or for running sweeps locally without using a job scheduling system like SLURM.
 
 ## Running a Sweep using a SLURM Job Script
-Please refer to [future-work documentation](future-work.md) for more information.
+1. **Edit the `sweep.job` File**:
+   - Replace `<YOUR-USERNAME>` with your username.
+   - Replace `<W&B_organization_name>` and `<sweep_id>` with the appropriate values from your W&B project.
 
+2. **Submit the Job and Monitor Its Status**:
+   ```bash
+   sbatch sweep.job
+   squeue -u <YOUR-USERNAME>
+   ```
+Please refer to [future-work documentation](future-work.md) for more detailed information.
 
 ## Collaborators
 - Matthew Rubenstein - rubensteinm@uchicago.edu
