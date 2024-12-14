@@ -149,12 +149,12 @@ The parallel coordinate plot below visualizes the relationship between hyperpara
 
 ## Class Imbalance: Woring in Progress PR #147
 ### Class distribution by freqency and area size 
-| BasinType                  | count | total_area    | class_id |
-|----------------------------|-------|---------------|----------|
-| POND                       | 2375  | 1.702098e+07  | 1        |
-| WETLAND                    | 1655  | 9.540348e+06  | 2        |
-| DRY BOTTOM - TURF          | 936   | 2.831817e+06  | 3        |
-| DRY BOTTOM - MESIC PRAIRIE | 223   | 1.074185e+06  | 4        |
+| BasinType                  | count | total_area    | 
+|----------------------------|-------|---------------|
+| POND                       | 2375  | 1.702098e+07  |
+| WETLAND                    | 1655  | 9.540348e+06  |
+| DRY BOTTOM - TURF          | 936   | 2.831817e+06  |
+| DRY BOTTOM - MESIC PRAIRIE | 223   | 1.074185e+06  | 
 
 ![Frequency of each class:](/documentation/frequency_by_class_plot.png)
 ![Area size of each class:](/documentation/area_by_class_plot.png)
