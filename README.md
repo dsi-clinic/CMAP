@@ -233,3 +233,4 @@ Please refer to [future-work documentation](future-work.md) for more information
 - Collin Kim - collinkim415@uchicago.edu
 - Mohit Kumar Sathishkumar - mohitk@uchicago.edu
 - Xiaoyue Wei - xiaoyue1@uchicago.edu
+- Cassandra Haas - cassandrahaas@uchicago.edu
