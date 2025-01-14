@@ -235,10 +235,12 @@ Please refer to [future-work documentation](future-work.md) for more detailed in
 - Mingyan Wang - mingyan@uchicago.edu
 - Miao Li - mli628@uchicago.edu
 - Grey Xu - greyxu@uchicago.edu
-
-## Collaborators- Fall 2024
-- Anna Poon - annapoon@uchicago.edu
 - Collin Kim - collinkim415@uchicago.edu
 - Mohit Kumar Sathishkumar - mohitk@uchicago.edu
 - Xiaoyue Wei - xiaoyue1@uchicago.edu
+
+## Collaborators- Winter 2025
+- Gregory Caesar - gregoryc25@uchicago.edu
+- Alan Cherman - acherman@uchicago.edu
+- Anna Poon - annapoon@uchicago.edu
 - Cassandra Haas - cassandrahaas@uchicago.edu
