@@ -11,7 +11,6 @@ import importlib.util
 import logging
 import random
 import shutil
-import sys
 import socket
 import sys
 from collections import defaultdict
@@ -59,6 +58,7 @@ def arg_parsing(argument):
     num_trials_arg = int(argument.num_trials)
 
     return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+
 
 def check_head_node(head_node_name="head-node"):
     """Check if the script is running on the head node and exit if true."""
@@ -1102,7 +1102,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
 
 
 if __name__ == "__main__":
-     # Check if running on the head node and exit if true
+    # Check if running on the head node and exit if true
     check_head_node(head_node_name="fe01")
 
     # import config and experiment name from runtime args
