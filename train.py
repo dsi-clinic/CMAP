@@ -12,6 +12,8 @@ import logging
 import random
 import shutil
 import sys
+import socket
+import sys
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -57,6 +59,16 @@ def arg_parsing(argument):
     num_trials_arg = int(argument.num_trials)
 
     return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+
+def check_head_node(head_node_name="head-node"):
+    """Check if the script is running on the head node and exit if true."""
+    current_hostname = socket.gethostname()
+    if current_hostname == head_node_name:
+        print(
+            f"WARNING: train.py was attempted to be run on the head node ('{current_hostname}'). "
+            "Please run this script on a compute node instead."
+        )
+        sys.exit(1)
 
 
 def writer_prep(exp_n, trial_num, wandb_tune):
@@ -1090,6 +1102,9 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
 
 
 if __name__ == "__main__":
+     # Check if running on the head node and exit if true
+    check_head_node(head_node_name="fe01")
+
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
         description="Train a segmentation model to predict stormwater storage "
