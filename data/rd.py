@@ -18,6 +18,11 @@ import rasterio
 import torch
 from shapely.geometry import box
 from torchgeo.datasets import BoundingBox, GeoDataset
+from pathlib import Path
+import sys
+
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
 
 from configs.config import KC_LABELS, KC_LAYER, KC_SHAPE_FILENAME, KC_SHAPE_ROOT
 
@@ -102,6 +107,7 @@ class KaneCounty(GeoDataset):
         layer, labels, patch_size, dest_crs, res = kc_configs
 
         gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
+        gdf = gdf.head(100) # TAKE ONLY FIRST TEN ENTIRES
         self.gdf = gdf
 
         context_size = math.ceil(patch_size / 2 * res)
@@ -213,7 +219,7 @@ class RiverDataset(GeoDataset):
         5: (255, 255, 0, 255),
     }
 
-    all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
+    all_labels = {0: "UNKNOWN", 5: "STREAM - RIVER"}
 
     def __init__(self, path: str, rd_configs, kc: True) -> None:
         """Initialize a new river dataset instance.
@@ -235,6 +241,7 @@ class RiverDataset(GeoDataset):
 
         labels, patch_size, dest_crs, res = rd_configs
         gdf = self._load_and_prepare_data(path, dest_crs)
+        gdf = gdf.head(100) # ONLY USE FIRST 20 ENTRIES
         self.gdf = gdf
 
         # Debug prints
@@ -261,7 +268,7 @@ class RiverDataset(GeoDataset):
             self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
             self.gdf["BasinType"] = self.gdf["BasinType"].fillna(self.gdf["FCODE"])
 
-            KC_LABELS["STREAM/RIVER"] = (
+            KC_LABELS["STREAM - RIVER"] = (
                 5  # add the river labels to the existing KC labels
             )
             labels = KC_LABELS
@@ -308,6 +315,8 @@ class RiverDataset(GeoDataset):
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
+        
+        print("gdf loaded and prepared")
 
         return gdf
 
@@ -315,7 +324,7 @@ class RiverDataset(GeoDataset):
         self,
         gdf,
         reference_crs=4326,  # this is the original CRS
-        target_chip_size=0.005,
+        target_chip_size=0.005, # originally 0.005
     ):
         """Populate spatial index with proportional chips based on CRS bounds."""
         mint, maxt = 0, sys.maxsize

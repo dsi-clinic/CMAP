@@ -35,6 +35,9 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
+import warnings
+warnings.filterwarnings("always", module="torch")
+
 MODEL_DEVICE = (
     "cuda"
     if torch.cuda.is_available()
@@ -152,6 +155,7 @@ def initialize_dataset(config):
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+        
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -203,6 +207,7 @@ def build_dataset(naip_set, split_rate):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
+    print("splitting into train test")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -725,8 +730,10 @@ def test(
             normalize = K.Normalize(mean=data_mean, std=data_std)
             x = normalize(x)
 
+            logger = logging.getLogger()
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test normalized input", logging.getLogger())
+            logger.info("finished logging stats")
 
             y = samp_mask.to(MODEL_DEVICE)
             if y.size(0) == 1:
@@ -735,31 +742,43 @@ def test(
                 y_squeezed = y.squeeze()
 
             # compute prediction error
+            logger.info("about to pass x to model")
             outputs = model(x)
+            logger.info("finished passing x to model")
 
+            print("checking if outputs is tuple")
             if isinstance(outputs, tuple):
                 outputs = outputs[0]
 
+            print("computing loss")
             loss = loss_fn(outputs, y_squeezed)
 
+            print("computing predictions")
             # update metric
             preds = outputs.argmax(dim=1)
+            print("updating jaccard")
             jaccard.update(preds, y_squeezed)
 
+            print("computing jaccard per class")
             # update Jaccard per class metric
             jaccard_per_class.forward(preds, y_squeezed)
 
+            print("updating test loss")
             # add test loss to rolling total
             test_loss += loss.item()
 
+            print("checking if need to plot")
+            print(batch)
             # plot first batch
             if batch == 0 or (
                 plateau_count == config.PATIENCE - 1 and batch < num_examples
             ):
+                print("creating epoch directory")
                 epoch_dir = Path(test_image_root) / f"epoch-{epoch}"
                 if not Path.exists(epoch_dir):
                     Path.mkdir(epoch_dir)
 
+                print("denormalizing data")
                 # Denormalize for plotting
                 data_mean = config.DATASET_MEAN
                 data_std = config.DATASET_STD
@@ -773,6 +792,7 @@ def test(
                 std = torch.tensor(data_std).view(-1, 1, 1)
                 x_denorm = x * std.to(x.device) + mean.to(x.device)
 
+                print("plotting batch")
                 for i in range(config.BATCH_SIZE):
                     plot_tensors = {
                         "RGB image": x_denorm[i][0:3, :, :].cpu().clip(0, 1),
@@ -809,9 +829,13 @@ def test(
                             kc.labels_inverse,
                             sample["bbox"][i],
                         )
+            else:
+                print("restarting loop")
+    print("computing final metrics")
     test_loss /= num_batches
     final_jaccard = jaccard.compute()
     final_jaccard_per_class = jaccard_per_class.compute()
+    print("writing to tensorboard")
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
     logger = logging.getLogger()
@@ -819,6 +843,7 @@ def test(
     logger.info(f"Jaccard index: {final_jaccard:.3f}")
     logger.info(f"Test avg loss: {test_loss:.3f}")
 
+    print("logging to wandb if enabled")
     if wandb_tune:
         wandb.log(
             {
@@ -828,6 +853,7 @@ def test(
             }
         )
 
+    print("logging per-class metrics")
     # Access the labels and their names
     _labels = {}
     for label_name, label_id in kc.labels.items():
@@ -838,6 +864,7 @@ def test(
     for i, label_name in _labels.items():
         logger.info(f"IoU for {label_name}: {final_jaccard_per_class[i]:.3f}")
 
+    print("returning metrics")
     return test_loss, final_jaccard
 
 
