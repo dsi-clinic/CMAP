@@ -195,10 +195,14 @@ def initialize_dataset(config):
         return naip_dataset, kc_dataset
 
 
-def build_dataset(naip_set, split_rate):
+def build_dataset(naip_set, split_rate, config):
     """Randomly split and load data to be the test and train sets
-
-    Returns train dataloader and test dataloader
+    Args: 
+    naip_set (Dataset): The NAIP (imagery) dataset
+    split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
+    config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
+    
+    Returns tuple (train dataloader, test dataloader)
     """
     # record generator seed
     seed = random.SystemRandom().randint(0, sys.maxsize)
@@ -209,8 +213,8 @@ def build_dataset(naip_set, split_rate):
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & kc
-    test_dataset = test_portion & kc
+    train_dataset = train_portion & initialize_dataset(config)[1]
+    test_dataset = test_portion & initialize_dataset(config)[1]
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -1041,7 +1045,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate)
+    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate, config)
     (
         model,
         loss_fn,
