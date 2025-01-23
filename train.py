@@ -197,13 +197,14 @@ def initialize_dataset(config):
 
 def build_dataset(naip_set, split_rate, config):
     """Randomly split and load data to be the test and train sets
-    Args: 
+    Args:
     naip_set (Dataset): The NAIP (imagery) dataset
     split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
     config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
-    
+
     Returns tuple (train dataloader, test dataloader)
     """
+    
     # record generator seed
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
