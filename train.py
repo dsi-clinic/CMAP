@@ -59,13 +59,14 @@ def arg_parsing(argument):
     return exp_name_arg, split_arg, wandb_tune, num_trials_arg
 
 
-def writer_prep(exp_n, trial_num, wandb_tune):
+def writer_prep(exp_n, trial_num, wandb_tune, config):
     """Preparing writers and logging for each training trial
 
     Args:
-        exp_n: experiment name
-        trial_num: current trial number
-        wandb_tune: whether tuning with wandb
+        exp_n: STR experiment name
+        trial_num: INT current trial number
+        wandb_tune: BOOL whether tuning with wandb
+        config (module): Configuration object containing OUTPUT_ROOT, etc.
     """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
@@ -1033,7 +1034,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         out_root,
         writer,
         logger,
-    ) = writer_prep(exp_n, num, wandb_tune)
+    ) = writer_prep(exp_n, num, wandb_tune, config)
     # Set 'epoch' based on debug mode
     if args.debug:
         epoch = 1
