@@ -203,13 +203,21 @@ def build_dataset(naip_set, split_rate):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
+    print(f"len(naip_set): {len(naip_set)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
+    print(
+        f"before intersection, train_portion: {len(train_portion)}, test_portion: {len(test_portion)}"
+    )
+    print(f"before intersection, len(kc): {len(kc)}")
     train_dataset = train_portion & kc
     test_dataset = test_portion & kc
+    print(
+        f"after intersection, train_dataset: {len(train_dataset)}, test_dataset: {len(test_dataset)}"
+    )
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -922,25 +930,25 @@ def train(
         epoch = config.EPOCHS
 
     for t in range(epoch):
-        if t == 0:
-            test_config = (
-                loss_fn,
-                test_jaccard,
-                t,
-                plateau_count,
-                test_image_root,
-                writer,
-                num_classes,
-                jaccard_per_class,
-            )
-            test_loss, t_jaccard = test(
-                test_dataloader,
-                model,
-                test_config,
-                writer,
-                args,
-            )
-            print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
+        # if t == 0:
+        #     test_config = (
+        #         loss_fn,
+        #         test_jaccard,
+        #         t,
+        #         plateau_count,
+        #         test_image_root,
+        #         writer,
+        #         num_classes,
+        #         jaccard_per_class,
+        #     )
+        #     test_loss, t_jaccard = test(
+        #         test_dataloader,
+        #         model,
+        #         test_config,
+        #         writer,
+        #         args,
+        #     )
+        #     print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
         train_config = (

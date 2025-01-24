@@ -153,18 +153,18 @@ class KaneCounty(GeoDataset):
             IndexError: if query is not found in the index
         """
         hits = self.index.intersection(tuple(query), objects=True)
-        objs = [hit.object for hit in hits]
-
-        if not objs:
+        if not hits:
             raise IndexError(
                 f"query: {query} not found in index with bounds: {self.bounds}"
             )
 
         shapes = []
-        for obj in objs:
-            shape = obj["geometry"]
-            label = self.labels[obj["BasinType"]]
-            shapes.append((shape, label))
+        for hit in hits:
+            # hit.object is now a list of dictionaries
+            for obj in hit.object:
+                shape = obj["geometry"]
+                label = self.labels[obj["BasinType"]]
+                shapes.append((shape, label))
 
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res
@@ -311,16 +311,9 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(
-        self,
-        gdf,
-        reference_crs=4326,  # this is the original CRS
-        target_chip_size=0.005,
-    ):
+    def _populate_index(self, gdf, reference_crs=4326, target_chip_size=0.01):
         """Populate spatial index with proportional chips based on CRS bounds."""
         mint, maxt = 0, sys.maxsize
-
-        self.bounding_boxes = []
         i = 0  # initialize chip index counter
 
         from pyproj import CRS, Transformer
@@ -381,18 +374,21 @@ class RiverDataset(GeoDataset):
         ):
             # Iterate over the y-axis within the bounds of the gdf
             for y in np.arange(miny, maxy, chip_size_y):
-                # Create a rectangular chip
                 chip = box(x, y, x + chip_size_x, y + chip_size_y)
                 coords = (x, y, x + chip_size_x, y + chip_size_y, mint, maxt)
 
                 # Find intersecting geometries in gdf
                 intersecting_rows = gdf[gdf.intersects(chip)]
-                for _, row in intersecting_rows.iterrows():
-                    # Insert only intersecting chips with their corresponding row data
-                    self.index.insert(i, coords, row[["BasinType", "geometry"]])
-                    i += 1  # Increment the global index for each chip
+                if not intersecting_rows.empty:
+                    # Store all intersecting geometries for this chip in one index entry
+                    self.index.insert(
+                        i,
+                        coords,
+                        intersecting_rows[["BasinType", "geometry"]].to_dict("records"),
+                    )
+                    i += 1
 
-        print(f"Total chips inserted: {i}")  # chips and polygons are many-to-many
+        print(f"Total chips inserted: {i}")
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
@@ -407,18 +403,18 @@ class RiverDataset(GeoDataset):
             IndexError: if query is not found in the index
         """
         hits = self.index.intersection(tuple(query), objects=True)
-        objs = [hit.object for hit in hits]
-
-        if not objs:
+        if not hits:
             raise IndexError(
                 f"query: {query} not found in index with bounds: {self.bounds}"
             )
 
         shapes = []
-        for obj in objs:
-            shape = obj["geometry"]
-            label = self.labels[obj["BasinType"]]
-            shapes.append((shape, label))
+        for hit in hits:
+            # hit.object is now a list of dictionaries
+            for obj in hit.object:
+                shape = obj["geometry"]
+                label = self.labels[obj["BasinType"]]
+                shapes.append((shape, label))
 
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res

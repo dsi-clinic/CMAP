@@ -13,7 +13,8 @@ KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
 USE_NIR = False
-KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+KC_DEM_ROOT = None
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -123,7 +124,7 @@ RD_LABELS = {
     "STREAM/RIVER": 5,
 }
 
-USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
 
 # for wandb
 WANDB_API = ""
