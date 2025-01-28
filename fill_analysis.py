@@ -7,6 +7,7 @@ from pysheds.grid import Grid
 import configs.config as config
 
 
+
 def export_filled_dem(diff_dem, grid, output_path):
     """Exports difference DEM to file
 
@@ -21,6 +22,15 @@ def export_filled_dem(diff_dem, grid, output_path):
 
     return
 
+def normalize_filled_dem(diff_dem):
+    """Normalizes difference DEM(WIP)
+
+    Args:
+        diff_dem: DEM containing difference between filled and original DEM
+    """
+    # Should normalization formula be grabbed directly from dem_params.py?
+    # Consider local normalization as shown in Castillo et al.(2014)
+    return
 
 def fill_analysis(tiff_path):
     """Loads DEM tiff file, performs fill analysis, and finds the difference
