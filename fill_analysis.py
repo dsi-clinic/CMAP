@@ -2,10 +2,10 @@
 
 from pathlib import Path
 
+import numpy as np
 from pysheds.grid import Grid
 
 import configs.config as config
-
 
 
 def export_filled_dem(diff_dem, grid, output_path):
@@ -22,15 +22,25 @@ def export_filled_dem(diff_dem, grid, output_path):
 
     return
 
-def normalize_filled_dem(diff_dem):
+def normalize_diff_dem(diff_dem):
     """Normalizes difference DEM(WIP)
 
     Args:
         diff_dem: DEM containing difference between filled and original DEM
+    Returns:
+        normalized: normalized diff_dem with mean=0 and stddev=1
     """
-    # Should normalization formula be grabbed directly from dem_params.py?
     # Consider local normalization as shown in Castillo et al.(2014)
-    return
+
+    mean = np.mean(diff_dem) 
+    std = np.std(diff_dem)
+    
+    if std == 0:  # Prevent division by zero
+        return diff_dem - mean  # If no variation, just center to 0
+    
+    normalized = (diff_dem - mean) / std
+
+    return normalized
 
 def fill_analysis(tiff_path):
     """Loads DEM tiff file, performs fill analysis, and finds the difference
@@ -53,7 +63,10 @@ def fill_analysis(tiff_path):
     # Find Difference Between Filled DEM and Original DEM
     diff_dem = filled_dem - dem
 
-    return diff_dem, grid
+    # Normalize Difference DEM with Z-score normalization (mean = 0, stddev = 1)
+    normalized_diff_dem = normalize_diff_dem(diff_dem)
+
+    return normalized_diff_dem, grid
 
 
 if __name__ == "__main__":
