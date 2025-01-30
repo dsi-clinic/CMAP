@@ -293,7 +293,18 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
     return base_loss
 
 
-def create_model():
+def create_model(
+    model_type,
+    backbone,
+    num_classes,
+    weights,
+    dropout,
+    loss_function_name,
+    ignore_index,
+    learning_rate,
+    weight_decay,
+    device="cpu",
+):
     """Setting up training model, loss function and measuring metrics
 
     Returns:
@@ -307,45 +318,45 @@ def create_model():
     """
     # create the model
     model_configs = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
-        "num_classes": config.NUM_CLASSES,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
+        "model": model_type,
+        "backbone": backbone,
+        "num_classes": num_classes,
+        "weights": weights,
+        "dropout": dropout,
     }
 
-    model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
+    model = SegmentationModel(model_configs).model.to(device)
     logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
         importlib.import_module("segmentation_models_pytorch.losses"),
-        config.LOSS_FUNCTION,
+        loss_function_name,
     )
     # Initialize the loss function with the required parameters
     loss_fn = loss_fn_class(mode="multiclass")
 
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
-        ignore_index=config.IGNORE_INDEX,
+        num_classes=num_classes,
+        ignore_index=ignore_index,
         average="micro",
-    ).to(MODEL_DEVICE)
+    ).to(device)
     test_jaccard = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
-        ignore_index=config.IGNORE_INDEX,
+        num_classes=num_classes,
+        ignore_index=ignore_index,
         average="micro",
-    ).to(MODEL_DEVICE)
+    ).to(device)
     jaccard_per_class = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
-        ignore_index=config.IGNORE_INDEX,
+        num_classes=num_classes,
+        ignore_index=ignore_index,
         average=None,
-    ).to(MODEL_DEVICE)
+    ).to(device)
 
     optimizer = AdamW(
         model.parameters(),
-        lr=config.LEARNING_RATE,
-        weight_decay=config.WEIGHT_DECAY,
+        lr=learning_rate,
+        weight_decay=weight_decay,
     )
 
     return (
@@ -1054,7 +1065,18 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         test_jaccard,
         jaccard_per_class,
         optimizer,
-    ) = create_model()
+    ) = create_model(
+        model_type=config.MODEL,
+        backbone=config.BACKBONE,
+        num_classes=config.NUM_CLASSES,
+        weights=config.WEIGHTS,
+        dropout=config.DROPOUT,
+        loss_function_name=config.LOSS_FUNCTION,
+        ignore_index=config.IGNORE_INDEX,
+        learning_rate=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
+        device=MODEL_DEVICE,
+    )
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
         config.SPATIAL_AUG_INDICES,
