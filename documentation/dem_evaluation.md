@@ -1,3 +1,4 @@
+# Performance
 Updated 1/27/2025 -
 
 All image and spatial augments work individually, as set in **SPATIAL_AUG_INDICES** and **IMAGE_AUG_INDICES** within config.py. When working together, however, some indices are no longer activated - resized crop, for example, seems to not always be present and needs to be investigated further to insure.
@@ -72,3 +73,9 @@ average: 0.422, standard deviation:0.000
 
 
 The results of the DEM tests return lower than running without the DEM. Randomness is involved in these tests, however, and this may not be an accurate reading of the effectiveness of DEM vs. no DEM.
+
+# Processes Involved
+Updated 1/28/2025:
+The DEM files are normalized on an image by image basis, though the RGB files are normalized across the entire population of images. This is working as intended. The Bare Earth DEM is used rather than the Hydro-Enforced DEM. This is wonderful, as long as it is being processed correctly. Data and Kane County documentation can be found in /net/projects/cmap/data/kane-county-data.
+
+Castillo et al.(2014, doi: 10.1002/esp.3595) has more detail on normalization techniques necessary, and recommends normalizing slope data. In this case, the filled DEM is the equivalent of slope data.
