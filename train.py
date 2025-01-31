@@ -59,6 +59,21 @@ def arg_parsing(argument):
     return exp_name_arg, split_arg, wandb_tune, num_trials_arg
 
 
+def arg_parsing(argument):
+    """Parsing arguments passed in from command line"""
+    # if no experiment name provided, set to timestamp
+    exp_name_arg = argument.experiment_name
+    if exp_name_arg is None:
+        exp_name_arg = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
+
+    split_arg = float(int(argument.split) / 100)
+    # tuning with wandb
+    wandb_tune = argument.tune
+    num_trials_arg = int(argument.num_trials)
+
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+
+
 def writer_prep(exp_n, trial_num, wandb_tune, config):
     """Preparing writers and logging for each training trial
 
