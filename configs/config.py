@@ -50,8 +50,8 @@ BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
-NUM_WORKERS = 8
-EPOCHS = 4
+NUM_WORKERS = 8 # previously 8
+EPOCHS = 1 #previously 4
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
@@ -121,7 +121,7 @@ RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 RD_LABELS = {
     "BACKGROUND": 0,
-    "STREAM/RIVER": 5,
+    "STREAM-RIVER": 5,
 }
 
 USE_RIVERDATASET = True  # change to True if training w/ RiverDataset

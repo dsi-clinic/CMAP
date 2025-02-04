@@ -19,11 +19,11 @@ import torch
 from shapely.geometry import box
 from torchgeo.datasets import BoundingBox, GeoDataset
 
-from configs.config import KC_LABELS, KC_LAYER, KC_SHAPE_FILENAME, KC_SHAPE_ROOT
-
 # Add the parent directory (contains both 'configs' and 'data') to sys.path
 parent_dir = Path(__file__).resolve().parent.parent
 sys.path.append(str(parent_dir))
+
+from configs.config import KC_LABELS, KC_LAYER, KC_SHAPE_FILENAME, KC_SHAPE_ROOT
 
 """
 This module provides a custom PyTorch GeoDataset for working with vector data
@@ -102,6 +102,7 @@ class KaneCounty(GeoDataset):
         layer, labels, patch_size, dest_crs, res = kc_configs
 
         gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
+        gdf = gdf.head(3) # LIMIT NUMBER OF KC OBJECTS
         self.gdf = gdf
 
         context_size = math.ceil(patch_size / 2 * res)
@@ -213,7 +214,7 @@ class RiverDataset(GeoDataset):
         5: (255, 255, 0, 255),
     }
 
-    all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
+    all_labels = {0: "UNKNOWN", 5: "STREAM-RIVER"}
 
     def __init__(self, path: str, rd_configs, kc: True) -> None:
         """Initialize a new river dataset instance.
@@ -235,6 +236,10 @@ class RiverDataset(GeoDataset):
 
         labels, patch_size, dest_crs, res = rd_configs
         gdf = self._load_and_prepare_data(path, dest_crs)
+        gdf = gdf.iloc[300:307] # LIMIT NUMBER OF RD OBJECTS
+        gdf.loc[gdf["FCODE"] == "STREAM/RIVER", "FCODE"] = "STREAM-RIVER"
+        #gdf = gdf.dropna()
+
         self.gdf = gdf
 
         # Debug prints
@@ -261,7 +266,7 @@ class RiverDataset(GeoDataset):
             self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
             self.gdf["BasinType"] = self.gdf["BasinType"].fillna(self.gdf["FCODE"])
 
-            KC_LABELS["STREAM/RIVER"] = (
+            KC_LABELS["STREAM-RIVER"] = (
                 5  # add the river labels to the existing KC labels
             )
             labels = KC_LABELS
@@ -311,7 +316,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, gdf, reference_crs=4326, target_chip_size=0.01):
+    def _populate_index(self, gdf, reference_crs=4326, target_chip_size=0.0013):
         """Populate spatial index with proportional chips based on CRS bounds."""
         mint, maxt = 0, sys.maxsize
         i = 0  # initialize chip index counter

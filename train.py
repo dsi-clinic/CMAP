@@ -35,6 +35,9 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
+import warnings
+warnings.filterwarnings("ignore")
+
 MODEL_DEVICE = (
     "cuda"
     if torch.cuda.is_available()
@@ -212,9 +215,9 @@ def build_dataset(naip_set, split_rate):
     print(
         f"before intersection, train_portion: {len(train_portion)}, test_portion: {len(test_portion)}"
     )
-    print(f"before intersection, len(kc): {len(kc)}")
-    train_dataset = train_portion & kc
-    test_dataset = test_portion & kc
+    print(f"before intersection, len(labeled_data): {len(labeled_data)}")
+    train_dataset = train_portion & labeled_data
+    test_dataset = test_portion & labeled_data
     print(
         f"after intersection, train_dataset: {len(train_dataset)}, test_dataset: {len(test_dataset)}"
     )
@@ -459,8 +462,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            kc.colors,
-            kc.labels_inverse,
+            labeled_data.colors,
+            labeled_data.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -803,7 +806,7 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = labeled_data.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
@@ -813,8 +816,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            kc.colors,
-                            kc.labels_inverse,
+                            labeled_data.colors,
+                            labeled_data.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -838,7 +841,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in kc.labels.items():
+    for label_name, label_id in labeled_data.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -848,6 +851,9 @@ def test(
 
     return test_loss, final_jaccard
 
+
+import time
+import logging
 
 def train(
     model: Module,
@@ -859,34 +865,9 @@ def train(
     args,
     epoch,
 ) -> tuple[float, float]:
-    """Train a deep learning model using the specified configuration and parameters.
+    """Train a deep learning model using the specified configuration and parameters."""
 
-    Args:
-        model: The deep learning model to be trained.
-        train_test_config: A tuple containing:
-                - train_dataloader: DataLoader for training dataset.
-                - train_jaccard: Function to calculate Jaccard index for training.
-                - test_jaccard: Function to calculate Jaccard index for test.
-                - test_dataloader: DataLoader for test dataset.
-                - loss_fn: Loss function used for training and testing.
-                - optimizer: Optimization algorithm used for training.
-                - jaccard_per_class: Function to calculate Jaccard index per class.
-        aug_config: A tuple containing:
-                - spatial_augs: Spatial augmentations applied during training.
-                - color_augs: Color augmentations applied during training.
-        path_config: A tuple containing:
-                - out_root: Root directory for saving the trained model.
-                - train_images_root: Root directory for training images.
-                - test_image_root: Root directory for test images.
-        writer: The writer object for logging training progress.
-        wandb_tune: Whether running hyperparameter tuning with wandb.
-        args: Additional arguments for debugging or special training conditions.
-        epoch: The configuration for the number of epochs.
-
-    Returns:
-        Tuple[float, float]: A tuple containing the Jaccard index for the last
-             epoch of training and for the test dataset.
-    """
+    # Unpacking configurations
     (
         train_dataloader,
         train_jaccard,
@@ -906,22 +887,13 @@ def train(
         color_augs,
     ) = aug_config
 
-    # How much the loss needs to drop to reset a plateau
+    print("Starting training loop...")
     threshold = config.THRESHOLD
-
-    # How many epochs loss needs to plateau before terminating
     patience = config.PATIENCE
-
-    # Beginning loss
-    best_loss = None
-
-    # How long it's been plateauing
-    plateau_count = 0
-
-    # How many classes we're predicting
     num_classes = config.NUM_CLASSES
+    print(f"Configurations: threshold={threshold}, patience={patience}, num_classes={num_classes}")
 
-    # reducing number of epoch in debugging or hyperparameter tuning
+    # Reducing the number of epochs for debug or tuning
     if args.debug:
         epoch = 1
     elif wandb_tune:
@@ -929,28 +901,16 @@ def train(
     else:
         epoch = config.EPOCHS
 
-    for t in range(epoch):
-        # if t == 0:
-        #     test_config = (
-        #         loss_fn,
-        #         test_jaccard,
-        #         t,
-        #         plateau_count,
-        #         test_image_root,
-        #         writer,
-        #         num_classes,
-        #         jaccard_per_class,
-        #     )
-        #     test_loss, t_jaccard = test(
-        #         test_dataloader,
-        #         model,
-        #         test_config,
-        #         writer,
-        #         args,
-        #     )
-        #     print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
+    best_loss = None
+    plateau_count = 0
 
-        logging.info(f"Epoch {t + 1}\n-------------------------------")
+    for t in range(epoch):
+        print(f"\nStarting Epoch {t + 1}/{epoch}")
+        epoch_start_time = time.time()
+
+        # Train step
+        print("Starting training step...")
+        train_start_time = time.time()
         train_config = (
             loss_fn,
             train_jaccard,
@@ -964,16 +924,28 @@ def train(
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
         )
-        epoch_jaccard = train_epoch(
-            train_dataloader,
-            model,
-            train_config,
-            aug_config,
-            writer,
-            args,
-            wandb_tune,
-        )
+        print("Calling train_epoch...")
+        try:
+            epoch_jaccard = train_epoch(
+                train_dataloader,
+                model,
+                train_config,
+                aug_config,
+                writer,
+                args,
+                wandb_tune,
+            )
+            print("train_epoch completed.")
+        except Exception as e:
+            print(f"Error in train_epoch: {e}")
+            raise
 
+        train_duration = time.time() - train_start_time
+        print(f"Training step duration: {train_duration:.2f} seconds")
+
+        # Test step
+        print("Starting testing step...")
+        test_start_time = time.time()
         test_config = (
             loss_fn,
             test_jaccard,
@@ -984,27 +956,43 @@ def train(
             num_classes,
             jaccard_per_class,
         )
-        test_loss, t_jaccard = test(
-            test_dataloader,
-            model,
-            test_config,
-            writer,
-            wandb_tune,
-        )
-        # Checks for plateau
+        print("Calling test function...")
+        try:
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
+                test_config,
+                writer,
+                wandb_tune,
+            )
+            print("Test function completed.")
+        except Exception as e:
+            print(f"Error in test function: {e}")
+            raise
+
+        test_duration = time.time() - test_start_time
+        print(f"Testing step duration: {test_duration:.2f} seconds")
+
+        # Plateau check
         if best_loss is None:
             best_loss = test_loss
+            print("Setting initial best loss.")
         elif test_loss < best_loss - threshold:
             best_loss = test_loss
             plateau_count = 0
+            print("Improved test loss, resetting plateau count.")
         else:
             plateau_count += 1
+            print(f"No significant improvement. Plateau count: {plateau_count}")
             if plateau_count >= patience:
                 logging.info(
                     f"Loss Plateau: {t} epochs, reached patience of {patience}"
                 )
+                break
 
+        # Log metrics to wandb
         if wandb_tune:
+            print("Logging metrics to wandb...")
             wandb.log(
                 {
                     "epoch": t + 1,
@@ -1013,18 +1001,26 @@ def train(
                     "test_loss": test_loss,
                 }
             )
+            print("wandb logging completed.")
 
-        # Break after the first iteration in debug mode
+        # Debug mode: break after one iteration
         if args.debug and t == 0:
-            print("Debug mode: Skipping the rest of the training loop")
+            print("Debug mode: Ending after the first epoch.")
             break
 
-    print("Done!")
+        epoch_duration = time.time() - epoch_start_time
+        print(f"Epoch {t + 1} duration: {epoch_duration:.2f} seconds")
 
-    torch.save(model.state_dict(), Path(out_root) / "model.pth")
-    logging.info("Saved PyTorch Model State to %s", out_root)
+    print("Training completed!")
+
+    # Save the model
+    save_path = Path(out_root) / "model.pth"
+    print(f"Saving model to {save_path}...")
+    torch.save(model.state_dict(), save_path)
+    logging.info("Saved PyTorch Model State to %s", save_path)
 
     return epoch_jaccard, t_jaccard
+
 
 
 def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
@@ -1148,7 +1144,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset(config)
+    naip, labeled_data = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
