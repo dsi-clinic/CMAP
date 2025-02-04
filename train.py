@@ -2,7 +2,7 @@
 
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
-    [--split <split>] [--tune]  [--num_trials <num>]
+    [--split <split>] [--tune]  [--num_trials <num>] [--dem]
 """
 
 import argparse
@@ -55,8 +55,10 @@ def arg_parsing(argument):
     # tuning with wandb
     wandb_tune = argument.tune
     num_trials_arg = int(argument.num_trials)
+    # Inclusion of DEM
+    dem_arg = argument.dem
 
-    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg, dem_arg
 
 
 def check_gpu_availability():
@@ -155,7 +157,7 @@ def initialize_dataset(config):
     )
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
-    if config.KC_DEM_ROOT is not None:
+    if dem_include:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         if not config.USE_NIR:
@@ -177,7 +179,7 @@ def initialize_dataset(config):
 
         combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
@@ -196,7 +198,7 @@ def initialize_dataset(config):
         )
         kc_dataset = KaneCounty(shape_path, dataset_config)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT, config)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
@@ -444,7 +446,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             )
 
         # Add DEM if enabled
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem_idx = (
                 3 if not config.USE_NIR else 4
             )  # DEM is after NIR if NIR is enabled
@@ -791,7 +793,7 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.KC_DEM_ROOT is not None:
+                    if dem_include:
                         dem_idx = 3 if not config.USE_NIR else 4
                         plot_tensors.update(
                             {
@@ -1136,6 +1138,12 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug mode", default=False
     )
+    parser.add_argument(
+        "--dem",
+        action="store_true",
+        help="Include Bare Earth DEM in model",
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -1149,7 +1157,7 @@ if __name__ == "__main__":
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
-    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials, dem_include = arg_parsing(args)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
