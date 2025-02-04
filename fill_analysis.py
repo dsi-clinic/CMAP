@@ -8,22 +8,22 @@ from pysheds.grid import Grid
 import configs.config as config
 
 
-def export_filled_dem(diff_dem, grid, output_path):
+def export_filled_dem(fill_dem, grid, output_path):
     """Exports difference DEM to file
 
     Args:
-        diff_dem: DEM containing difference between filled and original DEM
+        fill_dem: DEM containing filled DEM
         grid: PySheds grid object
         output_path: file path to export the DEM data to
     """
-    grid.to_raster(diff_dem, output_path)
+    grid.to_raster(fill_dem, output_path)
 
     print(f"Difference Diff DEM has been exported to {output_path}")
 
     return
 
 def normalize_diff_dem(diff_dem):
-    """Normalizes difference DEM(WIP)
+    """Normalizes difference DEM(WIP) - should be done in train.py?
 
     Args:
         diff_dem: DEM containing difference between filled and original DEM
@@ -54,25 +54,26 @@ def fill_analysis(tiff_path):
     """
     # Load Data
     grid = Grid.from_raster(tiff_path)
-    dem = grid.read_raster(tiff_path)
+    dem = grid.read_raster(tiff_path).copy()
 
-    # Fill Pits and Depressions
-    pit_filled_dem = grid.fill_pits(dem)
-    filled_dem = grid.fill_depressions(pit_filled_dem)
+    # Fill Pits and Depressions in place to limit memory usage
+    grid.fill_pits(dem, out=dem)
+    grid.fill_depressions(dem, out=dem)
 
-    # Find Difference Between Filled DEM and Original DEM
-    diff_dem = filled_dem - dem
+    # Should be done in train.py
+    # # Find Difference Between Filled DEM and Original DEM
+    # diff_dem = filled_dem - dem
 
-    # Normalize Difference DEM with Z-score normalization (mean = 0, stddev = 1)
-    normalized_diff_dem = normalize_diff_dem(diff_dem)
+    # # Normalize Difference DEM with Z-score normalization (mean = 0, stddev = 1)
+    # normalized_diff_dem = normalize_diff_dem(diff_dem)
 
-    return normalized_diff_dem, grid
+    return dem, grid
 
 
 if __name__ == "__main__":
     dem_path = str(Path(config.KC_DEM_ROOT) / "Kane2017BE.tif")
     output_path = str(Path(config.KC_DEM_ROOT) / "Kane2017BE_fill_diff.tif")
 
-    diff_dem, grid = fill_analysis(dem_path)
+    fill_dem, grid = fill_analysis(dem_path)
 
-    export_filled_dem(diff_dem, grid, output_path)
+    export_filled_dem(fill_dem, grid, output_path)

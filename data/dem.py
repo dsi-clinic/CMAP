@@ -27,7 +27,7 @@ class KaneDEM(RasterDataset):
     filename_glob = "Kane2017BE.tif"
 
     def __init__(
-        self, paths, config, crs=None, res=None, transforms=None, epsilon=1e-6
+        self, paths, config, crs=None, res=None, transforms=None, epsilon=1e-6, use_filled=False
     ):
         """Initializes a KaneDEM instance.
 
@@ -38,11 +38,16 @@ class KaneDEM(RasterDataset):
             res: The resolution of the DEM.
             transforms: The transforms to apply to the DEM.
             epsilon: A small value to prevent division by zero.
+            use_filled: Changes input to filled DEM set
         """
         super().__init__(paths, crs=crs, res=res, transforms=transforms)
         self.patch_size = config.PATCH_SIZE
         self.use_nir = config.USE_NIR
         self.epsilon = epsilon
+
+        # Use filled DEM file if specified
+        if use_filled:
+            self.filename_glob = "Kane2017BE_fill_diff.tif"
 
     def __getitem__(self, query: BoundingBox):
         """Retrieves a specific DEM sample from the dataset."""
