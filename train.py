@@ -1173,8 +1173,8 @@ if __name__ == "__main__":
             train_iou, test_iou = one_trial(
                 exp_name, num, wandb_tune, naip, split, args
             )
-            train_ious.append(float(train_iou))
-            test_ious.append(float(test_iou))
+            train_ious.append(round(float(train_iou),3))
+            test_ious.append(round(float(test_iou),3))
 
         test_average = mean(test_ious)
         train_average = mean(train_ious)
