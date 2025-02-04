@@ -27,7 +27,14 @@ class KaneDEM(RasterDataset):
     filename_glob = "Kane2017BE.tif"
 
     def __init__(
-        self, paths, config, crs=None, res=None, transforms=None, epsilon=1e-6, use_filled=False
+        self,
+        paths,
+        config,
+        crs=None,
+        res=None,
+        transforms=None,
+        epsilon=1e-6,
+        use_filled=False,
     ):
         """Initializes a KaneDEM instance.
 

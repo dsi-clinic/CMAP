@@ -57,8 +57,9 @@ def arg_parsing(argument):
     num_trials_arg = int(argument.num_trials)
     # Inclusion of DEM
     dem_arg = argument.dem
+    filled_dem_arg = argument.filled_dem
 
-    return exp_name_arg, split_arg, wandb_tune, num_trials_arg, dem_arg
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg, dem_arg, filled_dem_arg
 
 
 def check_gpu_availability():
@@ -165,6 +166,10 @@ def initialize_dataset(config):
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+    if filled_dem_include:
+        filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+        if filled_dem:
+            print("filled dem exists")
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -1172,6 +1177,12 @@ if __name__ == "__main__":
         help="Include Bare Earth DEM in model",
         default=False,
     )
+    parser.add_argument(
+        "--filled_dem",
+        action="store_true",
+        help="Include Filled Bare Earth DEM file in model",
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -1185,7 +1196,9 @@ if __name__ == "__main__":
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
-    exp_name, split, wandb_tune, num_trials, dem_include = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials, dem_include, filled_dem_include = (
+        arg_parsing(args)
+    )
 
     logging.info("Using %s device", MODEL_DEVICE)
 
