@@ -2,7 +2,7 @@
 
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
-    [--split <split>] [--tune]  [--num_trials <num>] [--dem]
+    [--split <split>] [--tune]  [--num_trials <num>] [--dem] [--filled_dem]
 """
 
 import argparse
@@ -165,10 +165,10 @@ def initialize_dataset(config):
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
-    if filled_dem_include:
-        filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
-        if filled_dem:
-            print("filled dem exists")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and dem and filled dem loaded")
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -188,6 +188,10 @@ def initialize_dataset(config):
             dem = KaneDEM(config.KC_DEM_ROOT)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, combined_dataset
 
@@ -207,6 +211,10 @@ def initialize_dataset(config):
             dem = KaneDEM(config.KC_DEM_ROOT, config)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, kc_dataset
 
@@ -450,19 +458,30 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 }
             )
 
-        # Add DEM if enabled
-        if dem_include:
-            dem_idx = (
-                3 if not config.USE_NIR else 4
-            )  # DEM is after NIR if NIR is enabled
-            plot_tensors.update(
-                {
-                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
-                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
-                    .cpu()
-                    .clip(0, 1),
-                }
-            )
+
+        if dem_include or filled_dem_include:
+            base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
+            if dem_include:
+                plot_tensors.update(
+                    {
+                        "DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
+                        "augmented DEM": x_aug_denorm[i][base_idx : base_idx + 1, :, :]
+                        .cpu()
+                        .clip(0, 1),
+                    }
+                )
+                base_idx += 1  # Move index forward
+
+            if filled_dem_include:
+                plot_tensors.update(
+                    {
+                        "Filled DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
+                        "augmented Filled DEM": x_aug_denorm[i][base_idx : base_idx + 1, :, :]
+                        .cpu()
+                        .clip(0, 1),
+                    }
+                )
 
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
@@ -731,12 +750,8 @@ def test(
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (
-                    model.in_channels - len(data_mean)
-                )
-                data_std = data_std + [data_std[0]] * (
-                    model.in_channels - len(data_std)
-                )
+                data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
+                data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -798,15 +813,14 @@ def test(
                     }
 
                     # Add DEM if enabled
+                    base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
                     if dem_include:
-                        dem_idx = 3 if not config.USE_NIR else 4
-                        plot_tensors.update(
-                            {
-                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
-                                .cpu()
-                                .clip(0, 1),
-                            }
-                        )
+                        plot_tensors["DEM"] = x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        base_idx += 1  # Move to the next channel index
+
+                    if filled_dem_include:
+                        plot_tensors["Filled DEM"] = x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
