@@ -59,19 +59,14 @@ def arg_parsing(argument):
     return exp_name_arg, split_arg, wandb_tune, num_trials_arg
 
 
-def arg_parsing(argument):
-    """Parsing arguments passed in from command line"""
-    # if no experiment name provided, set to timestamp
-    exp_name_arg = argument.experiment_name
-    if exp_name_arg is None:
-        exp_name_arg = f'{datetime.datetime.now().strftime("%Y%m%d-%H%M%S")}'
-
-    split_arg = float(int(argument.split) / 100)
-    # tuning with wandb
-    wandb_tune = argument.tune
-    num_trials_arg = int(argument.num_trials)
-
-    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+def check_gpu_availability():
+    """Check if a GPU is available and exit if no GPU is found."""
+    if not torch.cuda.is_available():
+        print(
+            "WARNING: No GPU is available on this node."
+            "Please ensure this script is run on a compute node with GPU access."
+        )
+        sys.exit(1)
 
 
 def writer_prep(exp_n, trial_num, wandb_tune, config):
@@ -1133,6 +1128,9 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
 
 
 if __name__ == "__main__":
+    # Check GPU availability; if GPU available, run on compute node, else exit
+    check_gpu_availability()
+
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
         description="Train a segmentation model to predict stormwater storage "
