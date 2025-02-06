@@ -203,21 +203,29 @@ def build_dataset(naip_set, split_rate):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
-    print(f"len(naip_set): {len(naip_set)}")
+    logging.info(f"Initial NAIP dataset size: {len(naip_set)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    print(
-        f"before intersection, train_portion: {len(train_portion)}, test_portion: {len(test_portion)}"
-    )
-    print(f"before intersection, len(kc): {len(kc)}")
+    logging.info("After split:")
+    logging.info(f"Train portion size: {len(train_portion)}")
+    logging.info(f"Test portion size: {len(test_portion)}")
+    logging.info(f"Kane County dataset size: {len(kc)}")
+
     train_dataset = train_portion & kc
     test_dataset = test_portion & kc
-    print(
-        f"after intersection, train_dataset: {len(train_dataset)}, test_dataset: {len(test_dataset)}"
-    )
+
+    logging.info("After intersection:")
+    logging.info(f"Train dataset size: {len(train_dataset)}")
+    logging.info(f"Test dataset size: {len(test_dataset)}")
+
+    # Check if datasets are empty before creating samplers
+    if len(train_dataset) == 0:
+        raise ValueError("Train dataset is empty after intersection!")
+    if len(test_dataset) == 0:
+        raise ValueError("Test dataset is empty after intersection!")
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -234,6 +242,10 @@ def build_dataset(naip_set, split_rate):
         }
     )
 
+    # Log sampler lengths
+    logging.info(f"Train sampler length: {len(train_sampler)}")
+    logging.info(f"Test sampler length: {len(test_sampler)}")
+
     # create dataloaders (must use batch_sampler)
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -248,6 +260,10 @@ def build_dataset(naip_set, split_rate):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
+
+    logging.info(f"Train dataloader length: {len(train_dataloader)}")
+    logging.info(f"Test dataloader length: {len(test_dataloader)}")
+
     return train_dataloader, test_dataloader
 
 
@@ -317,7 +333,7 @@ def create_model():
     }
 
     model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
-    logging.info(model)
+    # logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
@@ -529,16 +545,16 @@ def train_setup(
         log_channel_stats(x_aug, "augmented input", logging.getLogger())
 
     # Save training sample images if first batch
-    if batch == 0:
-        save_training_images(
-            epoch,
-            train_images_root,
-            samp_image,  # Save original images
-            samp_mask,
-            x_aug,
-            y_squeezed,
-            sample,
-        )
+    # if batch == 0:
+    save_training_images(
+        epoch,
+        train_images_root,
+        samp_image,  # Save original images
+        samp_mask,
+        x_aug,
+        y_squeezed,
+        sample,
+    )
 
     return x_aug.to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 

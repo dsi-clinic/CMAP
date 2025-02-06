@@ -13,13 +13,18 @@ from pathlib import Path
 
 import geopandas as gpd
 import numpy as np
-import pandas as pd
 import rasterio
 import torch
-from shapely.geometry import box
+from shapely.geometry import MultiPoint, Point, box
 from torchgeo.datasets import BoundingBox, GeoDataset
 
-from configs.config import KC_LABELS, KC_LAYER, KC_SHAPE_FILENAME, KC_SHAPE_ROOT
+from configs.config import (
+    KC_LABELS,
+    KC_LAYER,
+    KC_SHAPE_FILENAME,
+    KC_SHAPE_ROOT,
+)
+from data.kc import KaneCounty
 
 # Add the parent directory (contains both 'configs' and 'data') to sys.path
 parent_dir = Path(__file__).resolve().parent.parent
@@ -32,170 +37,6 @@ stored as shapes in a GeoDatabase file, and this module allows for retrieving
 samples of labels or features as masks or rasterized images within specified
 bounding boxes.
 """
-
-
-# Load the Kane County Dataset first
-# The KC gdf will later be combined with the RD gdf
-
-
-class KaneCounty(GeoDataset):
-    """Vector dataset for Kane County labels stored as shapes in GeoDatabase."""
-
-    all_bands = ["Label"]
-    is_image = False
-
-    # all colors and labels
-    all_colors = {
-        0: (0, 0, 0, 0),
-        1: (215, 80, 48, 255),
-        2: (49, 102, 80, 255),
-        3: (239, 169, 74, 255),
-        4: (100, 107, 99, 255),
-        6: (89, 53, 31, 255),
-        7: (2, 86, 105, 255),
-        8: (207, 211, 205, 255),
-        9: (195, 88, 49, 255),
-        10: (144, 70, 132, 255),
-        11: (29, 51, 74, 255),
-        12: (71, 64, 46, 255),
-        13: (114, 20, 34, 255),
-        14: (37, 40, 80, 255),
-        15: (94, 33, 41, 255),
-        16: (255, 255, 255, 255),
-    }
-    all_labels = {
-        0: "BACKGROUND",
-        1: "POND",
-        2: "WETLAND",
-        3: "DRY BOTTOM - TURF",
-        4: "DRY BOTTOM - MESIC PRAIRIE",
-        6: "DEPRESSIONAL STORAGE",
-        7: "DRY BOTTOM - WOODED",
-        8: "POND - EXTENDED DRY",
-        9: "PICP PARKING LOT",
-        10: "DRY BOTTOM - GRAVEL",
-        11: "UNDERGROUND",
-        12: "UNDERGROUND VAULT",
-        13: "PICP ALLEY",
-        14: "INFILTRATION TRENCH",
-        15: "BIORETENTION",
-        16: "UNKNOWN",
-    }
-
-    def __init__(self, path: str, kc_configs) -> None:
-        """Initialize a new KaneCounty dataset instance.
-
-        Args:
-            path: directory to the file to load
-            kc_configs: a tuple containing
-                layer: specifying layer of GPKG
-                labels: a dictionary containing a label mapping for masks
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
-
-        Raises:
-            FileNotFoundError: if no files are found in path
-        """
-        super().__init__()
-
-        layer, labels, patch_size, dest_crs, res = kc_configs
-
-        gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
-        self.gdf = gdf
-
-        context_size = math.ceil(patch_size / 2 * res)
-        self.context_size = context_size
-        self._crs = dest_crs
-        self._res = res
-
-        self.labels = labels
-        self.colors = {i: self.all_colors[i] for i in labels.values()}
-        self.labels_inverse = {v: k for k, v in labels.items()}
-
-    def _load_and_prepare_data(self, path, layer, labels, dest_crs):
-        """Load and prepare the GeoDataFrame.
-
-        Args:
-            path: directory to the file to load
-            layer: specifying layer of GPKG
-            labels: a dictionary containing a label mapping for masks
-            dest_crs: the coordinate reference system (CRS) to convert to
-
-        Returns:
-            gdf: A GeoDataFrame filtered and converted to the target CRS
-        """
-        gdf = gpd.read_file(path, layer=layer)[["BasinType", "geometry"]]
-
-        # debug print
-        print("Initial Kane County GeoDataFrame loaded:")
-        print(gdf.head())
-
-        gdf = gdf[gdf["BasinType"].isin(labels.keys())]
-        gdf = gdf.to_crs(dest_crs)
-
-        # debug print
-        print("Kane countys filtered gdf")
-        print(gdf.head())
-
-        return gdf
-
-    def __getitem__(self, query: BoundingBox):
-        """Retrieve image/mask and metadata indexed by query.
-
-        Args:
-            query: (minx, maxx, miny, maxy, mint, maxt) coordinates to index
-
-        Returns:
-            sample of image/mask and metadata at that index
-
-        Raises:
-            IndexError: if query is not found in the index
-        """
-        hits = self.index.intersection(tuple(query), objects=True)
-        if not hits:
-            raise IndexError(
-                f"query: {query} not found in index with bounds: {self.bounds}"
-            )
-
-        shapes = []
-        for hit in hits:
-            # hit.object is now a list of dictionaries
-            for obj in hit.object:
-                shape = obj["geometry"]
-                label = self.labels[obj["BasinType"]]
-                shapes.append((shape, label))
-
-        width = (query.maxx - query.minx) / self._res
-        height = (query.maxy - query.miny) / self._res
-        transform = rasterio.transform.from_bounds(
-            query.minx, query.miny, query.maxx, query.maxy, width, height
-        )
-        if shapes and min((round(height), round(width))) != 0:
-            masks = rasterio.features.rasterize(
-                shapes,
-                out_shape=(round(height), round(width)),
-                transform=transform,
-            )
-        else:
-            # If no features are found in this query, return an empty mask
-            # with the default fill value and dtype used by rasterize
-            masks = np.zeros((round(height), round(width)), dtype=np.uint8)
-
-        sample = {
-            "mask": torch.Tensor(masks).long(),
-            "crs": self.crs,
-            "bbox": query,
-        }
-
-        if self.transforms is not None:
-            sample = self.transforms(sample)
-
-        return sample
-
-    def __getlabels__(self):
-        """Returns the labels of the dataset."""
-        return self.labels
 
 
 # Load the RiverDataset class
@@ -215,7 +56,7 @@ class RiverDataset(GeoDataset):
 
     all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
 
-    def __init__(self, path: str, rd_configs, kc: True) -> None:
+    def __init__(self, path: str, rd_configs, kc: False) -> None:
         """Initialize a new river dataset instance.
 
         Args:
@@ -237,60 +78,51 @@ class RiverDataset(GeoDataset):
         gdf = self._load_and_prepare_data(path, dest_crs)
         self.gdf = gdf
 
-        # Debug prints
-        # print(f"Configs received: {rd_configs}")
-        # print(f"Type of labels: {type(labels)}, Content: {labels}")
-
-        # Initialize the KaneCounty dataset if kc is True
-        if kc:
-            kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-
-            kc_config = (
-                KC_LAYER,
-                KC_LABELS,
-                patch_size,
-                dest_crs,
-                res,
-            )
-
-            # Create the KaneCounty dataset instance
-            kc_dataset = KaneCounty(kc_shape_path, kc_config)
-            print(f"Initialized KC dataset with {kc_config}")
-
-            # Combine the River dataset and KaneCounty dataset gdfs
-            self.gdf = pd.concat([self.gdf, kc_dataset.gdf], ignore_index=True)
-            self.gdf["BasinType"] = self.gdf["BasinType"].fillna(self.gdf["FCODE"])
-
-            KC_LABELS["STREAM/RIVER"] = (
-                5  # add the river labels to the existing KC labels
-            )
-            labels = KC_LABELS
-
-            self.gdf = self.gdf[
-                self.gdf["BasinType"].isin(labels.keys())
-            ]  # only extract KC and RD objects
-
-            kc_dataset.colors[5] = (
-                255,
-                255,
-                0,
-                255,
-            )  # add the river colors to the existing KC colors
-            self.all_colors = kc_dataset.colors
-
-        context_size = math.ceil(patch_size / 2 * res)
-        self.context_size = context_size
+        box_size = math.ceil(patch_size / 2 * res) * 2
+        self.box_size = box_size
         self._crs = dest_crs
         self._res = res
 
-        self._populate_index(self.gdf)
         self.labels = labels
         self.colors = {
             label_value: self.all_colors[label_value] for label_value in labels.values()
         }
-        self.labels_inverse = {v: k for k, v in labels.items()}
+        self._populate_index(self.gdf, box_size=box_size)
 
-        # Debug print
+        if kc:
+            kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
+
+            kc_config = (KC_LAYER, KC_LABELS, patch_size, dest_crs, res)
+            kc_dataset = KaneCounty(kc_shape_path, kc_config)
+            print(f"river dataset crs {self.crs}")
+            print(f"KC crs {kc_dataset.crs}")
+
+            # Merge indices and labels
+            i = 0
+            for item in kc_dataset.index.intersection(
+                kc_dataset.index.bounds,
+                objects=True,
+            ):
+                # Convert KC object to same format as RD objects
+                obj_dict = {
+                    "BasinType": item.object["BasinType"],
+                    "geometry": item.object["geometry"],
+                }
+                self.index.insert(
+                    item.id,
+                    item.bounds,
+                    [obj_dict],  # wrap in list to match RD format
+                )
+                print(f"KC inserting coords {item.bounds}")
+                # FIXME debug hack for fewer KC
+                i += 1
+                if i > 1:
+                    break
+
+            self.labels.update(KC_LABELS)
+            self.colors.update({**kc_dataset.colors, 5: (255, 255, 0, 255)})
+
+        self.labels_inverse = {v: k for k, v in self.labels.items()}
         print(f"Initialized RiverDataset with configs: {rd_configs}")
 
     def _load_and_prepare_data(self, path, dest_crs):
@@ -308,87 +140,144 @@ class RiverDataset(GeoDataset):
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
+        gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
+        gdf["BasinType"] = gdf["FCODE"]
 
         return gdf
 
-    def _populate_index(self, gdf, reference_crs=4326, target_chip_size=0.01):
-        """Populate spatial index with proportional chips based on CRS bounds."""
-        mint, maxt = 0, sys.maxsize
-        i = 0  # initialize chip index counter
+    def _populate_index(self, gdf, total_points=200, box_size=150):
+        """Populate spatial index with random points within river polygons."""
+        import time
 
-        from pyproj import CRS, Transformer
+        import numpy as np
         from tqdm import tqdm
 
-        # Get the CRS of the GeoDataFrame
-        gdf_crs = gdf.crs  # extract the NAIP CRS
-        print(f"GeoDataFrame CRS: {gdf_crs}")
+        start = time.time()
+        mint, maxt = 0, sys.maxsize
+        half_box = box_size / 2
 
-        # Set up transformations
-        if gdf_crs.to_epsg() != reference_crs:
-            transformer = Transformer.from_crs(
-                gdf_crs, CRS.from_epsg(reference_crs), always_xy=True
+        # calculate total area and points per geometry
+        total_area = gdf["geometry"].area.sum()
+        if len(gdf) > total_points:
+            raise ValueError(
+                f"total_points ({total_points}) must be >= number of geometries ({len(gdf)})"
             )
-            ref_minx, ref_miny, ref_maxx, ref_maxy = transformer.transform_bounds(
-                *gdf.total_bounds
-            )
-        else:
-            ref_minx, ref_miny, ref_maxx, ref_maxy = gdf.total_bounds
 
-        # Calculate the proportion of chip size to the reference CRS bounds
-        ref_x_extent = ref_maxx - ref_minx
-        proportional_factor = (
-            target_chip_size / ref_x_extent
-        )  # Use x_extent for consistency
+        # allocate points proportionally with minimum 1 point per geometry
+        areas = gdf["geometry"].area
+        relative_points = areas / total_area * (total_points - len(gdf))
+        points_per_geom = np.maximum(1, np.floor(relative_points))
 
-        print(f"Proportional factor: {proportional_factor}")
+        print(f"\nInitial allocation: {points_per_geom.sum():.0f} points")
 
-        # Transform bounds back to target CRS if needed
-        if gdf_crs.to_epsg() != reference_crs:
-            transformer = Transformer.from_crs(
-                CRS.from_epsg(reference_crs), gdf_crs, always_xy=True
-            )
-            minx, miny, maxx, maxy = transformer.transform_bounds(
-                ref_minx, ref_miny, ref_maxx, ref_maxy
-            )
-        else:
-            minx, miny, maxx, maxy = gdf.total_bounds
+        # adjust allocation if over total_points
+        while points_per_geom.sum() > total_points:
+            max_idx = points_per_geom.argmax()
+            points_per_geom[max_idx] -= 1
+            points_per_geom = np.maximum(1, points_per_geom)
 
-        print(f"Target CRS bounds: minx={minx}, miny={miny}, maxx={maxx}, maxy={maxy}")
+        print(f"After adjustment: {points_per_geom.sum():.0f} points")
 
-        # Calculate the proportional chip size for the target CRS
-        x_extent = maxx - minx
-        y_extent = maxy - miny
-        chip_size_x = x_extent * proportional_factor
-        chip_size_y = y_extent * proportional_factor
+        i = 0  # point counter
+        # iterate through each river polygon
+        for idx, row in tqdm(gdf.iterrows(), desc="Processing rivers", total=len(gdf)):
+            geom = row["geometry"]
+            n_points = int(points_per_geom[idx])
 
-        print(f"Chip sizes: chip_size_x={chip_size_x}, chip_size_y={chip_size_y}")
+            points_added = 0
+            attempts = 0
+            max_attempts = 1
+            valid_points = []
 
-        # Calculate total number of iterations for progress bar
-        total_iterations = (x_extent / chip_size_x) * (y_extent / chip_size_y)
+            while points_added < n_points and attempts < max_attempts:
+                # generate many points at once using bounds
+                minx, miny, maxx, maxy = geom.bounds
+                factor = 100.0
+                remaining_points = n_points - points_added
+                batch_size = int(remaining_points * factor)
 
-        # Iterate over the x-axis within the bounds of the gdf
-        for x in tqdm(
-            np.arange(minx, maxx, chip_size_x),
-            desc="Processing x-axis",
-            total=int(total_iterations),
-        ):
-            # Iterate over the y-axis within the bounds of the gdf
-            for y in np.arange(miny, maxy, chip_size_y):
-                chip = box(x, y, x + chip_size_x, y + chip_size_y)
-                coords = (x, y, x + chip_size_x, y + chip_size_y, mint, maxt)
+                # Time point generation
+                t0 = time.time()
+                points_x = np.random.uniform(minx, maxx, size=batch_size)
+                points_y = np.random.uniform(miny, maxy, size=batch_size)
+                points = MultiPoint([Point(x, y) for x, y in zip(points_x, points_y)])
+                t1 = time.time()
+                point_gen_time = t1 - t0
 
-                # Find intersecting geometries in gdf
-                intersecting_rows = gdf[gdf.intersects(chip)]
-                if not intersecting_rows.empty:
-                    # Store all intersecting geometries for this chip in one index entry
-                    self.index.insert(
-                        i,
-                        coords,
-                        intersecting_rows[["BasinType", "geometry"]].to_dict("records"),
+                # Time point filtering
+                t0 = time.time()
+                new_valid_points = [p for p in points.geoms if geom.contains(p)]
+                t1 = time.time()
+                point_filter_time = t1 - t0
+                valid_points.extend(new_valid_points)
+
+                print(f"\nGeometry {idx}:")
+                print(f"- Target points: {n_points}")
+                print(f"- Generated points: {batch_size}")
+                print(f"- Valid points in batch: {len(new_valid_points)}")
+                print(f"- Point generation time: {point_gen_time:.3f}s")
+                print(f"- Point filtering time: {point_filter_time:.3f}s")
+                print(f"- Points/sec filtered: {batch_size/point_filter_time:.0f}")
+
+                # Time box creation and index insertion
+                t0 = time.time()
+                box_count = 0
+                for point in valid_points[points_added:]:
+                    if points_added >= n_points:
+                        break
+
+                    x, y = point.x, point.y
+                    bbox = box(x - half_box, y - half_box, x + half_box, y + half_box)
+                    coords = (
+                        x - half_box,
+                        x + half_box,
+                        y - half_box,
+                        y + half_box,
+                        mint,
+                        maxt,
                     )
-                    i += 1
 
-        print(f"Total chips inserted: {i}")
+                    # find all geometries that intersect with this box
+                    t2 = time.time()
+                    intersecting_rows = gdf[gdf.intersects(bbox)]
+                    t3 = time.time()
+
+                    if not intersecting_rows.empty:
+                        self.index.insert(
+                            i,
+                            coords,
+                            intersecting_rows[["BasinType", "geometry"]].to_dict(
+                                "records"
+                            ),
+                        )
+                        i += 1
+                        points_added += 1
+                        box_count += 1
+
+                t1 = time.time()
+                box_time = t1 - t0
+                intersect_time = t3 - t2
+
+                print(f"- Box creation & insertion time: {box_time:.3f}s")
+                print(f"- Intersection check time: {intersect_time:.3f}s")
+                print(f"- Boxes created: {box_count}")
+                if box_count > 0:
+                    print(f"- Time per box: {box_time/box_count:.3f}s")
+
+                attempts += 1
+
+                # break early if we have enough points
+                if points_added >= n_points:
+                    break
+
+            if points_added < n_points:
+                print(
+                    f"Warning: Only added {points_added}/{n_points} points for geometry {idx} after {attempts} attempts"
+                )
+
+        print(f"\nTotal points inserted: {i}")
+        print(f"Target points: {total_points}")
+        print(f"Time taken: {time.time() - start:.0f} seconds")
 
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.

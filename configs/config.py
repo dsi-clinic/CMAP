@@ -65,20 +65,20 @@ CLIP_VALUE = 1.0
 # data augmentation
 SPATIAL_AUG_INDICES = [
     0,  # HorizontalFlip
-    1,  # VerticalFlip
-    2,  # Rotate
-    3,  # Affine
-    4,  # Elastic
-    5,  # Perspective
-    6,  # ResizedCrop
+    # 1,  # VerticalFlip
+    # 2,  # Rotate
+    # 3,  # Affine
+    # 4,  # Elastic
+    # 5,  # Perspective
+    # 6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
 IMAGE_AUG_INDICES = [
-    0,  # Contrast
+    # 0,  # Contrast
     1,  # Brightness
-    2,  # Gaussian Noise
-    3,  # Gaussian Blur0
+    # 2,  # Gaussian Noise
+    # 3,  # Gaussian Blur0
     # 4,  # Plasma Brightness
     # 5,  # Saturation
     # 6,  # Channel Shuffle
