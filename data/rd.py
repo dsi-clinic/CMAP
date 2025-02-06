@@ -116,7 +116,7 @@ class RiverDataset(GeoDataset):
                 print(f"KC inserting coords {item.bounds}")
                 # FIXME debug hack for fewer KC
                 i += 1
-                if i > 1:
+                if i > 10:
                     break
 
             self.labels.update(KC_LABELS)
