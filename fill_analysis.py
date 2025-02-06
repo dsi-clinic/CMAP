@@ -22,6 +22,7 @@ def export_filled_dem(fill_dem, grid, output_path):
 
     return
 
+
 def normalize_diff_dem(diff_dem):
     """Normalizes difference DEM(WIP) - should be done in train.py?
 
@@ -32,15 +33,16 @@ def normalize_diff_dem(diff_dem):
     """
     # Consider local normalization as shown in Castillo et al.(2014)
 
-    mean = np.mean(diff_dem) 
+    mean = np.mean(diff_dem)
     std = np.std(diff_dem)
-    
+
     if std == 0:  # Prevent division by zero
         return diff_dem - mean  # If no variation, just center to 0
-    
+
     normalized = (diff_dem - mean) / std
 
     return normalized
+
 
 def fill_analysis(tiff_path):
     """Loads DEM tiff file, performs fill analysis, and finds the difference

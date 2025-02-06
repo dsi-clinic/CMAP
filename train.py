@@ -458,7 +458,6 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 }
             )
 
-
         if dem_include or filled_dem_include:
             base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
 
@@ -477,7 +476,9 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 plot_tensors.update(
                     {
                         "Filled DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
-                        "augmented Filled DEM": x_aug_denorm[i][base_idx : base_idx + 1, :, :]
+                        "augmented Filled DEM": x_aug_denorm[i][
+                            base_idx : base_idx + 1, :, :
+                        ]
                         .cpu()
                         .clip(0, 1),
                     }
@@ -750,8 +751,12 @@ def test(
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
-                data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+                data_mean = data_mean + [data_mean[0]] * (
+                    model.in_channels - len(data_mean)
+                )
+                data_std = data_std + [data_std[0]] * (
+                    model.in_channels - len(data_std)
+                )
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -816,11 +821,15 @@ def test(
                     base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
 
                     if dem_include:
-                        plot_tensors["DEM"] = x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        plot_tensors["DEM"] = (
+                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        )
                         base_idx += 1  # Move to the next channel index
 
                     if filled_dem_include:
-                        plot_tensors["Filled DEM"] = x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        plot_tensors["Filled DEM"] = (
+                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        )
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
