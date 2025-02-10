@@ -2,7 +2,7 @@
 
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
-    [--split <split>] [--tune]  [--num_trials <num>]
+    [--split <split>] [--tune]  [--num_trials <num>] [--dem] [--filled_dem]
 """
 
 import argparse
@@ -55,8 +55,11 @@ def arg_parsing(argument):
     # tuning with wandb
     wandb_tune = argument.tune
     num_trials_arg = int(argument.num_trials)
+    # Inclusion of DEM
+    dem_arg = argument.dem
+    filled_dem_arg = argument.filled_dem
 
-    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg, dem_arg, filled_dem_arg
 
 
 def check_gpu_availability():
@@ -156,13 +159,17 @@ def initialize_dataset(config):
     )
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
-    if config.KC_DEM_ROOT is not None:
+    if dem_include:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         if not config.USE_NIR:
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and dem and filled dem loaded")
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -178,10 +185,14 @@ def initialize_dataset(config):
 
         combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, combined_dataset
 
@@ -197,10 +208,14 @@ def initialize_dataset(config):
         )
         kc_dataset = KaneCounty(shape_path, dataset_config)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT, config)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, kc_dataset
 
@@ -460,19 +475,31 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 }
             )
 
-        # Add DEM if enabled
-        if config.KC_DEM_ROOT is not None:
-            dem_idx = (
-                3 if not config.USE_NIR else 4
-            )  # DEM is after NIR if NIR is enabled
-            plot_tensors.update(
-                {
-                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
-                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
-                    .cpu()
-                    .clip(0, 1),
-                }
-            )
+        if dem_include or filled_dem_include:
+            base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
+            if dem_include:
+                plot_tensors.update(
+                    {
+                        "DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
+                        "augmented DEM": x_aug_denorm[i][base_idx : base_idx + 1, :, :]
+                        .cpu()
+                        .clip(0, 1),
+                    }
+                )
+                base_idx += 1  # Move index forward
+
+            if filled_dem_include:
+                plot_tensors.update(
+                    {
+                        "Filled DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
+                        "augmented Filled DEM": x_aug_denorm[i][
+                            base_idx : base_idx + 1, :, :
+                        ]
+                        .cpu()
+                        .clip(0, 1),
+                    }
+                )
 
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
@@ -808,14 +835,17 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.KC_DEM_ROOT is not None:
-                        dem_idx = 3 if not config.USE_NIR else 4
-                        plot_tensors.update(
-                            {
-                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
-                                .cpu()
-                                .clip(0, 1),
-                            }
+                    base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
+                    if dem_include:
+                        plot_tensors["DEM"] = (
+                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                        )
+                        base_idx += 1  # Move to the next channel index
+
+                    if filled_dem_include:
+                        plot_tensors["Filled DEM"] = (
+                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
                         )
 
                     ground_truth = samp_mask[i]
@@ -1164,6 +1194,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug mode", default=False
     )
+    parser.add_argument(
+        "--dem",
+        action="store_true",
+        help="Include Bare Earth DEM in model",
+        default=False,
+    )
+    parser.add_argument(
+        "--filled_dem",
+        action="store_true",
+        help="Include Filled Bare Earth DEM file in model",
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -1177,7 +1219,9 @@ if __name__ == "__main__":
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
-    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials, dem_include, filled_dem_include = (
+        arg_parsing(args)
+    )
 
     logging.info("Using %s device", MODEL_DEVICE)
 
