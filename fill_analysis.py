@@ -18,7 +18,7 @@ def export_filled_dem(fill_dem, grid, output_path):
     """
     grid.to_raster(fill_dem, output_path)
 
-    print(f"Difference Diff DEM has been exported to {output_path}")
+    print(f"Filled DEM has been exported to {output_path}")
 
     return
 
@@ -62,10 +62,6 @@ def fill_analysis(tiff_path):
     grid.fill_pits(dem, out=dem)
     grid.fill_depressions(dem, out=dem)
 
-    # Should be done in train.py
-    # # Find Difference Between Filled DEM and Original DEM
-    # diff_dem = filled_dem - dem
-
     # # Normalize Difference DEM with Z-score normalization (mean = 0, stddev = 1)
     # normalized_diff_dem = normalize_diff_dem(diff_dem)
 
@@ -74,7 +70,7 @@ def fill_analysis(tiff_path):
 
 if __name__ == "__main__":
     dem_path = str(Path(config.KC_DEM_ROOT) / "Kane2017BE.tif")
-    output_path = str(Path(config.KC_DEM_ROOT) / "Kane2017BE_fill_diff.tif")
+    output_path = str(Path(config.KC_DEM_ROOT) / "Kane2017BE_filled.tif")
 
     fill_dem, grid = fill_analysis(dem_path)
 

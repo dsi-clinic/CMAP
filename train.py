@@ -475,8 +475,9 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             if filled_dem_include:
                 plot_tensors.update(
                     {
-                        "Filled DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
-                        "augmented Filled DEM": x_aug_denorm[i][
+                        # "Difference DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
+                        "Difference DEM": x[i][base_idx : base_idx + 1, :, :].cpu(),
+                        "Augmented Difference DEM": x_aug_denorm[i][
                             base_idx : base_idx + 1, :, :
                         ]
                         .cpu()
