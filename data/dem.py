@@ -54,7 +54,8 @@ class KaneDEM(RasterDataset):
 
         # Use filled DEM file if specified
         if use_filled:
-            self.filename_glob = "Kane2017BE_fill_diff.tif"
+            self.filename_glob = "Kane2017BE_difference.tif"
+        print(f"Using DEM file: {self.filename_glob}")
 
     def __getitem__(self, query: BoundingBox):
         """Retrieves a specific DEM sample from the dataset."""
