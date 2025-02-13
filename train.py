@@ -162,6 +162,7 @@ def initialize_dataset(config):
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+        
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -175,7 +176,7 @@ def initialize_dataset(config):
             naip_dataset.res,
         )
 
-        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True, overwrite_cache=True)
 
         if config.KC_DEM_ROOT is not None:
             dem = KaneDEM(config.KC_DEM_ROOT)

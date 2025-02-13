@@ -1,11 +1,11 @@
-"""This module provides a custom PyTorch GeoDataset for working with vector data.
-
-The vector data represents river labels or features in the River images dataset.
-It is stored as shapes in a GeoDatabase file, and this module allows for retrieving
-samples of labels or features as masks or rasterized images within specified
-bounding boxes. The KC gdf is added to the RD gdf and chips are generated using
-this combined gdf.
 """
+This module provides a custom PyTorch GeoDataset for working with vector data
+representing labels or features in Kane County, Illinois. The vector data is
+stored as shapes in a GeoDatabase file, and this module allows for retrieving
+samples of labels or features as masks or rasterized images within specified
+bounding boxes.
+"""
+
 
 import math
 import sys
@@ -18,30 +18,21 @@ import torch
 from shapely.geometry import MultiPoint, Point, box
 from torchgeo.datasets import BoundingBox, GeoDataset
 
+# Add the parent directory (contains both 'configs' and 'data') to sys.path
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+
+
+from torchgeo.datasets import GeoDataset
 from configs.config import (
     KC_LABELS,
     KC_LAYER,
     KC_SHAPE_FILENAME,
     KC_SHAPE_ROOT,
+    RIVER_DATA_CACHE,  # Ensure this is defined in `config`
 )
+
 from data.kc import KaneCounty
-
-# Add the parent directory (contains both 'configs' and 'data') to sys.path
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
-
-"""
-This module provides a custom PyTorch GeoDataset for working with vector data
-representing labels or features in Kane County, Illinois. The vector data is
-stored as shapes in a GeoDatabase file, and this module allows for retrieving
-samples of labels or features as masks or rasterized images within specified
-bounding boxes.
-"""
-
-
-# Load the RiverDataset class
-# This will also contain the KC class; chips will be generated using the combined KC and RD gdfs
-
 
 class RiverDataset(GeoDataset):
     """Vector dataset for river labels stored as shapes in GeoDatabase."""
@@ -50,71 +41,73 @@ class RiverDataset(GeoDataset):
     is_image = False
 
     all_colors = {
-        0: (0, 0, 0, 0),
-        5: (255, 255, 0, 255),
+        0: (0, 0, 0, 0),  # Transparent for unknown
+        5: (255, 255, 0, 255),  # Yellow for stream-river
     }
 
     all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
 
-    def __init__(self, path: str, rd_configs, kc: False) -> None:
+    def __init__(self, path: str, rd_configs, kc: bool = True, overwrite_cache: bool=True) -> None:
         """Initialize a new river dataset instance.
 
         Args:
-            path: directory to the file to load
-            rd_configs: a tuple containing
-                layer: specifying layer of GPKG
-                labels: a dictionary containing a label mapping for masks
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
-            kc: a boolean to include the KC dataset or not; default is True
-
-        Raises:
-            FileNotFoundError: if no files are found in path
+            path: Path to the vector dataset (e.g., GeoDatabase file).
+            rd_configs: Tuple containing:
+                - labels (dict): Mapping for labels in masks.
+                - patch_size (int): Patch size for the model.
+                - dest_crs (CRS): Target coordinate reference system.
+                - res (float): Resolution of the dataset.
+            kc: Boolean flag to include Kane County dataset.
         """
         super().__init__()
 
-        labels, patch_size, dest_crs, res = rd_configs
-        gdf = self._load_and_prepare_data(path, dest_crs)
-        self.gdf = gdf
+        # Attempt to load from cache
+        if RIVER_DATA_CACHE and Path(RIVER_DATA_CACHE).exists() and not overwrite_cache:
+            print("Loading dataset from cache...")
+            cached_data = torch.load(RIVER_DATA_CACHE)
 
-        box_size = math.ceil(patch_size / 2 * res) * 2
-        self.box_size = box_size
+            # Restore each attribute explicitly
+            for key, value in cached_data.items():
+                setattr(self, key, value)
+
+            return
+
+        print("Processing dataset from scratch...")
+
+        # Unpack rd_configs
+        labels, patch_size, dest_crs, res = rd_configs
+
+        # Load and prepare river dataset
+        self.gdf = self._load_and_prepare_data(path, dest_crs)
+        self.box_size = math.ceil(patch_size / 2 * res) * 2
         self._crs = dest_crs
         self._res = res
-
         self.labels = labels
-        self.colors = {
-            label_value: self.all_colors[label_value] for label_value in labels.values()
-        }
-        self._populate_index(self.gdf, box_size=box_size)
+        self.colors = {label_value: self.all_colors[label_value] for label_value in labels.values()}
 
+        # Populate index
+        self._populate_index(self.gdf, box_size=self.box_size)
+
+        # Integrate Kane County dataset if `kc=True`
         if kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-
             kc_config = (KC_LAYER, KC_LABELS, patch_size, dest_crs, res)
             kc_dataset = KaneCounty(kc_shape_path, kc_config)
-            print(f"river dataset crs {self.crs}")
-            print(f"KC crs {kc_dataset.crs}")
 
-            # Merge indices and labels
+            print(f"River dataset CRS: {self.crs}")
+            print(f"Kane County CRS: {kc_dataset.crs}")
+
+            # Merge KC dataset into index
             i = 0
-            for item in kc_dataset.index.intersection(
-                kc_dataset.index.bounds,
-                objects=True,
-            ):
-                # Convert KC object to same format as RD objects
+            for item in kc_dataset.index.intersection(kc_dataset.index.bounds, objects=True):
                 obj_dict = {
                     "BasinType": item.object["BasinType"],
                     "geometry": item.object["geometry"],
                 }
-                self.index.insert(
-                    item.id,
-                    item.bounds,
-                    [obj_dict],  # wrap in list to match RD format
-                )
-                print(f"KC inserting coords {item.bounds}")
-                # FIXME debug hack for fewer KC
+                self.index.insert(item.id, item.bounds, [obj_dict])  # Wrap in list for consistency
+                print(f"Inserting KC chip: {item.bounds}")
+
+                # FIXME: Debug hack to limit KC inserts
                 i += 1
                 if i > 10:
                     break
@@ -123,7 +116,26 @@ class RiverDataset(GeoDataset):
             self.colors.update({**kc_dataset.colors, 5: (255, 255, 0, 255)})
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
+
+        # Save dataset to cache (only serializable attributes)
+        if RIVER_DATA_CACHE:
+            print("Saving dataset to cache...")
+            cache_data = {
+                "gdf": self.gdf,  # Ensure this is serializable, otherwise convert to dict
+                "box_size": self.box_size,
+                "_crs": self._crs,
+                "_res": self._res,
+                "labels": self.labels,
+                "colors": self.colors,
+                "labels_inverse": self.labels_inverse,
+            }
+            
+            if not Path(RIVER_DATA_CACHE).exists() or overwrite_cache:
+                torch.save(cache_data, RIVER_DATA_CACHE)
+                print(f"Dataset saved to cache at {RIVER_DATA_CACHE}")
+            
         print(f"Initialized RiverDataset with configs: {rd_configs}")
+
 
     def _load_and_prepare_data(self, path, dest_crs):
         """Load and prepare the GeoDataFrame.
@@ -140,6 +152,7 @@ class RiverDataset(GeoDataset):
 
         # Transform the GeoDataFrame to dest_crs
         gdf = gdf.to_crs(dest_crs)
+        #gdf["FCODE"] = gdf["FCODE"].replace("STREAM/RIVER", "STREAM-RIVER")
         gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
         gdf["BasinType"] = gdf["FCODE"]
 
@@ -155,6 +168,8 @@ class RiverDataset(GeoDataset):
         start = time.time()
         mint, maxt = 0, sys.maxsize
         half_box = box_size / 2
+        
+        print("len of gdf is", len(gdf))
 
         # calculate total area and points per geometry
         total_area = gdf["geometry"].area.sum()

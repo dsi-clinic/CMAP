@@ -120,11 +120,15 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 RD_LABELS = {
-    "BACKGROUND": 0,
+    #"STREAM-RIVER": 5,
     "STREAM/RIVER": 5,
+    "BACKGROUND": 0,
 }
 
 USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
 
 # for wandb
 WANDB_API = ""
+
+#RIVER_DATA_CACHE = None
+RIVER_DATA_CACHE = "/net/projects/cmap/data/river-cache/riverdata.pth"

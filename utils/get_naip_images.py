@@ -69,6 +69,7 @@ def get_river_geometry(fpath: str):
 
     # Filter by FCODE to only include stream and river
     gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
+    #gdf = gdf[gdf["FCODE"] == "STREAM-RIVER"]
 
     # Yield each feature as a dictionary
     for index, row in gdf.iterrows():
