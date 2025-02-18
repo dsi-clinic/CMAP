@@ -464,8 +464,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             if dem_include:
                 plot_tensors.update(
                     {
-                        "DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
-                        "augmented DEM": x_aug_denorm[i][base_idx : base_idx + 1, :, :]
+                        "DEM": x[i][-1, :, :].cpu() / 255.0,
+                        "augmented DEM": x_aug_denorm[i][-1, :, :]
                         .cpu()
                         .clip(0, 1),
                     }
@@ -475,10 +475,9 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             if filled_dem_include:
                 plot_tensors.update(
                     {
-                        # "Difference DEM": x[i][base_idx : base_idx + 1, :, :].cpu() / 255.0,
-                        "Difference DEM": x[i][base_idx : base_idx + 1, :, :].cpu(),
+                        "Difference DEM": x[i][-1, :, :].cpu() / 255.0,
                         "Augmented Difference DEM": x_aug_denorm[i][
-                            base_idx : base_idx + 1, :, :
+                            -1, :, :
                         ]
                         .cpu()
                         .clip(0, 1),
@@ -626,10 +625,6 @@ def train_epoch(
         )
         x = x.to(MODEL_DEVICE)
         y = y.to(MODEL_DEVICE)
-        # Break after the first batch in debug mode
-        if args.debug and batch == 0:
-            print("Debug mode: Exiting training loop after first batch.")
-            break
 
         # compute prediction error
         outputs = model(x)
@@ -663,6 +658,12 @@ def train_epoch(
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
             logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
+
+        # Break after the first batch in debug mode
+        if args.debug and batch == 0:
+            print("Debug mode: Exiting training loop after first batch.")
+            break
+    
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
@@ -823,13 +824,13 @@ def test(
 
                     if dem_include:
                         plot_tensors["DEM"] = (
-                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
                         )
                         base_idx += 1  # Move to the next channel index
 
                     if filled_dem_include:
                         plot_tensors["Filled DEM"] = (
-                            x_denorm[i][base_idx : base_idx + 1, :, :].cpu().clip(0, 1)
+                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
                         )
 
                     ground_truth = samp_mask[i]
