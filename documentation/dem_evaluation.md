@@ -78,4 +78,21 @@ The results of the DEM tests return lower than running without the DEM. Randomne
 Updated 1/28/2025:
 The DEM files are normalized on an image by image basis, though the RGB files are normalized across the entire population of images. This is working as intended. The Bare Earth DEM is used rather than the Hydro-Enforced DEM. This is wonderful, as long as it is being processed correctly. Data and Kane County documentation can be found in /net/projects/cmap/data/kane-county-data.
 
-Castillo et al.(2014, doi: 10.1002/esp.3595) has more detail on normalization techniques necessary, and recommends normalizing slope data. In this case, the filled DEM is the equivalent of slope data.
+Castillo et al.(2014, doi: 10.1002/esp.3595) has more detail on normalization techniques necessary, and recommends normalizing slope data. In this case, the filled/difference DEM is the equivalent of slope data.
+
+
+# Next Steps:
+* Adjust plot.py to display difference DEM correctly
+* Run diagnostic tests on these configurations:
+    * DEM w/ all spatial augs
+    * DEM w/ no spatial augs
+    * DEM w/ 3/ spatial augs
+    * DEM w/ no augs at all
+    * Adjust if augs are seen to be unfit
+* Run equivalent diagnostic tests without DEM
+    * Num_trials to be used?
+
+
+
+## ONE SPATIAL CURRENTLY MUST BE APPLIED
+DEM w/ all spatial:
