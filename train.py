@@ -496,18 +496,24 @@ def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
 
 
 def log_per_class_iou_tensor(
-    writer: SummaryWriter, per_class_iou_tensor: torch.Tensor, prefix: str, epoch: int
+    writer: SummaryWriter,
+    class_labels,
+    per_class_iou_tensor: torch.Tensor,
+    prefix: str,
+    epoch: int,
 ):
     """Logs per-class IoU values to TensorBoard.
 
     Args:
         writer: TensorBoard SummaryWriter.
+        class_labels: Iterable of class labels
         per_class_iou_tensor: Tensor containing per-class IoU values.
         prefix: String prefix for the metric key (e.g., "IoU/train" or "IoU/test").
         epoch: Current epoch number.
     """
-    # Build mapping from class IDs to names using your global `kc.labels`
-    class_labels = {label_id: label_name for label_name, label_id in kc.labels.items()}
+    class_labels = {
+        label_id: label_name for label_name, label_id in class_labels
+    }  # kc.labels.items()
     for i in sorted(class_labels.keys()):
         writer.add_scalar(
             f"{prefix}/{class_labels[i]}", per_class_iou_tensor[i].item(), epoch
@@ -686,7 +692,9 @@ def train_epoch(
     writer.add_scalar("IoU/train", final_jaccard, epoch)
 
     final_train_iou = train_jaccard_per_class.compute()
-    log_per_class_iou_tensor(writer, final_train_iou, "IoU/train", epoch)
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_train_iou, "IoU/train", epoch
+    )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
 
@@ -873,7 +881,9 @@ def test(
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
 
-    log_per_class_iou_tensor(writer, final_jaccard_per_class, "IoU/test", epoch)
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+    )
 
     logger = logging.getLogger()
     logger.info("Test error:")
