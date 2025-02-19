@@ -10,6 +10,7 @@ bounding boxes.
 import math
 import sys
 from pathlib import Path
+import rtree
 
 import geopandas as gpd
 import numpy as np
@@ -33,6 +34,9 @@ from configs.config import (
 )
 
 from data.kc import KaneCounty
+import torch
+import math
+from pathlib import Path
 
 class RiverDataset(GeoDataset):
     """Vector dataset for river labels stored as shapes in GeoDatabase."""
@@ -47,7 +51,7 @@ class RiverDataset(GeoDataset):
 
     all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
 
-    def __init__(self, path: str, rd_configs, kc: bool = True, overwrite_cache: bool=True) -> None:
+    def __init__(self, path: str, rd_configs, kc: bool = True, overwrite_cache: bool = True) -> None:
         """Initialize a new river dataset instance.
 
         Args:
@@ -61,16 +65,31 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
+        self.index = rtree.index.Index()
+
         # Attempt to load from cache
         if RIVER_DATA_CACHE and Path(RIVER_DATA_CACHE).exists() and not overwrite_cache:
             print("Loading dataset from cache...")
             cached_data = torch.load(RIVER_DATA_CACHE)
 
-            # Restore each attribute explicitly
-            for key, value in cached_data.items():
-                setattr(self, key, value)
+            # Restore attributes
+            self.gdf = cached_data["gdf"]
+            self.box_size = cached_data["box_size"]
+            self._crs = cached_data["_crs"]
+            self._res = cached_data["_res"]
+            self.labels = cached_data["labels"]
+            self.colors = cached_data["colors"]
+            self.labels_inverse = cached_data["labels_inverse"]
 
+            # Rebuild the spatial index using cached chips
+            for chip in cached_data["cached_chips"]:
+                # Ensure coordinates are in (minx, miny, maxx, maxy)
+                minx, miny, maxx, maxy = chip["bounds"]
+                self.index.insert(chip["id"], (minx, miny, maxx, maxy), chip["data"])
+
+            print(f"Rebuilt spatial index with {len(cached_data['cached_chips'])} chips from cache.")
             return
+
 
         print("Processing dataset from scratch...")
 
@@ -85,8 +104,15 @@ class RiverDataset(GeoDataset):
         self.labels = labels
         self.colors = {label_value: self.all_colors[label_value] for label_value in labels.values()}
 
-        # Populate index
-        self._populate_index(self.gdf, box_size=self.box_size)
+        # Populate index and store chip data for caching
+        cached_chips = []
+        for idx, row in self.gdf.iterrows():
+            bounds = row.geometry.bounds
+            minx, miny, maxx, maxy = bounds
+            chip_data = {"geometry": row.geometry, "label": row.get("label", "UNKNOWN")}
+
+            self.index.insert(idx, (minx, maxx, miny, maxy), chip_data)
+            cached_chips.append({"id": idx, "bounds": (minx, maxx, miny, maxy), "data": chip_data})
 
         # Integrate Kane County dataset if `kc=True`
         if kc:
@@ -97,17 +123,22 @@ class RiverDataset(GeoDataset):
             print(f"River dataset CRS: {self.crs}")
             print(f"Kane County CRS: {kc_dataset.crs}")
 
-            # Merge KC dataset into index
             i = 0
             for item in kc_dataset.index.intersection(kc_dataset.index.bounds, objects=True):
+                minx, maxx, miny, maxy = item.bbox[0], item.bbox[3], item.bbox[1], item.bbox[4]
                 obj_dict = {
                     "BasinType": item.object["BasinType"],
                     "geometry": item.object["geometry"],
                 }
-                self.index.insert(item.id, item.bounds, [obj_dict])  # Wrap in list for consistency
-                print(f"Inserting KC chip: {item.bounds}")
+                self.index.insert(item.id, (minx, maxx, miny, maxy), [obj_dict])
 
-                # FIXME: Debug hack to limit KC inserts
+                cached_chips.append({
+                    "id": item.id,
+                    "bounds": (minx, maxx, miny, maxy),
+                    "data": [obj_dict],
+                })
+
+                # Debug limit for KC inserts
                 i += 1
                 if i > 10:
                     break
@@ -117,24 +148,27 @@ class RiverDataset(GeoDataset):
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
 
-        # Save dataset to cache (only serializable attributes)
+        # Save dataset to cache
         if RIVER_DATA_CACHE:
             print("Saving dataset to cache...")
             cache_data = {
-                "gdf": self.gdf,  # Ensure this is serializable, otherwise convert to dict
+                "gdf": self.gdf,  # Ensure serializability
                 "box_size": self.box_size,
                 "_crs": self._crs,
                 "_res": self._res,
                 "labels": self.labels,
                 "colors": self.colors,
                 "labels_inverse": self.labels_inverse,
+                "cached_chips": cached_chips,  # Store chip data instead of the index
             }
-            
+
             if not Path(RIVER_DATA_CACHE).exists() or overwrite_cache:
                 torch.save(cache_data, RIVER_DATA_CACHE)
                 print(f"Dataset saved to cache at {RIVER_DATA_CACHE}")
-            
+
         print(f"Initialized RiverDataset with configs: {rd_configs}")
+
+
 
 
     def _load_and_prepare_data(self, path, dest_crs):

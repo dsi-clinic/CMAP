@@ -51,7 +51,7 @@ PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
-EPOCHS = 4
+EPOCHS = 1 #4
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
 PATIENCE = 5
@@ -120,8 +120,8 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 RD_LABELS = {
-    #"STREAM-RIVER": 5,
-    "STREAM/RIVER": 5,
+    "STREAM-RIVER": 5,
+    #"STREAM/RIVER": 5,
     "BACKGROUND": 0,
 }
 
