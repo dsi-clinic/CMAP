@@ -621,6 +621,11 @@ def train_epoch(
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     num_batches = len(dataloader)
+
+    class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
+    total_pixels = 0
+
+
     model.train()
     jaccard.reset()
 
@@ -647,6 +652,13 @@ def train_epoch(
         )
         x = x.to(MODEL_DEVICE)
         y = y.to(MODEL_DEVICE)
+
+        mask_int = y.long()
+        batch_pixels = mask_int.numel()
+        total_pixels += batch_pixels
+        for i in range(config.NUM_CLASSES):
+            class_area_counts[i] += (mask_int == i).sum().item()
+
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -687,6 +699,11 @@ def train_epoch(
             logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
+
+    class_area_percentages = {
+        i: (class_area_counts[i] / total_pixels * 100) for i in range(config.NUM_CLASSES)
+    }
+    logging.info("Per-class area percentages for epoch %d: %s", epoch, class_area_percentages)
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
