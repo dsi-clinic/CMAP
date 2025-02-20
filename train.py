@@ -465,9 +465,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 plot_tensors.update(
                     {
                         "DEM": x[i][-1, :, :].cpu() / 255.0,
-                        "augmented DEM": x_aug_denorm[i][-1, :, :]
-                        .cpu()
-                        .clip(0, 1),
+                        "augmented DEM": x_aug_denorm[i][-1, :, :].cpu().clip(0, 1),
                     }
                 )
                 base_idx += 1  # Move index forward
@@ -476,9 +474,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 plot_tensors.update(
                     {
                         "Difference DEM": x[i][-1, :, :].cpu() / 255.0,
-                        "Augmented Difference DEM": x_aug_denorm[i][
-                            -1, :, :
-                        ]
+                        "Augmented Difference DEM": x_aug_denorm[i][-1, :, :]
                         .cpu()
                         .clip(0, 1),
                     }
@@ -663,7 +659,7 @@ def train_epoch(
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
             break
-    
+
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
@@ -823,9 +819,7 @@ def test(
                     base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
 
                     if dem_include:
-                        plot_tensors["DEM"] = (
-                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
-                        )
+                        plot_tensors["DEM"] = x_denorm[i][-1, :, :].cpu().clip(0, 1)
                         base_idx += 1  # Move to the next channel index
 
                     if filled_dem_include:

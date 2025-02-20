@@ -14,7 +14,6 @@ from configs import config
 from data.dem import KaneDEM
 from data.sampler import BalancedGridGeoSampler
 
-
 # data paths
 DATA_ROOT = "/net/projects/cmap/data"
 KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
@@ -51,7 +50,12 @@ def main():
     means = []
     stds = []
     naip_dataset = NAIP(KC_IMAGE_ROOT)
-    dem = KaneDEM(KC_DEM_ROOT, config = config, crs=naip_dataset.crs, res=naip_dataset.res,)
+    dem = KaneDEM(
+        KC_DEM_ROOT,
+        config=config,
+        crs=naip_dataset.crs,
+        res=naip_dataset.res,
+    )
     sampler = BalancedGridGeoSampler(
         config={"dataset": naip_dataset, "size": 256, "stride": 256}
     )
