@@ -172,7 +172,7 @@ def initialize_dataset(config):
             naip_dataset.res,
         )
 
-        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=config.USE_KC)
 
         if config.KC_DEM_ROOT is not None:
             dem = KaneDEM(config.KC_DEM_ROOT)
