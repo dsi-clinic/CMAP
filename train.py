@@ -166,10 +166,7 @@ def initialize_dataset(config):
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
 
-        config.NUM_CLASSES = 6  # predicting 5 classes + background
-
         rd_config = (
-            config.RD_LABELS,
             config.PATCH_SIZE,
             naip_dataset.crs,
             naip_dataset.res,
@@ -274,7 +271,7 @@ def build_dataset(naip_set, split_rate):
     logging.info(f"Train dataloader length: {len(train_dataloader)}")
     logging.info(f"Test dataloader length: {len(test_dataloader)}")
 
-    return train_dataloader, test_dataloader
+    return train_dataloader, test_dataloader, len(kc.labels)
 
 
 def regularization_loss(model, reg_type, weight):
@@ -321,7 +318,7 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
     return base_loss
 
 
-def create_model():
+def create_model(num_classes):
     """Setting up training model, loss function and measuring metrics
 
     Returns:
@@ -333,11 +330,10 @@ def create_model():
             - jaccard_per_class: The metric to measure Jaccard index per class.
             - optimizer: The optimizer for training the model.
     """
-    # create the model
     model_configs = {
         "model": config.MODEL,
         "backbone": config.BACKBONE,
-        "num_classes": config.NUM_CLASSES,
+        "num_classes": num_classes,
         "weights": config.WEIGHTS,
         "dropout": config.DROPOUT,
     }
@@ -355,17 +351,17 @@ def create_model():
 
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(MODEL_DEVICE)
     test_jaccard = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(MODEL_DEVICE)
     jaccard_per_class = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
@@ -944,9 +940,6 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    # How many classes we're predicting
-    num_classes = config.NUM_CLASSES
-
     # reducing number of epoch in debugging or hyperparameter tuning
     if args.debug:
         epoch = 1
@@ -1007,7 +1000,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            num_classes,
+            len(kc.labels),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1074,7 +1067,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate)
+    train_dataloader, test_dataloader, num_classes = build_dataset(naip_set, split_rate)
     (
         model,
         loss_fn,
@@ -1082,7 +1075,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         test_jaccard,
         jaccard_per_class,
         optimizer,
-    ) = create_model()
+    ) = create_model(num_classes)
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
         config.SPATIAL_AUG_INDICES,

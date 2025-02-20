@@ -51,10 +51,8 @@ class RiverDataset(GeoDataset):
 
     all_colors = {
         0: (0, 0, 0, 0),
-        5: (255, 255, 0, 255),
+        1: (255, 255, 0, 255),
     }
-
-    all_labels = {0: "UNKNOWN", 5: "STREAM/RIVER"}
 
     def __init__(self, path: str, rd_configs, kc: False) -> None:
         """Initialize a new river dataset instance.
@@ -74,7 +72,7 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
-        labels, patch_size, dest_crs, res = rd_configs
+        patch_size, dest_crs, res = rd_configs
         gdf = self._load_and_prepare_data(path, dest_crs)
         self.gdf = gdf
 
@@ -83,9 +81,10 @@ class RiverDataset(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-        self.labels = labels
+        self.labels = {"BACKGROUND": 0, "STREAM/RIVER": 1}
         self.colors = {
-            label_value: self.all_colors[label_value] for label_value in labels.values()
+            label_value: self.all_colors[label_value]
+            for label_value in self.labels.values()
         }
         self._populate_index(self.gdf, box_size=box_size)
 
@@ -119,8 +118,15 @@ class RiverDataset(GeoDataset):
                 if i > 10:
                     break
 
-            self.labels.update(KC_LABELS)
-            self.colors.update({**kc_dataset.colors, 5: (255, 255, 0, 255)})
+            # combine labels from both dictionaries
+            all_labels = list(
+                set(list(self.labels.values()) + list(KC_LABELS.values()))
+            )
+            self.labels = dict(enumerate(all_labels))
+            all_colors = list(
+                set(list(self.colors.values()) + list(kc_dataset.colors.values()))
+            )
+            self.colors = dict(enumerate(all_colors))
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
         print(f"Initialized RiverDataset with configs: {rd_configs}")

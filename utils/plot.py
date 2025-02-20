@@ -137,7 +137,8 @@ def plot_from_tensors(
     if labels is not None and colors is not None:
         unique_labels = unique_labels.unique().type(torch.int).tolist()
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
+            mpatches.Patch(color=cmap.colors[i], label=labels[label])
+            for i, label in enumerate(unique_labels)
         ]
 
         fig.legend(

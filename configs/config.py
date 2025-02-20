@@ -48,7 +48,6 @@ DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 # ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
-NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 4
@@ -108,6 +107,7 @@ COLOR_AUG_MODE = "all"  # all or random
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
 KC_LAYER = 4
+# FIXME this should be a list— user does not need to know the index of each label
 KC_LABELS = {
     "BACKGROUND": 0,
     "POND": 1,
@@ -119,10 +119,6 @@ KC_LABELS = {
 # River data
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
-RD_LABELS = {
-    "BACKGROUND": 0,
-    "STREAM/RIVER": 5,
-}
 
 USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
 
