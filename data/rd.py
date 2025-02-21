@@ -98,6 +98,8 @@ class RiverDataset(GeoDataset):
 
             # Merge indices and labels
             i = 0
+            max_kc = 10
+
             for item in kc_dataset.index.intersection(
                 kc_dataset.index.bounds,
                 objects=True,
@@ -115,7 +117,7 @@ class RiverDataset(GeoDataset):
                 print(f"KC inserting coords {item.bounds}")
                 # FIXME debug hack for fewer KC
                 i += 1
-                if i > 1000:
+                if i > max_kc:
                     break
 
             # combine labels from both dictionaries
