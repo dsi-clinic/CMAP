@@ -115,7 +115,7 @@ class RiverDataset(GeoDataset):
                 print(f"KC inserting coords {item.bounds}")
                 # FIXME debug hack for fewer KC
                 i += 1
-                if i > 10:
+                if i > 1000:
                     break
 
             # combine labels from both dictionaries
@@ -151,7 +151,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, gdf, total_points=200, box_size=150):
+    def _populate_index(self, gdf, total_points=300, box_size=150):
         """Populate spatial index with random points within river polygons."""
         import time
 
