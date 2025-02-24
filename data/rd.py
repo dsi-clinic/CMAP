@@ -18,6 +18,10 @@ import torch
 from shapely.geometry import MultiPoint, Point, box
 from torchgeo.datasets import BoundingBox, GeoDataset
 
+# Add the parent directory (contains both 'configs' and 'data') to sys.path
+parent_dir = Path(__file__).resolve().parent.parent
+sys.path.append(str(parent_dir))
+
 from configs.config import (
     KC_LABELS,
     KC_LAYER,
@@ -25,10 +29,6 @@ from configs.config import (
     KC_SHAPE_ROOT,
 )
 from data.kc import KaneCounty
-
-# Add the parent directory (contains both 'configs' and 'data') to sys.path
-parent_dir = Path(__file__).resolve().parent.parent
-sys.path.append(str(parent_dir))
 
 """
 This module provides a custom PyTorch GeoDataset for working with vector data
@@ -153,7 +153,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, gdf, total_points=300, box_size=150):
+    def _populate_index(self, gdf, total_points=177, box_size=150):
         """Populate spatial index with random points within river polygons."""
         import time
 
