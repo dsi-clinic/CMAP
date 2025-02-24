@@ -121,7 +121,7 @@ RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
 USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
-USE_KC = False  # change to False if training w/ only RiverDataset
+USE_KC = True  # change to False if training w/ only RiverDataset
 
 # for wandb
 WANDB_API = ""

@@ -119,10 +119,8 @@ class RiverDataset(GeoDataset):
                     break
 
             # combine labels from both dictionaries
-            all_labels = list(
-                set(list(self.labels.values()) + list(KC_LABELS.values()))
-            )
-            self.labels = dict(enumerate(all_labels))
+            all_labels = list(set(list(self.labels.keys()) + list(KC_LABELS.keys())))
+            self.labels = {label: idx for idx, label in enumerate(all_labels)}
             all_colors = list(
                 set(list(self.colors.values()) + list(kc_dataset.colors.values()))
             )
