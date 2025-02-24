@@ -510,7 +510,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
 def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
     """Log statistics for each channel of the input tensor."""
     for i in range(tensor.size(1)):
-        channel = tensor[:, i]
+        channel = tensor[:, i, :, :]
         logger.info(
             f"{name} channel {i} - min: {channel.min().item():.3f}, "
             f"max: {channel.max().item():.3f}, mean: {channel.mean().item():.3f}, "
@@ -542,7 +542,12 @@ def train_setup(
         log_channel_stats(x, "raw input", logging.getLogger())
 
     # Scale to [0,1]
-    x = x / 255.0
+    x[:, 0:4] = x[:, 0:4] / 255.0
+
+    # Scale DEM properly if needed
+    if filled_dem_include:
+        max_val = torch.max(x[:, -1])
+        x[:, -1] = x[:, -1] / max_val.clone()
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
@@ -757,7 +762,12 @@ def test(
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
             # Scale to [0,1] before normalization
-            x = x / 255.0
+            x[:, 0:4] = x[:, 0:4] / 255.0
+
+            # Scale DEM properly if needed
+            if filled_dem_include:
+                max_val = torch.max(x[:, -1])
+                x[:, -1] = x[:, -1] / max_val.clone()
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
