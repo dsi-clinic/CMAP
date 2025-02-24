@@ -69,13 +69,14 @@ def check_gpu_availability():
         sys.exit(1)
 
 
-def writer_prep(exp_n, trial_num, wandb_tune):
+def writer_prep(exp_n, trial_num, wandb_tune, config):
     """Preparing writers and logging for each training trial
 
     Args:
-        exp_n: experiment name
-        trial_num: current trial number
-        wandb_tune: whether tuning with wandb
+        exp_n: STR experiment name
+        trial_num: INT current trial number
+        wandb_tune: BOOL whether tuning with wandb
+        config (module): Configuration object containing OUTPUT_ROOT, etc.
     """
     # set output path and exit run if path already exists
     exp_trial_name = f"{exp_n}_trial_{trial_num}"
@@ -201,10 +202,15 @@ def initialize_dataset(config):
         return naip_dataset, kc_dataset
 
 
-def build_dataset(naip_set, split_rate):
+def build_dataset(naip_set, split_rate, config):
     """Randomly split and load data to be the test and train sets
 
-    Returns train dataloader and test dataloader
+    Args:
+    naip_set (Dataset): The NAIP (imagery) dataset
+    split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
+    config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
+
+    Returns tuple (train dataloader, test dataloader)
     """
     # record generator seed
     seed = random.SystemRandom().randint(0, sys.maxsize)
@@ -216,13 +222,8 @@ def build_dataset(naip_set, split_rate):
     train_portion, test_portion = random_bbox_assignment(
         naip_set, [split_rate, 1 - split_rate], generator
     )
-    logging.info("After split:")
-    logging.info(f"Train portion size: {len(train_portion)}")
-    logging.info(f"Test portion size: {len(test_portion)}")
-    logging.info(f"Kane County dataset size: {len(kc)}")
-
-    train_dataset = train_portion & kc
-    test_dataset = test_portion & kc
+    train_dataset = train_portion & initialize_dataset(config)[1]
+    test_dataset = test_portion & initialize_dataset(config)[1]
 
     logging.info("After intersection:")
     logging.info(f"Train dataset size: {len(train_dataset)}")
@@ -318,7 +319,18 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
     return base_loss
 
 
-def create_model(num_classes):
+def create_model(
+    model_type,
+    backbone,
+    num_classes,
+    weights,
+    dropout,
+    loss_function_name,
+    ignore_index,
+    learning_rate,
+    weight_decay,
+    device="cpu",
+):
     """Setting up training model, loss function and measuring metrics
 
     Returns:
@@ -331,20 +343,20 @@ def create_model(num_classes):
             - optimizer: The optimizer for training the model.
     """
     model_configs = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
+        "model": model_type,
+        "backbone": backbone,
         "num_classes": num_classes,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
+        "weights": weights,
+        "dropout": dropout,
     }
 
-    model = SegmentationModel(model_configs).model.to(MODEL_DEVICE)
-    # logging.info(model)
+    model = SegmentationModel(model_configs).model.to(device)
+    logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
         importlib.import_module("segmentation_models_pytorch.losses"),
-        config.LOSS_FUNCTION,
+        loss_function_name,
     )
     # Initialize the loss function with the required parameters
     loss_fn = loss_fn_class(mode="multiclass")
@@ -352,24 +364,24 @@ def create_model(num_classes):
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=config.IGNORE_INDEX,
+        ignore_index=ignore_index,
         average="micro",
-    ).to(MODEL_DEVICE)
+    ).to(device)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=config.IGNORE_INDEX,
+        ignore_index=ignore_index,
         average="micro",
-    ).to(MODEL_DEVICE)
+    ).to(device)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=config.IGNORE_INDEX,
+        ignore_index=ignore_index,
         average=None,
-    ).to(MODEL_DEVICE)
+    ).to(device)
 
     optimizer = AdamW(
         model.parameters(),
-        lr=config.LEARNING_RATE,
-        weight_decay=config.WEIGHT_DECAY,
+        lr=learning_rate,
+        weight_decay=weight_decay,
     )
 
     return (
@@ -1060,14 +1072,16 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         out_root,
         writer,
         logger,
-    ) = writer_prep(exp_n, num, wandb_tune)
+    ) = writer_prep(exp_n, num, wandb_tune, config)
     # Set 'epoch' based on debug mode
     if args.debug:
         epoch = 1
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader, num_classes = build_dataset(naip_set, split_rate)
+    train_dataloader, test_dataloader, num_classes = build_dataset(
+        naip_set, split_rate, config
+    )
     (
         model,
         loss_fn,
@@ -1075,7 +1089,18 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         test_jaccard,
         jaccard_per_class,
         optimizer,
-    ) = create_model(num_classes)
+    ) = create_model(
+        model_type=config.MODEL,
+        backbone=config.BACKBONE,
+        num_classes=num_classes,
+        weights=config.WEIGHTS,
+        dropout=config.DROPOUT,
+        loss_function_name=config.LOSS_FUNCTION,
+        ignore_index=config.IGNORE_INDEX,
+        learning_rate=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
+        device=MODEL_DEVICE,
+    )
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
         config.SPATIAL_AUG_INDICES,
@@ -1190,8 +1215,8 @@ if __name__ == "__main__":
             train_iou, test_iou = one_trial(
                 exp_name, num, wandb_tune, naip, split, args
             )
-            train_ious.append(float(train_iou))
-            test_ious.append(float(test_iou))
+            train_ious.append(round(float(train_iou), 3))
+            test_ious.append(round(float(test_iou), 3))
 
         test_average = mean(test_ious)
         train_average = mean(train_ious)
