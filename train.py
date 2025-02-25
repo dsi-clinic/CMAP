@@ -547,17 +547,23 @@ def train_setup(
     # Scale DEM properly if needed
     if filled_dem_include:
         max_val = torch.max(x[:, -1])
-        x[:, -1] = x[:, -1] / max_val.clone()
+        min_val = torch.min(x[:, -1])
+        x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
 
-    # Extend mean/std if needed
+    # Extend mean/std dynamically if needed
     data_mean = config.DATASET_MEAN  # ImageNet mean
     data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
-        data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
-        data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+        missing_channels = model.in_channels - len(data_mean)
+        computed_means = torch.mean(x[:, len(data_mean):], dim=[0, 2, 3]).tolist()
+        data_mean = data_mean + computed_means[:missing_channels]
+    if len(data_std) < model.in_channels:
+        missing_channels = model.in_channels - len(data_std)
+        computed_stds = torch.std(x[:, len(data_std):], dim=[0, 2, 3]).tolist()
+        data_std = data_std + computed_stds[:missing_channels]
 
     # Normalize using ImageNet statistics
     normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -767,21 +773,23 @@ def test(
             # Scale DEM properly if needed
             if filled_dem_include:
                 max_val = torch.max(x[:, -1])
-                x[:, -1] = x[:, -1] / max_val.clone()
+                min_val = torch.min(x[:, -1])
+                x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
 
-            # Extend mean/std if needed
+            # Extend mean/std dynamically if needed
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (
-                    model.in_channels - len(data_mean)
-                )
-                data_std = data_std + [data_std[0]] * (
-                    model.in_channels - len(data_std)
-                )
+                missing_channels = model.in_channels - len(data_mean)
+                computed_means = torch.mean(x[:, len(data_mean):], dim=[0, 2, 3]).tolist()
+                data_mean = data_mean + computed_means[:missing_channels]
+            if len(data_std) < model.in_channels:
+                missing_channels = model.in_channels - len(data_std)
+                computed_stds = torch.std(x[:, len(data_std):], dim=[0, 2, 3]).tolist()
+                data_std = data_std + computed_stds[:missing_channels]
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
