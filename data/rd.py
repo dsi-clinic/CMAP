@@ -91,7 +91,6 @@ class RiverDataset(GeoDataset):
 
         if kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-
             kc_config = (KC_LAYER, KC_LABELS, patch_size, dest_crs, res)
             kc_dataset = KaneCounty(kc_shape_path, kc_config)
             print(f"river dataset crs {self.crs}")
@@ -121,13 +120,35 @@ class RiverDataset(GeoDataset):
                 if i > max_kc:
                     break
 
-            # combine labels from both dictionaries
-            all_labels = list(set(list(self.labels.keys()) + list(KC_LABELS.keys())))
-            self.labels = {label: idx for idx, label in enumerate(all_labels)}
-            all_colors = list(
-                set(list(self.colors.values()) + list(kc_dataset.colors.values()))
-            )
-            self.colors = dict(enumerate(all_colors))
+            # Preserve label ordering when combining
+            rd_labels = self.labels
+            combined_labels = {}
+            next_idx = 0
+
+            # First add RD labels
+            for label, _ in rd_labels.items():
+                combined_labels[label] = next_idx
+                next_idx += 1
+
+            # Then add KC labels that aren't already present
+            for label in KC_LABELS.keys():
+                if label not in combined_labels:
+                    combined_labels[label] = next_idx
+                    next_idx += 1
+
+            self.labels = combined_labels
+
+            # Preserve color ordering
+            combined_colors = {}
+            for label, idx in combined_labels.items():
+                if label in rd_labels:
+                    # Use RD color
+                    combined_colors[idx] = self.colors[rd_labels[label]]
+                else:
+                    # Use KC color
+                    combined_colors[idx] = kc_dataset.colors[KC_LABELS[label]]
+
+            self.colors = combined_colors
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
         print(f"Initialized RiverDataset with configs: {rd_configs}")
