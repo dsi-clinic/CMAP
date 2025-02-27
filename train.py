@@ -583,11 +583,11 @@ def train_setup(
     data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
         missing_channels = model.in_channels - len(data_mean)
-        computed_means = torch.mean(x[:, len(data_mean):], dim=[0, 2, 3]).tolist()
+        computed_means = torch.mean(x[:, len(data_mean) :], dim=[0, 2, 3]).tolist()
         data_mean = data_mean + computed_means[:missing_channels]
     if len(data_std) < model.in_channels:
         missing_channels = model.in_channels - len(data_std)
-        computed_stds = torch.std(x[:, len(data_std):], dim=[0, 2, 3]).tolist()
+        computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
         data_std = data_std + computed_stds[:missing_channels]
 
     # Normalize using ImageNet statistics
@@ -823,11 +823,13 @@ def test(
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
                 missing_channels = model.in_channels - len(data_mean)
-                computed_means = torch.mean(x[:, len(data_mean):], dim=[0, 2, 3]).tolist()
+                computed_means = torch.mean(
+                    x[:, len(data_mean) :], dim=[0, 2, 3]
+                ).tolist()
                 data_mean = data_mean + computed_means[:missing_channels]
             if len(data_std) < model.in_channels:
                 missing_channels = model.in_channels - len(data_std)
-                computed_stds = torch.std(x[:, len(data_std):], dim=[0, 2, 3]).tolist()
+                computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
                 data_std = data_std + computed_stds[:missing_channels]
 
             # Normalize

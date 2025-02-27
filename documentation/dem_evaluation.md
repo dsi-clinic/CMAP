@@ -75,24 +75,17 @@ average: 0.422, standard deviation:0.000
 The results of the DEM tests return lower than running without the DEM. Randomness is involved in these tests, however, and this may not be an accurate reading of the effectiveness of DEM vs. no DEM.
 
 # Processes Involved
-Updated 1/28/2025:
+Updated 2/24/2025:
 The DEM files are normalized on an image by image basis, though the RGB files are normalized across the entire population of images. This is working as intended. The Bare Earth DEM is used rather than the Hydro-Enforced DEM. This is wonderful, as long as it is being processed correctly. Data and Kane County documentation can be found in /net/projects/cmap/data/kane-county-data.
 
 Castillo et al.(2014, doi: 10.1002/esp.3595) has more detail on normalization techniques necessary, and recommends normalizing slope data. In this case, the filled/difference DEM is the equivalent of slope data.
 
-
-# Next Steps:
-* Adjust plot.py to display difference DEM correctly
-* Run diagnostic tests on these configurations:
-    * DEM w/ all spatial augs
-    * DEM w/ no spatial augs
-    * DEM w/ 3/ spatial augs
-    * DEM w/ no augs at all
-    * Adjust if augs are seen to be unfit
-* Run equivalent diagnostic tests without DEM
-    * Num_trials to be used?
+# Results - 5 trials, 4 epochs
 
 
-
-## ONE SPATIAL CURRENTLY MUST BE APPLIED
-DEM w/ all spatial:
+| Configuration       | Overall IOU  | Pond IOU | Wetland IOU | Dry Bottom Turf IOU | Dry Bottom Mesic Prairie IOU |
+|---------------------|------------------|------------------|------------------|----------------------|-----------------------------|
+| No DEM, No Rotation  | .5102 ± .0413 | .6964 ± .0310 | .3391 ± .1098 | .3575 ± .0637 | .0775 ± .0708 |
+| No DEM, Rotation    | .5067 ± .0448 | .7198 ± .0244 | .304 ± .0679 | .3768 ± .0416 | .0948 ± .0522 |
+| DEM, No Rotation    | .5544 ± .0456 | .7452 ± .0274 | .3891 ± .0745 | .4689 ± .1278 | .0680 ± .0253 |
+| DEM, Rotation      | .4718 ± .0569 | .6924 ± .0559 | .3185 ± .0573 | .4868 ± .0258 | .0821 ± .0263 |
