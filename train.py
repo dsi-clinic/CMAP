@@ -2,7 +2,7 @@
 
 To run: from repo directory (2024-winter-cmap)
 > python train.py configs.<config> [--experiment_name <name>]
-    [--split <split>] [--tune]  [--num_trials <num>]
+    [--split <split>] [--tune]  [--num_trials <num>] [--dem] [--filled_dem]
 """
 
 import argparse
@@ -55,8 +55,11 @@ def arg_parsing(argument):
     # tuning with wandb
     wandb_tune = argument.tune
     num_trials_arg = int(argument.num_trials)
+    # Inclusion of DEM
+    dem_arg = argument.dem
+    filled_dem_arg = argument.filled_dem
 
-    return exp_name_arg, split_arg, wandb_tune, num_trials_arg
+    return exp_name_arg, split_arg, wandb_tune, num_trials_arg, dem_arg, filled_dem_arg
 
 
 def check_gpu_availability():
@@ -156,13 +159,17 @@ def initialize_dataset(config):
     )
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
-    if config.KC_DEM_ROOT is not None:
+    if dem_include:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         if not config.USE_NIR:
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
         print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and dem and filled dem loaded")
     if config.USE_RIVERDATASET:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
@@ -178,10 +185,14 @@ def initialize_dataset(config):
 
         combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, combined_dataset
 
@@ -197,10 +208,14 @@ def initialize_dataset(config):
         )
         kc_dataset = KaneCounty(shape_path, dataset_config)
 
-        if config.KC_DEM_ROOT is not None:
+        if dem_include:
             dem = KaneDEM(config.KC_DEM_ROOT, config)
             naip_dataset = naip_dataset & dem
             print("naip and dem loaded")
+        if filled_dem_include:
+            filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
+            naip_dataset = naip_dataset & filled_dem
+            print("naip and filled dem loaded")
 
         return naip_dataset, kc_dataset
 
@@ -460,19 +475,27 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 }
             )
 
-        # Add DEM if enabled
-        if config.KC_DEM_ROOT is not None:
-            dem_idx = (
-                3 if not config.USE_NIR else 4
-            )  # DEM is after NIR if NIR is enabled
-            plot_tensors.update(
-                {
-                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
-                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
-                    .cpu()
-                    .clip(0, 1),
-                }
-            )
+        if dem_include or filled_dem_include:
+            base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
+            if dem_include:
+                plot_tensors.update(
+                    {
+                        "DEM": x[i][-1, :, :].cpu() / 255.0,
+                        "augmented DEM": x_aug_denorm[i][-1, :, :].cpu().clip(0, 1),
+                    }
+                )
+                base_idx += 1  # Move index forward
+
+            if filled_dem_include:
+                plot_tensors.update(
+                    {
+                        "Difference DEM": x[i][-1, :, :].cpu() / 255.0,
+                        "Augmented Difference DEM": x_aug_denorm[i][-1, :, :]
+                        .cpu()
+                        .clip(0, 1),
+                    }
+                )
 
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
@@ -487,11 +510,36 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
 def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
     """Log statistics for each channel of the input tensor."""
     for i in range(tensor.size(1)):
-        channel = tensor[:, i]
+        channel = tensor[:, i, :, :]
         logger.info(
             f"{name} channel {i} - min: {channel.min().item():.3f}, "
             f"max: {channel.max().item():.3f}, mean: {channel.mean().item():.3f}, "
             f"std: {channel.std().item():.3f}"
+        )
+
+
+def log_per_class_iou_tensor(
+    writer: SummaryWriter,
+    class_labels,
+    per_class_iou_tensor: torch.Tensor,
+    prefix: str,
+    epoch: int,
+):
+    """Logs per-class IoU values to TensorBoard.
+
+    Args:
+        writer: TensorBoard SummaryWriter.
+        class_labels: Iterable of class labels
+        per_class_iou_tensor: Tensor containing per-class IoU values.
+        prefix: String prefix for the metric key (e.g., "IoU/train" or "IoU/test").
+        epoch: Current epoch number.
+    """
+    class_labels = {
+        label_id: label_name for label_name, label_id in class_labels
+    }  # kc.labels.items()
+    for i in sorted(class_labels.keys()):
+        writer.add_scalar(
+            f"{prefix}/{class_labels[i]}", per_class_iou_tensor[i].item(), epoch
         )
 
 
@@ -519,17 +567,28 @@ def train_setup(
         log_channel_stats(x, "raw input", logging.getLogger())
 
     # Scale to [0,1]
-    x = x / 255.0
+    x[:, 0:4] = x[:, 0:4] / 255.0
+
+    # Scale DEM properly if needed
+    if filled_dem_include:
+        max_val = torch.max(x[:, -1])
+        min_val = torch.min(x[:, -1])
+        x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
 
-    # Extend mean/std if needed
+    # Extend mean/std dynamically if needed
     data_mean = config.DATASET_MEAN  # ImageNet mean
     data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
-        data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
-        data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+        missing_channels = model.in_channels - len(data_mean)
+        computed_means = torch.mean(x[:, len(data_mean) :], dim=[0, 2, 3]).tolist()
+        data_mean = data_mean + computed_means[:missing_channels]
+    if len(data_std) < model.in_channels:
+        missing_channels = model.in_channels - len(data_std)
+        computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+        data_std = data_std + computed_stds[:missing_channels]
 
     # Normalize using ImageNet statistics
     normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -598,6 +657,13 @@ def train_epoch(
     num_batches = len(dataloader)
     model.train()
     jaccard.reset()
+
+    train_jaccard_per_class = MulticlassJaccardIndex(
+        num_classes=config.NUM_CLASSES,
+        ignore_index=config.IGNORE_INDEX,
+        average=None,
+    ).to(MODEL_DEVICE)
+
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
@@ -615,10 +681,6 @@ def train_epoch(
         )
         x = x.to(MODEL_DEVICE)
         y = y.to(MODEL_DEVICE)
-        # Break after the first batch in debug mode
-        if args.debug and batch == 0:
-            print("Debug mode: Exiting training loop after first batch.")
-            break
 
         # compute prediction error
         outputs = model(x)
@@ -637,6 +699,7 @@ def train_epoch(
         # update jaccard index
         preds = outputs.argmax(dim=1)
         jaccard.update(preds, y)
+        train_jaccard_per_class.update(preds, y)
 
         # backpropagation
         loss.backward()
@@ -652,11 +715,23 @@ def train_epoch(
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
             logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
+
+        # Break after the first batch in debug mode
+        if args.debug and batch == 0:
+            print("Debug mode: Exiting training loop after first batch.")
+            break
+
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
+
+    final_train_iou = train_jaccard_per_class.compute()
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_train_iou, "IoU/train", epoch
+    )
+
     logging.info("Train Jaccard index: %.4f", final_jaccard)
 
     if wandb_tune:
@@ -732,21 +807,30 @@ def test(
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
             # Scale to [0,1] before normalization
-            x = x / 255.0
+            x[:, 0:4] = x[:, 0:4] / 255.0
+
+            # Scale DEM properly if needed
+            if filled_dem_include:
+                max_val = torch.max(x[:, -1])
+                min_val = torch.min(x[:, -1])
+                x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
 
-            # Extend mean/std if needed
+            # Extend mean/std dynamically if needed
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (
-                    model.in_channels - len(data_mean)
-                )
-                data_std = data_std + [data_std[0]] * (
-                    model.in_channels - len(data_std)
-                )
+                missing_channels = model.in_channels - len(data_mean)
+                computed_means = torch.mean(
+                    x[:, len(data_mean) :], dim=[0, 2, 3]
+                ).tolist()
+                data_mean = data_mean + computed_means[:missing_channels]
+            if len(data_std) < model.in_channels:
+                missing_channels = model.in_channels - len(data_std)
+                computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+                data_std = data_std + computed_stds[:missing_channels]
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -808,14 +892,15 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.KC_DEM_ROOT is not None:
-                        dem_idx = 3 if not config.USE_NIR else 4
-                        plot_tensors.update(
-                            {
-                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
-                                .cpu()
-                                .clip(0, 1),
-                            }
+                    base_idx = 3 if not config.USE_NIR else 4  # Adjust for NIR presence
+
+                    if dem_include:
+                        plot_tensors["DEM"] = x_denorm[i][-1, :, :].cpu().clip(0, 1)
+                        base_idx += 1  # Move to the next channel index
+
+                    if filled_dem_include:
+                        plot_tensors["Filled DEM"] = (
+                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
                         )
 
                     ground_truth = samp_mask[i]
@@ -841,6 +926,11 @@ def test(
     final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
+
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+    )
+
     logger = logging.getLogger()
     logger.info("Test error:")
     logger.info(f"Jaccard index: {final_jaccard:.3f}")
@@ -1164,6 +1254,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--debug", action="store_true", help="Enable debug mode", default=False
     )
+    parser.add_argument(
+        "--dem",
+        action="store_true",
+        help="Include Bare Earth DEM in model",
+        default=False,
+    )
+    parser.add_argument(
+        "--filled_dem",
+        action="store_true",
+        help="Include Filled Bare Earth DEM file in model",
+        default=False,
+    )
 
     args = parser.parse_args()
 
@@ -1177,7 +1279,9 @@ if __name__ == "__main__":
     # Enable debug mode in config
     config.DEBUG_MODE = args.debug
 
-    exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    exp_name, split, wandb_tune, num_trials, dem_include, filled_dem_include = (
+        arg_parsing(args)
+    )
 
     logging.info("Using %s device", MODEL_DEVICE)
 
