@@ -27,10 +27,11 @@ from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics.classification import MulticlassJaccardIndex
 
+from data.class_balanced_sampler import ClassBalancedRandomBatchGeoSampler
 from data.dem import KaneDEM
 from data.kc import KaneCounty
 from data.rd import RiverDataset
-from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
+from data.sampler import BalancedGridGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
@@ -227,11 +228,12 @@ def build_dataset(naip_set, split_rate, config):
     train_dataset = train_portion & initialize_dataset(config)[1]
     test_dataset = test_portion & initialize_dataset(config)[1]
 
-    train_sampler = BalancedRandomBatchGeoSampler(
+    train_sampler = ClassBalancedRandomBatchGeoSampler(
         config={
             "dataset": train_dataset,
             "size": config.PATCH_SIZE,
             "batch_size": config.BATCH_SIZE,
+            "NUM_CLASSES": config.NUM_CLASSES,
         }
     )
     test_sampler = BalancedGridGeoSampler(
