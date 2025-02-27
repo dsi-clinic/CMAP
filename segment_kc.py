@@ -1,171 +1,270 @@
+#!/usr/bin/env python
+
+import argparse
 import torch
 import numpy as np
-import json
+import os
+import csv
+import matplotlib
+
+# Use a non-interactive backend for matplotlib (headless mode)
+matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from torchmetrics.classification import MulticlassJaccardIndex
-from pathlib import Path
+
+from torchgeo.datasets import NAIP, stack_samples
+from torch.utils.data import DataLoader
+from data.kc import KaneCounty
 from data.sampler import BalancedRandomBatchGeoSampler
 from configs import config
-from torch.utils.data import DataLoader
-from torchgeo.datasets import NAIP, stack_samples
-from data.kc import KaneCounty
 from segment_anything import SamPredictor, sam_model_registry
-import argparse
-import os
 
-# Parse command line arguments
-parser = argparse.ArgumentParser(description='Segmentation Script')
-parser.add_argument('--use_all_classes', action='store_true', help='Use all available classes instead of default config')
-parser.add_argument('--max_objects', type=int, default=None, help='Maximum number of objects to process')
-args = parser.parse_args()
+def compute_instance_iou(pred_mask, gt_mask, instance_id):
+    """
+    Compute IoU for one predicted mask vs. one ground-truth label ID.
+    pred_mask, gt_mask: same shape
+    instance_id: the ground-truth label ID (class/instance) we care about
+    """
+    gt_instance = (gt_mask == instance_id).astype(np.uint8)
+    pred_instance = (pred_mask > 0).astype(np.uint8)  # 1=object, 0=bg
+    intersection = np.logical_and(gt_instance, pred_instance).sum()
+    union = np.logical_or(gt_instance, pred_instance).sum()
+    return float(intersection) / union if union != 0 else 0.0
 
-OUTPUT_DIR = "kane_segmentation_results"
-Path(OUTPUT_DIR).mkdir(parents=True, exist_ok=True)
+def main():
+    """
+    ProcessNAIP imagery by running Segment Anything (SAM) on each patch,
+    optionally in parallel when using an HPC array job.
 
-naip_dataset = NAIP("/net/projects/cmap/data/KC-images")
-shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+    This function:
+      1. Loads imagery and a corresponding shapefile to build a dataset.
+      2. Applies a BalancedRandomBatchGeoSampler to enumerate patches (i.e., subsets of the imagery).
+      3. Loops over each patch, optionally subdividing the patches among multiple array tasks:
+         - If using Slurm, you can pass --subset_index=X and --total_subsets=Y to have each
+           sub-task handle a different portion of the patches (parallel processing).
+         - Patches not in the sub-task's assigned range are skipped.
+      4. For each valid label in a patch, picks a random pixel and runs the SAM model to obtain
+         a segmentation mask. Then it computes the IoU against the ground-truth.
+      5. Optionally saves a limited number of debug plots (up to MAX_SAVED_PLOTS).
+      6. Aggregates all IoU results by class, saving a CSV (per array sub-task or overall) in
+         one output folder.
 
-# Define class labels
-if args.use_all_classes:
-    all_labels = {
-        0: "BACKGROUND",
-        1: "POND",
-        2: "WETLAND",
-        3: "DRY BOTTOM - TURF",
-        4: "DRY BOTTOM - MESIC PRAIRIE",
-        5: "DEPRESSIONAL STORAGE",
-        6: "DRY BOTTOM - WOODED",
-        7: "POND - EXTENDED DRY",
-        8: "PICP PARKING LOT",
-        9: "DRY BOTTOM - GRAVEL",
-        10: "UNDERGROUND",
-        11: "UNDERGROUND VAULT",
-        12: "PICP ALLEY",
-        13: "INFILTRATION TRENCH",
-        14: "BIORETENTION",
-        15: "UNKNOWN",
-    }
-else:
-    all_labels = config.KC_LABELS
+    Args:
+        --max_samples (int): If >0, limit total patch processing to that many; if -1, process all.
+        --subset_index (int): This sub-task's index if running multiple parallel jobs.
+        --total_subsets (int): Total number of parallel sub-tasks (used to partition patch indices).
 
-# Configure dataset
-dataset_config = (
-    config.KC_LAYER,
-    all_labels,
-    config.PATCH_SIZE,
-    naip_dataset.crs,
-    naip_dataset.res,
-)
+    Note:
+        - No previous runs are deleted, so repeated calls may accumulate outputs unless
+          manually cleared.
+        - If using an HPC array, each sub-task writes its partial CSV in the same folder but
+          with a unique name (e.g., per_class_ious_subset_{index}.csv).
+    """
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--max_samples", type=int, default=-1,
+                        help="Process up to this many patches; -1 for all.")
+    parser.add_argument("--subset_index", type=int, default=None,
+                        help="Index of subset if splitting data among multiple jobs.")
+    parser.add_argument("--total_subsets", type=int, default=None,
+                        help="Total subsets to split the data (used with subset_index).")
+    args = parser.parse_args()
 
-kc_dataset = KaneCounty(shape_path, dataset_config)
-train_dataset = naip_dataset & kc_dataset
+    # -------------------------------------------------------------------------
+    # Output directory setup (NO deletion of old runs => Aggregator will including old data if not deleted first!!)
+    # -------------------------------------------------------------------------
+    home_dir = os.path.expanduser("~")
+    base_out_dir = os.path.join(home_dir, "CMAP", "segment-anything", "kc-sam-outputs")
+    os.makedirs(base_out_dir, exist_ok=True)
 
-train_sampler = BalancedRandomBatchGeoSampler(
-    config={
-        "dataset": train_dataset,
-        "size": config.PATCH_SIZE,
-        "batch_size": 1,
-    }
-)
+    job_id = os.getenv("SLURM_JOB_ID", "local")
+    run_folder_name = f"kc_sam_run_{job_id}"
+    out_dir = os.path.join(base_out_dir, run_folder_name)
+    os.makedirs(out_dir, exist_ok=True)
 
-plot_dataloader = DataLoader(
-    dataset=train_dataset,
-    batch_sampler=train_sampler,
-    collate_fn=stack_samples,
-    num_workers=config.NUM_WORKERS,
-)
+    plots_dir = os.path.join(out_dir, "plots")
+    os.makedirs(plots_dir, exist_ok=True)
 
-sam = sam_model_registry["vit_h"](checkpoint="/home/gregoryc25/CMAP/segment-anything/sam_vit_h.pth")
-predictor = SamPredictor(sam)
+    print(f"[INFO] Using single output directory for all tasks:\n  {out_dir}")
 
-MAX_SAVED_OUTPUTS = 20
+    # -------------------------------------------------------------------------
+    # 1) Load dataset
+    # -------------------------------------------------------------------------
+    naip_dataset = NAIP("/net/projects/cmap/data/KC-images")
+    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
 
-iou_metric = MulticlassJaccardIndex(num_classes=len(all_labels), ignore_index=0, average="macro")
+    dataset_config = (
+        config.KC_LAYER,
+        config.KC_LABELS,
+        config.PATCH_SIZE,
+        naip_dataset.crs,
+        naip_dataset.res,
+    )
+    kc_dataset = KaneCounty(shape_path, dataset_config)
+    train_dataset = naip_dataset & kc_dataset
 
-iou_results = {}
-
-total_objects = 0
-valid_objects = 0
-skipped_objects = 0
-saved_images = 0
-
-for obj_id, sample in enumerate(plot_dataloader):
-    if args.max_objects and total_objects >= args.max_objects:
-        break
-    total_objects += 1
-    print(f"\nProcessing object {obj_id}...")
-
-    img_tensor = sample["image"][0]
-    gt_mask = sample["mask"][0].numpy()
-
-    img_np = img_tensor[:3].cpu().numpy()
-    img_np = np.transpose(img_np, (1, 2, 0)).astype(np.uint8)
-
-    unique_labels = np.unique(gt_mask)
-    valid_labels = unique_labels[unique_labels > 0]
-
-    if len(valid_labels) == 0:
-        print(f"Skipping object {obj_id} - No valid segmentation regions found!")
-        skipped_objects += 1
-        continue
-
-    inferred_class_label = np.random.choice(valid_labels)
-    print(f"Inferred class label: {inferred_class_label} ({all_labels.get(inferred_class_label, 'UNKNOWN')})")
-
-    valid_objects += 1
-
-    predictor.set_image(img_np)
-
-    ys, xs = torch.where(torch.tensor(gt_mask) == inferred_class_label)
-    random_idx = torch.randint(0, len(xs), (1,)).item()
-    seed_x, seed_y = xs[random_idx].item(), ys[random_idx].item()
-
-    seed_coords = np.array([[seed_x, seed_y]])
-    seed_label = np.array([1])
-
-    masks, scores, logits = predictor.predict(
-        point_coords=seed_coords,
-        point_labels=seed_label,
-        multimask_output=False
+    train_sampler = BalancedRandomBatchGeoSampler(
+        config={
+            "dataset": train_dataset,
+            "size": config.PATCH_SIZE,
+            "batch_size": 1,
+        }
+    )
+    plot_dataloader = DataLoader(
+        dataset=train_dataset,
+        batch_sampler=train_sampler,
+        collate_fn=stack_samples,
+        num_workers=config.NUM_WORKERS
     )
 
-    pred_mask = masks[0]
+    try:
+        total_samples = len(plot_dataloader)
+    except TypeError:
+        total_samples = None
 
-    gt_tensor = torch.tensor(gt_mask, dtype=torch.int64).unsqueeze(0)
-    pred_tensor = torch.tensor(pred_mask, dtype=torch.int64).unsqueeze(0)
+    print("[INFO] Loading SAM model...")
+    sam_checkpoint = os.path.join(home_dir, "CMAP", "segment-anything", "sam_vit_h.pth")
+    sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
+    predictor = SamPredictor(sam)
 
-    iou_score = iou_metric(pred_tensor, gt_tensor).item()
+    # -------------------------------------------------------------------------
+    # 2) Loop over patches, apply SAM
+    # -------------------------------------------------------------------------
+    per_class_ious = {}
+    num_processed = 0
+    num_skipped = 0
+    num_total_iou_calcs = 0
 
-    if inferred_class_label not in iou_results:
-        iou_results[inferred_class_label] = []
-    iou_results[inferred_class_label].append(iou_score)
+    MAX_SAVED_PLOTS = 10 # number of plots for each parallel job to save
+    saved_plots_count = 0
 
-    if saved_images < MAX_SAVED_OUTPUTS:
-        plt.figure(figsize=(10, 4))
+    print("[INFO] Starting segmentation loop...")
 
-        plt.subplot(1, 3, 1)
-        plt.imshow(img_np)
-        plt.scatter(seed_x, seed_y, color="red", s=20, edgecolors="black", linewidth=0.5)
-        plt.title("Image (Seed Point)")
-        plt.axis("off")
+    for sample_idx, batch in enumerate(plot_dataloader):
+        # (a) If max_samples != -1, limit total
+        if args.max_samples != -1 and sample_idx >= args.max_samples:
+            break
 
-        plt.subplot(1, 3, 2)
-        plt.imshow(gt_mask, cmap="gray")
-        plt.title("Ground Truth Mask")
-        plt.axis("off")
+        # (b) Partition logic for array
+        if args.total_subsets and args.subset_index is not None and total_samples is not None:
+            subset_size = total_samples // args.total_subsets
+            start_idx = args.subset_index * subset_size
+            end_idx = (args.subset_index + 1) * subset_size
+            # last subset picks up remainder
+            if args.subset_index == args.total_subsets - 1:
+                end_idx = total_samples
+            if not (start_idx <= sample_idx < end_idx):
+                continue
 
-        plt.subplot(1, 3, 3)
-        plt.imshow(pred_mask, cmap="gray")
-        plt.title(f"Predicted Mask (IoU: {iou_score:.2f})")
-        plt.axis("off")
+        # Progress print
+        if total_samples is not None:
+            pct = 100.0 * sample_idx / total_samples
+            print(f"Processing patch {sample_idx+1}/{total_samples} ({pct:.1f}% complete).")
+        else:
+            print(f"Processing patch {sample_idx}...")
 
-        save_path = f"{OUTPUT_DIR}/object_{obj_id}.png"
-        try:
-            plt.savefig(save_path)
-            plt.close()
-            saved_images += 1
-            print(f"✅ Image saved successfully: {save_path}")
-        except Exception as e:
-            print(f"❌ Error saving image: {e}")
+        # Extract image & mask from batch
+        img_tensor = batch["image"][0]
+        mask_tensor = batch["mask"][0]
+        if mask_tensor.dim() == 3 and mask_tensor.shape[0] == 1:
+            mask_tensor = mask_tensor.squeeze(0)
 
-print("\nSegmentation Complete!")
+        # Identify valid labels in ground truth
+        valid_labels = torch.unique(mask_tensor)
+        valid_labels = valid_labels[valid_labels > 0]
+        if len(valid_labels) == 0:
+            num_skipped += 1
+            continue
+
+        # Convert to NumPy for SAM
+        img_np = img_tensor[:3].cpu().numpy()
+        img_np = np.transpose(img_np, (1, 2, 0)).astype(np.uint8)
+        predictor.set_image(img_np)
+        gt_mask_np = mask_tensor.cpu().numpy()
+
+        # Segment each valid label
+        for label_id in valid_labels:
+            ys, xs = torch.where(mask_tensor == label_id)
+            if len(xs) == 0:
+                continue
+
+            # Pick a random seed from that label
+            rand_idx = torch.randint(0, len(xs), (1,)).item()
+            seed_x, seed_y = xs[rand_idx].item(), ys[rand_idx].item()
+
+            # Run SAM
+            masks, scores, _ = predictor.predict(
+                point_coords=np.array([[seed_x, seed_y]]),
+                point_labels=np.array([1]),
+                multimask_output=False
+            )
+            pred_mask = masks[0].astype(np.uint8)
+
+            # Compute IoU for that label
+            iou_val = compute_instance_iou(pred_mask, gt_mask_np, label_id.item())
+            label_id_int = int(label_id.item())
+            if label_id_int not in per_class_ious:
+                per_class_ious[label_id_int] = []
+            per_class_ious[label_id_int].append(iou_val)
+            num_total_iou_calcs += 1
+
+            # Optionally save some debug plots
+            if saved_plots_count < MAX_SAVED_PLOTS:
+                saved_plots_count += 1
+                fig, axs = plt.subplots(1, 3, figsize=(16, 5))
+
+                axs[0].imshow(img_np)
+                axs[0].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
+                axs[0].set_title("RGB + Seed")
+                axs[0].axis("off")
+
+                axs[1].imshow(gt_mask_np, cmap="gray")
+                axs[1].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
+                axs[1].set_title("GT Mask")
+                axs[1].axis("off")
+
+                axs[2].imshow(pred_mask, cmap="gray")
+                axs[2].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
+                axs[2].set_title(f"Pred Mask (IoU={iou_val:.2f})")
+                axs[2].axis("off")
+
+                plt.tight_layout()
+
+                si = args.subset_index if args.subset_index is not None else 0
+                plot_fname = f"task{si}_patch_{sample_idx}_label_{label_id_int}_{saved_plots_count}.png"
+                out_plot_path = os.path.join(plots_dir, plot_fname)
+                plt.savefig(out_plot_path, dpi=150)
+                plt.close(fig)
+
+        num_processed += 1
+
+    print("\n--- Inference Complete ✅---")
+    print(f"Processed {num_processed} patches (skipped {num_skipped}).") # "skipped" patches == those outside of sub-task's assigned range
+    print(f"Total per-label IoU calculations: {num_total_iou_calcs}")
+
+    # Summarize IoU
+    print("\nPer-class IoU Summary:")
+    for cls_id, iou_list in per_class_ious.items():
+        mean_iou = np.mean(iou_list)
+        std_iou = np.std(iou_list)
+        print(f"  Class {cls_id}: Mean IoU={mean_iou:.4f}, Std={std_iou:.4f}")
+
+    # Write CSV
+    if args.total_subsets and args.subset_index is not None:
+        csv_name = f"per_class_ious_subset_{args.subset_index}.csv"
+    else:
+        csv_name = "per_class_ious_all.csv"
+
+    csv_path = os.path.join(out_dir, csv_name)
+    print(f"\nSaving CSV to: {csv_path}")
+    with open(csv_path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["class_id", "mean_iou", "std_iou", "count"])
+        for cls_id, iou_list in per_class_ious.items():
+            mean_iou = float(np.mean(iou_list))
+            std_iou = float(np.std(iou_list))
+            count = len(iou_list)
+            writer.writerow([cls_id, mean_iou, std_iou, count])
+
+    print(f"\nDone! All tasks wrote to the single folder:\n  {out_dir}")
+
+if __name__ == "__main__":
+    main()
