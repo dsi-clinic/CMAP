@@ -625,7 +625,6 @@ def train_epoch(
     class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
     total_pixels = 0
 
-
     model.train()
     jaccard.reset()
 
@@ -701,9 +700,12 @@ def train_epoch(
     final_jaccard = jaccard.compute()
 
     class_area_percentages = {
-        i: (class_area_counts[i] / total_pixels * 100) for i in range(config.NUM_CLASSES)
+        i: (class_area_counts[i] / total_pixels * 100)
+        for i in range(config.NUM_CLASSES)
     }
-    logging.info("Per-class area percentages for epoch %d: %s", epoch, class_area_percentages)
+    logging.info(
+        "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
+    )
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
