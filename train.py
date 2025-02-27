@@ -528,7 +528,7 @@ def train_setup(
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
     epoch, batch, train_images_root = train_config
-    spatial_aug_mode, color_aug_mode, spatial_augs, color_augs = aug_config
+    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -637,12 +637,7 @@ def train_epoch(
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
-        aug_config = (
-            spatial_aug_mode,
-            color_aug_mode,
-            spatial_augs,
-            color_augs,
-        )
+        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
             train_config,
