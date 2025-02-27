@@ -51,7 +51,9 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         if config.get("length") is not None:
             self.length = config["length"]
 
-    def calculate_hits_and_areas(self):
+    def calculate_hits_and_areas(
+        self,
+    ):  # Balancing (between background and features, i.e any class) happens here! We are creating different sized patches?!
         """Calculate hits and areas for the dataset.
 
         Returns:
