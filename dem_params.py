@@ -30,7 +30,8 @@ def calculate_image_stats(dem_image):
     Parameters
     ----------
     file_path : str
-        Path to the image file
+        Path
+        to the image file
 
     Returns:
     -------
