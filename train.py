@@ -498,18 +498,24 @@ def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
 
 
 def log_per_class_iou_tensor(
-    writer: SummaryWriter, per_class_iou_tensor: torch.Tensor, prefix: str, epoch: int
+    writer: SummaryWriter,
+    class_labels,
+    per_class_iou_tensor: torch.Tensor,
+    prefix: str,
+    epoch: int,
 ):
     """Logs per-class IoU values to TensorBoard.
 
     Args:
         writer: TensorBoard SummaryWriter.
+        class_labels: Iterable of class labels
         per_class_iou_tensor: Tensor containing per-class IoU values.
         prefix: String prefix for the metric key (e.g., "IoU/train" or "IoU/test").
         epoch: Current epoch number.
     """
-    # Build mapping from class IDs to names using your global `kc.labels`
-    class_labels = {label_id: label_name for label_name, label_id in kc.labels.items()}
+    class_labels = {
+        label_id: label_name for label_name, label_id in class_labels
+    }  # kc.labels.items()
     for i in sorted(class_labels.keys()):
         writer.add_scalar(
             f"{prefix}/{class_labels[i]}", per_class_iou_tensor[i].item(), epoch
@@ -524,7 +530,7 @@ def train_setup(
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
     epoch, batch, train_images_root = train_config
-    spatial_aug_mode, color_aug_mode, spatial_augs, color_augs = aug_config
+    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -617,6 +623,10 @@ def train_epoch(
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     num_batches = len(dataloader)
+
+    class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
+    total_pixels = 0
+
     model.train()
     jaccard.reset()
 
@@ -629,12 +639,7 @@ def train_epoch(
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
-        aug_config = (
-            spatial_aug_mode,
-            color_aug_mode,
-            spatial_augs,
-            color_augs,
-        )
+        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
             train_config,
@@ -643,6 +648,13 @@ def train_epoch(
         )
         x = x.to(MODEL_DEVICE)
         y = y.to(MODEL_DEVICE)
+
+        mask_int = y.long()
+        batch_pixels = mask_int.numel()
+        total_pixels += batch_pixels
+        for i in range(config.NUM_CLASSES):
+            class_area_counts[i] += (mask_int == i).sum().item()
+
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -684,11 +696,21 @@ def train_epoch(
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
+    class_area_percentages = {
+        i: (class_area_counts[i] / total_pixels * 100)
+        for i in range(config.NUM_CLASSES)
+    }
+    logging.info(
+        "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
+    )
+
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
 
     final_train_iou = train_jaccard_per_class.compute()
-    log_per_class_iou_tensor(writer, final_train_iou, "IoU/train", epoch)
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_train_iou, "IoU/train", epoch
+    )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
 
@@ -875,7 +897,9 @@ def test(
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
 
-    log_per_class_iou_tensor(writer, final_jaccard_per_class, "IoU/test", epoch)
+    log_per_class_iou_tensor(
+        writer, kc.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+    )
 
     logger = logging.getLogger()
     logger.info("Test error:")
