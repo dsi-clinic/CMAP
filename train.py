@@ -146,47 +146,29 @@ def initialize_dataset(config):
     else:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-    dataset_config = (
-        config.KC_LAYER,
-        config.KC_LABELS,
-        config.PATCH_SIZE,
-        naip_dataset.crs,
-        naip_dataset.res,
-    )
-    kc_dataset = KaneCounty(shape_path, dataset_config)
-
+    # Load DEM if specified
     if config.KC_DEM_ROOT is not None:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         if not config.USE_NIR:
             config.DATASET_MEAN.append(0.0)  # DEM mean
             config.DATASET_STD.append(1.0)  # DEM std
-        print("naip and dem loaded")
+        print("dem loaded")
+
+    # Load appropriate label dataset
     if config.USE_RIVERDATASET:
-        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-
         config.NUM_CLASSES = 6  # predicting 5 classes + background
-
         rd_config = (
             config.RD_LABELS,
             config.PATCH_SIZE,
             naip_dataset.crs,
             naip_dataset.res,
         )
-
-        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
-
-        if config.KC_DEM_ROOT is not None:
-            dem = KaneDEM(config.KC_DEM_ROOT)
-            naip_dataset = naip_dataset & dem
-            print("naip and dem loaded")
-
-        return naip_dataset, combined_dataset
-
-    else:  # this is the default; uses KC only
-        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+        print("river dataset loaded")
+    else:
+        # Default: use Kane County dataset
         shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         dataset_config = (
             config.KC_LAYER,
@@ -195,21 +177,17 @@ def initialize_dataset(config):
             naip_dataset.crs,
             naip_dataset.res,
         )
-        kc_dataset = KaneCounty(shape_path, dataset_config)
-
-        if config.KC_DEM_ROOT is not None:
-            dem = KaneDEM(config.KC_DEM_ROOT, config)
-            naip_dataset = naip_dataset & dem
-            print("naip and dem loaded")
-
-        return naip_dataset, kc_dataset
+        label_dataset = KaneCounty(shape_path, dataset_config)
+        print("kc dataset loaded")
+    return naip_dataset, label_dataset
 
 
-def build_dataset(naip_set, split_rate, config):
+def build_dataloaders(images, labels, split_rate, config):
     """Randomly split and load data to be the test and train sets
 
     Args:
-    naip_set (Dataset): The NAIP (imagery) dataset
+    images (Dataset): The images dataset
+    labels (Dataset): The labels dataset
     split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
     config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
 
@@ -222,10 +200,10 @@ def build_dataset(naip_set, split_rate, config):
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
-        naip_set, [split_rate, 1 - split_rate], generator
+        images, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & initialize_dataset(config)[1]
-    test_dataset = test_portion & initialize_dataset(config)[1]
+    train_dataset = train_portion & labels
+    test_dataset = test_portion & labels
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -314,6 +292,7 @@ def create_model(
     learning_rate,
     weight_decay,
     device="cpu",
+    debug=False,
 ):
     """Setting up training model, loss function and measuring metrics
 
@@ -336,7 +315,8 @@ def create_model(
     }
 
     model = SegmentationModel(model_configs).model.to(device)
-    logging.info(model)
+    if not debug:
+        logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
@@ -478,8 +458,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            kc.colors,
-            kc.labels_inverse,
+            labels.colors,
+            labels.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -707,7 +687,7 @@ def train_epoch(
 
     final_train_iou = train_jaccard_per_class.compute()
     log_per_class_iou_tensor(
-        writer, kc.labels.items(), final_train_iou, "IoU/train", epoch
+        writer, labels.labels.items(), final_train_iou, "IoU/train", epoch
     )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
@@ -731,6 +711,7 @@ def test(
     test_config,
     writer,
     wandb_tune: bool,
+    labels,
     num_examples: int = 10,
 ) -> float:
     """Executes a testing step for the model and saves sample output images.
@@ -750,6 +731,7 @@ def test(
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
+        labels: The labels for the dataset.
         num_examples: The number of examples to save.
 
     Returns:
@@ -875,7 +857,7 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
@@ -885,8 +867,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            kc.colors,
-                            kc.labels_inverse,
+                            labels.colors,
+                            labels.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -896,7 +878,7 @@ def test(
     writer.add_scalar("IoU/test", final_jaccard, epoch)
 
     log_per_class_iou_tensor(
-        writer, kc.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+        writer, labels.labels.items(), final_jaccard_per_class, "IoU/test", epoch
     )
 
     logger = logging.getLogger()
@@ -915,7 +897,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in kc.labels.items():
+    for label_name, label_id in labels.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -935,6 +917,7 @@ def train(
     wandb_tune: bool,
     args,
     epoch,
+    labels,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -959,6 +942,7 @@ def train(
         wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
         epoch: The configuration for the number of epochs.
+        labels: The labels for the dataset.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -1024,6 +1008,7 @@ def train(
                 test_config,
                 writer,
                 args,
+                labels,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -1067,6 +1052,7 @@ def train(
             test_config,
             writer,
             wandb_tune,
+            labels,
         )
         # Checks for plateau
         if best_loss is None:
@@ -1104,7 +1090,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
+def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     """Runing a single trial of training
 
     Input:
@@ -1125,7 +1111,9 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate, config)
+    train_dataloader, test_dataloader = build_dataloaders(
+        images, labels, split_rate, config
+    )
     (
         model,
         loss_fn,
@@ -1144,6 +1132,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         learning_rate=config.LEARNING_RATE,
         weight_decay=config.WEIGHT_DECAY,
         device=MODEL_DEVICE,
+        debug=args.debug,
     )
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
@@ -1179,6 +1168,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         wandb_tune,
         args,
         epoch,
+        labels,
     )
     writer.close()
     logger.handlers.clear()
@@ -1239,7 +1229,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset(config)
+    images, labels = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
@@ -1257,7 +1247,7 @@ if __name__ == "__main__":
 
         for num in range(num_trials):
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split, args
+                exp_name, num, wandb_tune, images, labels, split, args
             )
             train_ious.append(round(float(train_iou), 3))
             test_ious.append(round(float(test_iou), 3))
