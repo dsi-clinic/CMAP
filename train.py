@@ -458,8 +458,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            kc.colors,
-            kc.labels_inverse,
+            labels.colors,
+            labels.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -687,7 +687,7 @@ def train_epoch(
 
     final_train_iou = train_jaccard_per_class.compute()
     log_per_class_iou_tensor(
-        writer, kc.labels.items(), final_train_iou, "IoU/train", epoch
+        writer, labels.labels.items(), final_train_iou, "IoU/train", epoch
     )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
@@ -711,6 +711,7 @@ def test(
     test_config,
     writer,
     wandb_tune: bool,
+    labels,
     num_examples: int = 10,
 ) -> float:
     """Executes a testing step for the model and saves sample output images.
@@ -730,6 +731,7 @@ def test(
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
+        labels: The labels for the dataset.
         num_examples: The number of examples to save.
 
     Returns:
@@ -855,7 +857,7 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
+                        label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
@@ -865,8 +867,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            kc.colors,
-                            kc.labels_inverse,
+                            labels.colors,
+                            labels.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -876,7 +878,7 @@ def test(
     writer.add_scalar("IoU/test", final_jaccard, epoch)
 
     log_per_class_iou_tensor(
-        writer, kc.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+        writer, labels.labels.items(), final_jaccard_per_class, "IoU/test", epoch
     )
 
     logger = logging.getLogger()
@@ -895,7 +897,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in kc.labels.items():
+    for label_name, label_id in labels.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -915,6 +917,7 @@ def train(
     wandb_tune: bool,
     args,
     epoch,
+    labels,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -939,6 +942,7 @@ def train(
         wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
         epoch: The configuration for the number of epochs.
+        labels: The labels for the dataset.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -1004,6 +1008,7 @@ def train(
                 test_config,
                 writer,
                 args,
+                labels,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -1047,6 +1052,7 @@ def train(
             test_config,
             writer,
             wandb_tune,
+            labels,
         )
         # Checks for plateau
         if best_loss is None:
@@ -1084,7 +1090,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
+def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     """Runing a single trial of training
 
     Input:
@@ -1126,6 +1132,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         learning_rate=config.LEARNING_RATE,
         weight_decay=config.WEIGHT_DECAY,
         device=MODEL_DEVICE,
+        debug=args.debug,
     )
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
@@ -1161,6 +1168,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         wandb_tune,
         args,
         epoch,
+        labels,
     )
     writer.close()
     logger.handlers.clear()
@@ -1239,7 +1247,7 @@ if __name__ == "__main__":
 
         for num in range(num_trials):
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split, args
+                exp_name, num, wandb_tune, images, labels, split, args
             )
             train_ious.append(round(float(train_iou), 3))
             test_ious.append(round(float(test_iou), 3))
