@@ -182,12 +182,12 @@ def initialize_dataset(config):
     return naip_dataset, label_dataset
 
 
-
-def build_dataset(naip_set, split_rate, config):
+def build_dataloaders(images, labels, split_rate, config):
     """Randomly split and load data to be the test and train sets
 
     Args:
-    naip_set (Dataset): The NAIP (imagery) dataset
+    images (Dataset): The images dataset
+    labels (Dataset): The labels dataset
     split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
     config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
 
@@ -200,10 +200,10 @@ def build_dataset(naip_set, split_rate, config):
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
-        naip_set, [split_rate, 1 - split_rate], generator
+        images, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & initialize_dataset(config)[1]
-    test_dataset = test_portion & initialize_dataset(config)[1]
+    train_dataset = train_portion & labels
+    test_dataset = test_portion & labels
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -1103,7 +1103,9 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate, config)
+    train_dataloader, test_dataloader = build_dataloaders(
+        images, labels, split_rate, config
+    )
     (
         model,
         loss_fn,
@@ -1217,7 +1219,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset(config)
+    images, labels = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
