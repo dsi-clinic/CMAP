@@ -46,7 +46,7 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
 
         self.batch_size = config["batch_size"]
         self.length = 0
-        self.hits, self.adjusted_areas = self.calculate_hits_and_areas()
+        self.hits, self.adjusted_weight_tensor = self.calculate_hits_and_areas()
 
         if config.get("length") is not None:
             self.length = config["length"]
@@ -61,7 +61,7 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
             adjusted_areas: Tensor of adjusted areas corresponding to each hit.
         """
         hits = []
-        areas = []
+        weight = []
         context_x = self.size[1] / 2
         context_y = self.size[0] / 2
 
@@ -100,20 +100,21 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
                     i: class_pixel_counts[i] / total_pixels
                     for i in range(self.config["NUM_CLASSES"])
                 }
+
                 print("Test:", patch_distribution)
 
-                # 4) Adjust the weight: here, a higher error (more imbalance) reduces the weight
-                adjusted_weight = 1
-
-                areas.append(adjusted_weight)
+                # 2) Adjust the weight:
+                underrepresented_score = patch_distribution.get(3, 0) + patch_distribution.get(4, 0)
+                adjusted_weight = shape_bounds.area * (1 + underrepresented_score)
+                weight.append(adjusted_weight)
 
                 ## END: OBTAINING PER HIT CLASS STATISTICS AND ADJUSTING THE SAMPLING WEIGHT
 
-        adjusted_areas_tensor = torch.tensor(areas, dtype=torch.float)
-        if torch.sum(adjusted_areas_tensor) == 0:
-            adjusted_areas_tensor += 1
+        adjusted_weight_tensor = torch.tensor(weight, dtype=torch.float)
+        if torch.sum(adjusted_weight_tensor) == 0:
+            adjusted_weight_tensor += 1
 
-        return hits, adjusted_areas_tensor
+        return hits, adjusted_weight_tensor
 
     def get_shape_bounds(self, bounds, context_x, context_y):
         """Get adjusted shape bounds considering context.
@@ -145,8 +146,8 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
             batch = []
             for _ in range(self.batch_size):
                 idx = torch.multinomial(
-                    self.adjusted_areas, 1
-                )  # Weighted sampling happens here
+                    self.adjusted_weight_tensor, 1
+                ).item()  # Weighted sampling happens here
                 hit = self.hits[idx]
                 bounds = BoundingBox(*hit.bounds)
                 bounding_box = get_random_bounding_box(bounds, self.size, self.res)
