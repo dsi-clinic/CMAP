@@ -292,6 +292,7 @@ def create_model(
     learning_rate,
     weight_decay,
     device="cpu",
+    debug=False,
 ):
     """Setting up training model, loss function and measuring metrics
 
@@ -314,7 +315,8 @@ def create_model(
     }
 
     model = SegmentationModel(model_configs).model.to(device)
-    logging.info(model)
+    if not debug:
+        logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
