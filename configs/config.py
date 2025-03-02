@@ -48,6 +48,8 @@ DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 # ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
+NUM_CLASSES = 5  # predicting 4 classes + background
+
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 4
@@ -120,7 +122,7 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
-USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 USE_KC = True  # change to False if training w/ only RiverDataset
 
 # for wandb
