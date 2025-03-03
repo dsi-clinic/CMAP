@@ -29,24 +29,21 @@ DROPOUT = 0.0
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
-DATASET_MEAN = [0.485, 0.456, 0.406]  # RGB only
-DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 
-# mean/std of NAIP data + DEM
-# DATASET_MEAN = [
-#     0.328,  # R
-#     0.420,  # G
-#     0.418,  # B
-#     0.547,  # NIR (optional)
-#     0.0,    # DEM (optional)
-# ]
-# DATASET_STD = [
-#     0.30,  # R
-#     0.25,  # G
-#     0.25,  # B
-#     0.36,  # NIR (optional)
-#     1.0,   # DEM (optional)
-# ]
+DATASET_MEAN = [
+    0.485,  # R
+    0.456,  # G
+    0.406,  # B
+    0.4,    # A
+    0.0,  # DEM (optional)
+]
+DATASET_STD = [
+    0.229,  # R
+    0.224,  # G
+    0.225,  # B
+    0.2,    # A
+    12.194,  # DEM (optional)
+]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 NUM_CLASSES = 5  # predicting 4 classes + background
@@ -67,11 +64,11 @@ CLIP_VALUE = 1.0
 SPATIAL_AUG_INDICES = [
     0,  # HorizontalFlip
     1,  # VerticalFlip
-    2,  # Rotate
-    3,  # Affine
-    4,  # Elastic
-    5,  # Perspective
-    6,  # ResizedCrop
+    # 2,  # Rotate
+    # 3,  # Affine
+    # 4,  # Elastic
+    # 5,  # Perspective
+    # 6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
@@ -82,8 +79,8 @@ IMAGE_AUG_INDICES = [
     3,  # Gaussian Blur0
     4,  # Plasma Brightness
     5,  # Saturation
-    6,  # Channel Shuffle
-    7,  # Gamma
+    # 6,  # Channel Shuffle
+    # 7,  # Gamma
 ]
 
 # Augmentation

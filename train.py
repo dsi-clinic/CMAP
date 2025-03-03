@@ -573,7 +573,7 @@ def train_setup(
     if filled_dem_include:
         max_val = torch.max(x[:, -1])
         min_val = torch.min(x[:, -1])
-        x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
+        x[:, -1] = (x[:, -1] - min_val) / (max_val - min_val)
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
