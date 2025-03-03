@@ -121,14 +121,16 @@ class RiverDataset(GeoDataset):
                     break
 
             # Preserve label ordering when combining
-            rd_labels = self.labels
+            rd_labels = (
+                self.labels.copy()
+            )  # Make a copy to avoid modifying the original
             combined_labels = {}
             next_idx = 0
 
-            # First add RD labels
-            for label, _ in rd_labels.items():
-                combined_labels[label] = next_idx
-                next_idx += 1
+            # First add RD labels with their original indices
+            for label, idx in rd_labels.items():
+                combined_labels[label] = idx  # Keep original indices
+                next_idx = max(next_idx, idx + 1)
 
             # Then add KC labels that aren't already present
             for label in KC_LABELS.keys():
@@ -138,15 +140,15 @@ class RiverDataset(GeoDataset):
 
             self.labels = combined_labels
 
-            # Preserve color ordering
+            # Preserve color mapping with correct indices
             combined_colors = {}
             for label, idx in combined_labels.items():
                 if label in rd_labels:
-                    # Use RD color
-                    combined_colors[idx] = self.colors[rd_labels[label]]
+                    # Use RD color with the correct index
+                    combined_colors[idx] = self.all_colors[rd_labels[label]]
                 else:
-                    # Use KC color
-                    combined_colors[idx] = kc_dataset.colors[KC_LABELS[label]]
+                    # Use KC color with the correct index
+                    combined_colors[idx] = kc_dataset.all_colors[KC_LABELS[label]]
 
             self.colors = combined_colors
 

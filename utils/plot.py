@@ -103,6 +103,9 @@ def plot_from_tensors(
     cmap = build_cmap(colors) if colors is not None else "viridis"
     min_dims = 2
 
+    print(f"plot_from_tensors: sample keys: {list(sample.keys())}")
+    print(f"plot_from_tensors: colors: {colors}")
+
     # Determine the layout and create subplots
     nrows = len(sample) // 2 + len(sample) % 2
     ncols = min(len(sample), 2)
@@ -112,18 +115,35 @@ def plot_from_tensors(
     fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
-    # Plot each input tensor and gather unique labels
-    unique_labels = Tensor()
+    # Track unique values in mask tensors
+    mask_unique_values = set()
+
+    # Plot each input tensor
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
+        print(
+            f"plot_from_tensors: plotting '{name}', shape: {tensor.shape}, dtype: {tensor.dtype}"
+        )
 
         if "image" in name.lower():
+            print("  plotting as RGB image")
             ax.imshow(rearrange(tensor, "c h w -> h w c"))
         elif "dem" in name.lower() or "nir" in name.lower():
             # Squeeze out the channel dimension for DEM/NIR visualization
+            print("  plotting as DEM/NIR with viridis colormap")
             ax.imshow(tensor.squeeze(0), cmap="viridis")
         else:
+            print("  plotting as mask/prediction")
             unique = tensor.unique() if tensor.ndim > min_dims else tensor.unique()
+            print(f"  unique values: {unique.tolist()}")
+
+            # Add unique values to our set
+            mask_unique_values.update(unique.tolist())
+
+            if colors is not None:
+                print(f"  using custom colormap with {len(cmap.colors)} colors")
+                print(f"  setting vmin=0, vmax={len(cmap.colors) - 1}")
+
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
@@ -131,17 +151,23 @@ def plot_from_tensors(
                 vmax=len(cmap.colors) - 1 if isinstance(cmap, ListedColormap) else None,
                 interpolation="none",
             )
-            unique_labels = torch.cat((unique, unique_labels))
 
         ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
-        unique_labels = unique_labels.unique().type(torch.int).tolist()
+        # Only include labels that actually appear in the masks
+        legend_labels = sorted(
+            [
+                i
+                for i in mask_unique_values
+                if i in labels and i in colors and i < len(cmap.colors)
+            ]
+        )
+
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[label])
-            for i, label in enumerate(unique_labels)
+            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in legend_labels
         ]
 
         fig.legend(
