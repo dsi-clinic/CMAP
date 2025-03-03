@@ -158,9 +158,7 @@ def initialize_dataset(config):
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        config.NUM_CLASSES = 6  # predicting 5 classes + background
         rd_config = (
-            config.RD_LABELS,
             config.PATCH_SIZE,
             naip_dataset.crs,
             naip_dataset.res,
@@ -197,6 +195,7 @@ def build_dataloaders(images, labels, split_rate, config):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
+    logging.info(f"Initial NAIP dataset size: {len(images)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -204,6 +203,16 @@ def build_dataloaders(images, labels, split_rate, config):
     )
     train_dataset = train_portion & labels
     test_dataset = test_portion & labels
+
+    logging.info("After intersection:")
+    logging.info(f"Train dataset size: {len(train_dataset)}")
+    logging.info(f"Test dataset size: {len(test_dataset)}")
+
+    # Check if datasets are empty before creating samplers
+    if len(train_dataset) == 0:
+        raise ValueError("Train dataset is empty after intersection!")
+    if len(test_dataset) == 0:
+        raise ValueError("Test dataset is empty after intersection!")
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -220,6 +229,10 @@ def build_dataloaders(images, labels, split_rate, config):
         }
     )
 
+    # Log sampler lengths
+    logging.info(f"Train sampler length: {len(train_sampler)}")
+    logging.info(f"Test sampler length: {len(test_sampler)}")
+
     # create dataloaders (must use batch_sampler)
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -234,6 +247,10 @@ def build_dataloaders(images, labels, split_rate, config):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
+
+    logging.info(f"Train dataloader length: {len(train_dataloader)}")
+    logging.info(f"Test dataloader length: {len(test_dataloader)}")
+
     return train_dataloader, test_dataloader
 
 
@@ -282,15 +299,8 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
 
 
 def create_model(
-    model_type,
-    backbone,
+    config,
     num_classes,
-    weights,
-    dropout,
-    loss_function_name,
-    ignore_index,
-    learning_rate,
-    weight_decay,
     device="cpu",
     debug=False,
 ):
@@ -305,13 +315,20 @@ def create_model(
             - jaccard_per_class: The metric to measure Jaccard index per class.
             - optimizer: The optimizer for training the model.
     """
-    # create the model
+    # calculate input channels based on config
+    in_channels = 3  # base RGB channels
+    if config.USE_NIR:
+        in_channels += 1  # add NIR channel
+    if config.KC_DEM_ROOT is not None:
+        in_channels += 1  # add DEM channel
+
     model_configs = {
-        "model": model_type,
-        "backbone": backbone,
+        "model": config.MODEL,
+        "backbone": config.BACKBONE,
         "num_classes": num_classes,
-        "weights": weights,
-        "dropout": dropout,
+        "weights": config.WEIGHTS,
+        "dropout": config.DROPOUT,
+        "in_channels": in_channels,
     }
 
     model = SegmentationModel(model_configs).model.to(device)
@@ -321,7 +338,7 @@ def create_model(
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
         importlib.import_module("segmentation_models_pytorch.losses"),
-        loss_function_name,
+        config.LOSS_FUNCTION,
     )
     # Initialize the loss function with the required parameters
     loss_fn = loss_fn_class(mode="multiclass")
@@ -329,24 +346,24 @@ def create_model(
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(device)
 
     optimizer = AdamW(
         model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay,
+        lr=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
     )
 
     return (
@@ -553,16 +570,16 @@ def train_setup(
         log_channel_stats(x_aug, "augmented input", logging.getLogger())
 
     # Save training sample images if first batch
-    if batch == 0:
-        save_training_images(
-            epoch,
-            train_images_root,
-            samp_image,  # Save original images
-            samp_mask,
-            x_aug,
-            y_squeezed,
-            sample,
-        )
+    # if batch == 0:
+    save_training_images(
+        epoch,
+        train_images_root,
+        samp_image,  # Save original images
+        samp_mask,
+        x_aug,
+        y_squeezed,
+        sample,
+    )
 
     return x_aug.to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 
@@ -597,19 +614,19 @@ def train_epoch(
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
-    loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
+    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     num_batches = len(dataloader)
 
-    class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
+    class_area_counts = {i: 0 for i in range(num_classes)}
     total_pixels = 0
 
     model.train()
     jaccard.reset()
 
     train_jaccard_per_class = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
@@ -630,7 +647,7 @@ def train_epoch(
         mask_int = y.long()
         batch_pixels = mask_int.numel()
         total_pixels += batch_pixels
-        for i in range(config.NUM_CLASSES):
+        for i in range(num_classes):
             class_area_counts[i] += (mask_int == i).sum().item()
 
         # Break after the first batch in debug mode
@@ -675,8 +692,7 @@ def train_epoch(
     final_jaccard = jaccard.compute()
 
     class_area_percentages = {
-        i: (class_area_counts[i] / total_pixels * 100)
-        for i in range(config.NUM_CLASSES)
+        i: (class_area_counts[i] / total_pixels * 100) for i in range(num_classes)
     }
     logging.info(
         "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
@@ -859,6 +875,8 @@ def test(
                     for label_id in label_ids:
                         label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
+                        # replace any slashes in the path with hyphens
+                        save_dir = Path(str(save_dir).replace("/", "-"))
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
@@ -979,9 +997,6 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    # How many classes we're predicting
-    num_classes = config.NUM_CLASSES
-
     # reducing number of epoch in debugging or hyperparameter tuning
     if args.debug:
         epoch = 1
@@ -999,7 +1014,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                num_classes,
+                len(labels.labels),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -1019,6 +1034,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
+            len(labels.labels),
         )
         aug_config = (
             spatial_augs,
@@ -1043,7 +1059,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            num_classes,
+            len(labels),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1122,15 +1138,8 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         jaccard_per_class,
         optimizer,
     ) = create_model(
-        model_type=config.MODEL,
-        backbone=config.BACKBONE,
-        num_classes=config.NUM_CLASSES,
-        weights=config.WEIGHTS,
-        dropout=config.DROPOUT,
-        loss_function_name=config.LOSS_FUNCTION,
-        ignore_index=config.IGNORE_INDEX,
-        learning_rate=config.LEARNING_RATE,
-        weight_decay=config.WEIGHT_DECAY,
+        config,
+        len(labels.labels),
         device=MODEL_DEVICE,
         debug=args.debug,
     )
