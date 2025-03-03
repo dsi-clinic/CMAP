@@ -1013,7 +1013,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                num_classes,
+                len(labels),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -1057,7 +1057,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            len(kc.labels),
+            len(labels),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1138,7 +1138,7 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     ) = create_model(
         model_type=config.MODEL,
         backbone=config.BACKBONE,
-        num_classes=num_classes,
+        num_classes=len(labels),
         weights=config.WEIGHTS,
         dropout=config.DROPOUT,
         loss_function_name=config.LOSS_FUNCTION,
