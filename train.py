@@ -165,9 +165,6 @@ def initialize_dataset(config):
         )
         label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
         print("river dataset loaded")
-        print("River dataset labels:", label_dataset.labels)
-        print("River dataset colors:", label_dataset.colors)
-        print("River dataset labels_inverse:", label_dataset.labels_inverse)
     else:
         # Default: use Kane County dataset
         shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
@@ -674,10 +671,6 @@ def train_epoch(
 
         # update jaccard index
         preds = outputs.argmax(dim=1)
-        print("outputs shape", outputs.shape)
-        print("preds shape", preds.shape)
-        print("preds unique", preds.unique())
-        raise Exception("Stop here")
         jaccard.update(preds, y)
         train_jaccard_per_class.update(preds, y)
 
@@ -798,10 +791,6 @@ def test(
             # Extend mean/std if needed
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
-            print("data mean", data_mean)
-            print("data std", data_std)
-            print("model in channels", model.in_channels)
-            print("x shape", x.shape)
             if len(data_mean) < model.in_channels:
                 data_mean = data_mean + [data_mean[0]] * (
                     model.in_channels - len(data_mean)

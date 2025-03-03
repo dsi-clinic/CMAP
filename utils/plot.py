@@ -103,15 +103,10 @@ def plot_from_tensors(
     cmap = build_cmap(colors) if colors is not None else "viridis"
     min_dims = 2
 
-    print(f"plot_from_tensors: sample keys: {list(sample.keys())}")
-    print(f"plot_from_tensors: colors: {colors}")
-
     # Determine the layout and create subplots
     nrows = len(sample) // 2 + len(sample) % 2
     ncols = min(len(sample), 2)
-    print(
-        f"plot_from_tensors: creating {nrows}x{ncols} subplot grid for {len(sample)} tensors"
-    )
+    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
@@ -121,28 +116,17 @@ def plot_from_tensors(
     # Plot each input tensor
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
-        print(
-            f"plot_from_tensors: plotting '{name}', shape: {tensor.shape}, dtype: {tensor.dtype}"
-        )
 
         if "image" in name.lower():
-            print("  plotting as RGB image")
             ax.imshow(rearrange(tensor, "c h w -> h w c"))
         elif "dem" in name.lower() or "nir" in name.lower():
             # Squeeze out the channel dimension for DEM/NIR visualization
-            print("  plotting as DEM/NIR with viridis colormap")
             ax.imshow(tensor.squeeze(0), cmap="viridis")
         else:
-            print("  plotting as mask/prediction")
             unique = tensor.unique() if tensor.ndim > min_dims else tensor.unique()
-            print(f"  unique values: {unique.tolist()}")
 
             # Add unique values to our set
             mask_unique_values.update(unique.tolist())
-
-            if colors is not None:
-                print(f"  using custom colormap with {len(cmap.colors)} colors")
-                print(f"  setting vmin=0, vmax={len(cmap.colors) - 1}")
 
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
