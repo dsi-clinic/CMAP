@@ -34,14 +34,14 @@ DATASET_MEAN = [
     0.485,  # R
     0.456,  # G
     0.406,  # B
-    0.4,    # A
+    0.4,  # A
     0.0,  # DEM (optional)
 ]
 DATASET_STD = [
     0.229,  # R
     0.224,  # G
     0.225,  # B
-    0.2,    # A
+    0.2,  # A
     12.194,  # DEM (optional)
 ]
 BATCH_SIZE = 16
