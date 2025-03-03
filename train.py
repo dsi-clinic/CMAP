@@ -196,7 +196,7 @@ def build_dataloaders(images, labels, split_rate, config):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
-    logging.info(f"Initial NAIP dataset size: {len(naip_set)}")
+    logging.info(f"Initial NAIP dataset size: {len(images)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -252,7 +252,7 @@ def build_dataloaders(images, labels, split_rate, config):
     logging.info(f"Train dataloader length: {len(train_dataloader)}")
     logging.info(f"Test dataloader length: {len(test_dataloader)}")
 
-    return train_dataloader, test_dataloader, len(kc.labels)
+    return train_dataloader, test_dataloader
 
 
 def regularization_loss(model, reg_type, weight):
