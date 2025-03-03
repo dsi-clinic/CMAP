@@ -158,7 +158,6 @@ def initialize_dataset(config):
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        config.NUM_CLASSES = 6  # predicting 5 classes + background
         rd_config = (
             config.PATCH_SIZE,
             naip_dataset.crs,
@@ -614,19 +613,19 @@ def train_epoch(
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
-    loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
+    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     num_batches = len(dataloader)
 
-    class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
+    class_area_counts = {i: 0 for i in range(num_classes)}
     total_pixels = 0
 
     model.train()
     jaccard.reset()
 
     train_jaccard_per_class = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
@@ -647,7 +646,7 @@ def train_epoch(
         mask_int = y.long()
         batch_pixels = mask_int.numel()
         total_pixels += batch_pixels
-        for i in range(config.NUM_CLASSES):
+        for i in range(num_classes):
             class_area_counts[i] += (mask_int == i).sum().item()
 
         # Break after the first batch in debug mode
@@ -692,8 +691,7 @@ def train_epoch(
     final_jaccard = jaccard.compute()
 
     class_area_percentages = {
-        i: (class_area_counts[i] / total_pixels * 100)
-        for i in range(config.NUM_CLASSES)
+        i: (class_area_counts[i] / total_pixels * 100) for i in range(num_classes)
     }
     logging.info(
         "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
@@ -1015,7 +1013,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                len(labels),
+                len(labels.labels),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -1035,6 +1033,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
+            len(labels.labels),
         )
         aug_config = (
             spatial_augs,
@@ -1140,7 +1139,7 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     ) = create_model(
         model_type=config.MODEL,
         backbone=config.BACKBONE,
-        num_classes=len(labels),
+        num_classes=len(labels.labels),
         weights=config.WEIGHTS,
         dropout=config.DROPOUT,
         loss_function_name=config.LOSS_FUNCTION,

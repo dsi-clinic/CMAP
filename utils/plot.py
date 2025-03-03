@@ -104,9 +104,12 @@ def plot_from_tensors(
     min_dims = 2
 
     # Determine the layout and create subplots
-    fig, axs = plt.subplots(
-        len(sample) // 2 + len(sample) % 2, min(len(sample), 2), figsize=(8, 8)
+    nrows = len(sample) // 2 + len(sample) % 2
+    ncols = min(len(sample), 2)
+    print(
+        f"plot_from_tensors: creating {nrows}x{ncols} subplot grid for {len(sample)} tensors"
     )
+    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
     # Plot each input tensor and gather unique labels
@@ -125,7 +128,7 @@ def plot_from_tensors(
                 tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
                 vmin=0,
-                vmax=len(cmap.colors) - 1,
+                vmax=len(cmap.colors) - 1 if isinstance(cmap, ListedColormap) else None,
                 interpolation="none",
             )
             unique_labels = torch.cat((unique, unique_labels))
