@@ -121,7 +121,7 @@ def plot_from_tensors(
             ax.imshow(rearrange(tensor, "c h w -> h w c"))
         elif "dem" in name.lower() or "nir" in name.lower():
             # Squeeze out the channel dimension for DEM/NIR visualization
-            ax.imshow(tensor.squeeze(0), cmap="viridis")
+            ax.imshow(tensor.squeeze(0), cmap="terrain")
         else:
             unique = tensor.unique() if tensor.ndim > min_dims else tensor.unique()
 

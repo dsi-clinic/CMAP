@@ -13,8 +13,7 @@ KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
 USE_NIR = False
-# KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
-KC_DEM_ROOT = None
+KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -28,24 +27,21 @@ DROPOUT = 0.0
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
-DATASET_MEAN = [0.485, 0.456, 0.406]  # RGB only
-DATASET_STD = [0.229, 0.224, 0.225]  # RGB only
 
-# mean/std of NAIP data + DEM
-# DATASET_MEAN = [
-#     0.328,  # R
-#     0.420,  # G
-#     0.418,  # B
-#     0.547,  # NIR (optional)
-#     0.0,    # DEM (optional)
-# ]
-# DATASET_STD = [
-#     0.30,  # R
-#     0.25,  # G
-#     0.25,  # B
-#     0.36,  # NIR (optional)
-#     1.0,   # DEM (optional)
-# ]
+DATASET_MEAN = [
+    0.485,  # R
+    0.456,  # G
+    0.406,  # B
+    # 0.4,  # NIR
+    # 0.0,  # DEM (optional)
+]
+DATASET_STD = [
+    0.229,  # R
+    0.224,  # G
+    0.225,  # B
+    # 0.2,  # NIR
+    # 1.96,  # DEM (optional)
+]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 LEARNING_RATE = 1e-5
@@ -120,7 +116,7 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
-USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 USE_KC = True  # change to False if training w/ only RiverDataset
 
 # for wandb

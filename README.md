@@ -99,6 +99,18 @@ To include RiverDataset in training:
 
 *When USE_RIVER_DATASET is set to True, train.py becomes stuck after correctly loading the KC and RD datasets. **This needs to be debugged.***
 
+## DEM Information
+
+To include DEM in training:
+* Include --dem flag in command
+* Assumes false if not called
+
+Similarly, to include Filled DEM in training(**WIP**):
+* Include --filled_dem flag in command
+* Assumes false if not called
+```
+python train.py configs.config --dem --filled_dem
+```
 
 ## Git Usage
 
