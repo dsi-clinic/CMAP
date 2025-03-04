@@ -104,13 +104,16 @@ def plot_from_tensors(
     min_dims = 2
 
     # Determine the layout and create subplots
-    fig, axs = plt.subplots(
-        len(sample) // 2 + len(sample) % 2, min(len(sample), 2), figsize=(8, 8)
-    )
+    nrows = len(sample) // 2 + len(sample) % 2
+    ncols = min(len(sample), 2)
+    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
+    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
-    # Plot each input tensor and gather unique labels
-    unique_labels = Tensor()
+    # Track unique values in mask tensors
+    mask_unique_values = set()
+
+    # Plot each input tensor
     for i, (name, tensor) in enumerate(sample.items()):
         ax = axs[i]
 
@@ -121,23 +124,34 @@ def plot_from_tensors(
             ax.imshow(tensor.squeeze(0), cmap="terrain")
         else:
             unique = tensor.unique() if tensor.ndim > min_dims else tensor.unique()
+
+            # Add unique values to our set
+            mask_unique_values.update(unique.tolist())
+
             ax.imshow(
                 tensor[0] if tensor.ndim > min_dims else tensor,
                 cmap=cmap,
                 vmin=0,
-                vmax=len(cmap.colors) - 1,
+                vmax=len(cmap.colors) - 1 if isinstance(cmap, ListedColormap) else None,
                 interpolation="none",
             )
-            unique_labels = torch.cat((unique, unique_labels))
 
         ax.set_title(name.replace("_", " "))
         ax.axis("off")
 
     # Create the legend if labels were provided
     if labels is not None and colors is not None:
-        unique_labels = unique_labels.unique().type(torch.int).tolist()
+        # Only include labels that actually appear in the masks
+        legend_labels = sorted(
+            [
+                i
+                for i in mask_unique_values
+                if i in labels and i in colors and i < len(cmap.colors)
+            ]
+        )
+
         patches = [
-            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in unique_labels
+            mpatches.Patch(color=cmap.colors[i], label=labels[i]) for i in legend_labels
         ]
 
         fig.legend(
