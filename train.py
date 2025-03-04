@@ -234,7 +234,6 @@ def build_dataset(naip_set, split_rate, config):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
-    logging.info(f"Initial NAIP dataset size: {len(images)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -1086,7 +1085,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                len(labels.labels),
+                len(kc.labels.items()),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -1105,7 +1104,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
-            len(labels.labels),
+            len(kc.labels.items()),
         )
         aug_config = (
             spatial_augs,
@@ -1130,7 +1129,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            len(labels),
+            len(kc.labels.items()),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1207,7 +1206,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         optimizer,
     ) = create_model(
         config,
-        len(labels.labels),
+        len(kc.labels.items()),
         device=MODEL_DEVICE,
     )
     spatial_augs, color_augs = create_augmentation_pipelines(
