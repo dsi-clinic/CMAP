@@ -13,7 +13,9 @@ KC_SHAPE_ROOT = str(Path(DATA_ROOT) / "kane-county-data")
 KC_IMAGE_ROOT = str(Path(DATA_ROOT) / "KC-images")
 KC_RIVER_ROOT = str(Path(DATA_ROOT) / "KC-river-images")
 USE_NIR = False
+
 KC_DEM_ROOT = str(Path(KC_SHAPE_ROOT) / "KC_DEM_2017")
+
 KC_MASK_ROOT = str(Path(DATA_ROOT) / "KC-masks/separate-masks")
 OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']}")
 
@@ -27,23 +29,23 @@ DROPOUT = 0.0
 
 # model hyperparams
 # mean/std of imagenet for pretrained model
-
 DATASET_MEAN = [
     0.485,  # R
     0.456,  # G
     0.406,  # B
     # 0.4,  # NIR
-    # 0.0,  # DEM (optional)
+    # 0.08,  # DEM (optional)
 ]
 DATASET_STD = [
     0.229,  # R
     0.224,  # G
     0.225,  # B
     # 0.2,  # NIR
-    # 1.96,  # DEM (optional)
+    # 0.05,  # DEM (optional)
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
+NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 4
@@ -60,24 +62,24 @@ CLIP_VALUE = 1.0
 # data augmentation
 SPATIAL_AUG_INDICES = [
     0,  # HorizontalFlip
-    # 1,  # VerticalFlip
-    # 2,  # Rotate
-    # 3,  # Affine
-    # 4,  # Elastic
-    # 5,  # Perspective
-    # 6,  # ResizedCrop
+    1,  # VerticalFlip
+    2,  # Rotate
+    3,  # Affine
+    4,  # Elastic
+    5,  # Perspective
+    6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
 IMAGE_AUG_INDICES = [
-    # 0,  # Contrast
+    0,  # Contrast
     1,  # Brightness
-    # 2,  # Gaussian Noise
-    # 3,  # Gaussian Blur0
-    # 4,  # Plasma Brightness
-    # 5,  # Saturation
-    # 6,  # Channel Shuffle
-    # 7,  # Gamma
+    2,  # Gaussian Noise
+    3,  # Gaussian Blur0
+    4,  # Plasma Brightness
+    5,  # Saturation
+    6,  # Channel Shuffle
+    7,  # Gamma
 ]
 
 # Augmentation
@@ -103,7 +105,6 @@ COLOR_AUG_MODE = "all"  # all or random
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
 KC_LAYER = 4
-# FIXME this should be a list— user does not need to know the index of each label
 KC_LABELS = {
     "BACKGROUND": 0,
     "POND": 1,
@@ -115,9 +116,15 @@ KC_LABELS = {
 # River data
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
+RD_LABELS = {
+    "BACKGROUND": 0,
+    "STREAM/RIVER": 5,
+}
 
 USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
-USE_KC = True  # change to False if training w/ only RiverDataset
+
+# DEM data
+USE_DEM = True
 
 # for wandb
 WANDB_API = ""

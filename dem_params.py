@@ -55,6 +55,7 @@ def main():
         config=config,
         crs=naip_dataset.crs,
         res=naip_dataset.res,
+        use_filled=True,
     )
     sampler = BalancedGridGeoSampler(
         config={"dataset": naip_dataset, "size": 256, "stride": 256}

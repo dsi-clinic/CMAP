@@ -63,8 +63,10 @@ class SegmentationModel:
         self.backbone = model_config["backbone"]
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
-        self.in_channels = model_config["in_channels"]
+        self.in_channels = model_config.get("in_channels")
         self.dropout = model_config.get("dropout", 0.3)
+        if self.in_channels is None:
+            self.in_channels = 5
         if model != "fcn":
             state_dict = None
             # set custom weights
