@@ -874,9 +874,7 @@ def test(
 
                     for label_id in label_ids:
                         label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
-                        save_dir = Path(epoch_dir) / label_name
-                        # replace any slashes in the path with hyphens
-                        save_dir = Path(str(save_dir).replace("/", "-"))
+                        save_dir = Path(epoch_dir) / label_name.replace("/", "-")
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
