@@ -587,7 +587,7 @@ def train_setup(
     if filled_dem_include:
         max_val = torch.max(x[:, -1])
         min_val = torch.min(x[:, -1])
-        x[:, -1] = (x[:, -1] - min_val) / (max_val - min_val)
+        x[:, -1] = (x[:, -1] - min_val.clone()) / (max_val.clone() - min_val.clone())
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
@@ -848,7 +848,9 @@ def test(
             if filled_dem_include:
                 max_val = torch.max(x[:, -1])
                 min_val = torch.min(x[:, -1])
-                x[:, -1] = (x[:, -1] + min_val.clone()) / max_val.clone()
+                x[:, -1] = (x[:, -1] - min_val.clone()) / (
+                    max_val.clone() - min_val.clone()
+                )
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
@@ -945,7 +947,7 @@ def test(
                         label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
                         # replace any slashes in the path with hyphens
-                        save_dir = Path(str(save_dir).replace("/", "-"))
+                        # save_dir = Path(str(save_dir).replace("/", "-"))
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
