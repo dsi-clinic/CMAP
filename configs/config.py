@@ -32,15 +32,15 @@ DATASET_MEAN = [
     0.485,  # R
     0.456,  # G
     0.406,  # B
-    0.4,  # A
-    0.0,  # DEM (optional)
+    # 0.4,  # NIR
+    # 0.0,  # DEM (optional)
 ]
 DATASET_STD = [
     0.229,  # R
     0.224,  # G
     0.225,  # B
-    0.2,  # A
-    12.194,  # DEM (optional)
+    # 0.2,  # NIR
+    # 1.96,  # DEM (optional)
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
@@ -116,7 +116,7 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
-USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 USE_KC = True  # change to False if training w/ only RiverDataset
 
 # for wandb

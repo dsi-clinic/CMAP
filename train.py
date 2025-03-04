@@ -144,8 +144,6 @@ def initialize_dataset(config):
                 return sample
 
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
-        config.DATASET_MEAN = config.DATASET_MEAN[:3]
-        config.DATASET_STD = config.DATASET_STD[:3]
     else:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
@@ -163,9 +161,7 @@ def initialize_dataset(config):
     if dem_include:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
-        if not config.USE_NIR:
-            config.DATASET_MEAN.append(0.0)  # DEM mean
-            config.DATASET_STD.append(1.0)  # DEM std
+
         print("naip and dem loaded")
         if filled_dem_include:
             filled_dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled=True)
@@ -197,7 +193,7 @@ def initialize_dataset(config):
         return naip_dataset, combined_dataset
 
     else:  # this is the default; uses KC only
-        naip_dataset = NAIP(config.KC_IMAGE_ROOT)
+        # naip_dataset = NAIP(config.KC_IMAGE_ROOT)
         shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         dataset_config = (
             config.KC_LAYER,
