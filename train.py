@@ -155,8 +155,13 @@ def initialize_dataset(config):
     )
     kc_dataset = KaneCounty(shape_path, dataset_config)
 
-    if config.USE_DEM:
-        dem = KaneDEM(config.KC_DEM_ROOT, config, use_filled = True)
+    if config.USE_DIFFDEM:
+        dem = KaneDEM(config.KC_DEM_ROOT, config, use_difference = True)
+        naip_dataset = naip_dataset & dem
+        print("naip and difference dem loaded")
+    
+    if config.USE_BASEDEM:
+        dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
         print("naip and difference dem loaded")
 
@@ -446,7 +451,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             )
 
         # Add DEM if enabled
-        if config.USE_DEM:
+        if config.USE_DIFFDEM:
             plot_tensors.update(
                 {
                     "Difference DEM": x[i][-1, :, :].cpu() / 255.0,
@@ -455,7 +460,16 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                     .clip(0, 1),
                 }
             )
-
+        
+        if config.USE_BASEDEM:
+            plot_tensors.update(
+                {
+                    "Base DEM": x[i][-1, :, :].cpu() / 255.0,
+                    "Augmented Base DEM": x_aug_denorm[i][-1, :, :]
+                    .cpu()
+                    .clip(0, 1),
+                }
+            )
 
         sample_fname = Path(save_dir) / f"train_sample-{epoch}.{i}.png"
         plot_from_tensors(
@@ -501,13 +515,7 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "raw input", logging.getLogger())
 
-    # Scale to [0,1]
-    # if config.USE_NIR:
-    #     x[:, 0:4] = x[:, 0:4] / 255.0
-    # else:
-    #     x[:, 0:3] = x[:, 0:3] / 255.0
-
-    # Scale DEM and any other channels properly if needed
+    # Scale all channels to 0 to 1
     for i in range(x.shape[1]):  # Loop over all channels after the 3rd
         max_val = torch.max(x[:, i])
         min_val = torch.min(x[:, i])
@@ -736,21 +744,8 @@ def test(
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
-            # # Scale to [0,1] before normalization
-            # if config.USE_NIR:
-            #     x[:, 0:4] = x[:, 0:4] / 255.0
-            # else:
-            #     x[:, 0:3] = x[:, 0:3] / 255.0
-
-            # # Scale DEM properly if needed
-            # if config.USE_DEM:
-            #     max_val = torch.max(x[:, -1])
-            #     min_val = torch.min(x[:, -1])
-            #     x[:, -1] = (x[:, -1] - min_val.clone()) / (
-            #         max_val.clone() - min_val.clone()
-            #     )
-
-            for i in range(x.shape[1]):  # Loop over all channels to scale
+            # Loop over all channels to scale to 0 to 1
+            for i in range(x.shape[1]):  
                 max_val = torch.max(x[:, i])
                 min_val = torch.min(x[:, i])
                 x[:, i] = (x[:, i] - min_val.clone()) / (max_val.clone() - min_val.clone())
@@ -832,8 +827,10 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.USE_DEM:
+                    if config.USE_DIFFDEM:
                         plot_tensors["Difference DEM"] = x_denorm[i][-1, :, :].cpu().clip(0, 1)
+                    if config.USE_BASEDEM:
+                        plot_tensors["Base DEM"] = x_denorm[i][-1, :, :].cpu().clip(0, 1)
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)

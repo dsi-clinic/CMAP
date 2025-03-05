@@ -123,8 +123,9 @@ RD_LABELS = {
 
 USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
-# DEM data
-USE_DEM = True
+# DEM data - a max of one should be enabled at a time
+USE_DIFFDEM = True        # change to True if training w/ difference DEM
+USE_BASEDEM = False       # change to True if training w/ baseline DEM
 
 # for wandb
 WANDB_API = ""

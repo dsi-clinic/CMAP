@@ -34,7 +34,7 @@ class KaneDEM(RasterDataset):
         res=None,
         transforms=None,
         epsilon=1e-6,
-        use_filled=False,
+        use_difference=False,
     ):
         """Initializes a KaneDEM instance.
 
@@ -45,7 +45,7 @@ class KaneDEM(RasterDataset):
             res: The resolution of the DEM.
             transforms: The transforms to apply to the DEM.
             epsilon: A small value to prevent division by zero.
-            use_filled: Changes input to filled DEM set
+            use_difference: Changes input to filled DEM set
         """
         super().__init__(paths, crs=crs, res=res, transforms=transforms)
         self.patch_size = config.PATCH_SIZE
@@ -53,7 +53,7 @@ class KaneDEM(RasterDataset):
         self.epsilon = epsilon
 
         # Use filled DEM file if specified
-        if use_filled:
+        if use_difference:
             self.filename_glob = "Kane2017BE_difference.tif"
         print(f"Using DEM file: {self.filename_glob}")
 
