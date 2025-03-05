@@ -107,7 +107,6 @@ def plot_from_tensors(
     nrows = len(sample) // 2 + len(sample) % 2
     ncols = min(len(sample), 2)
     fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
-    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
     # Track unique values in mask tensors
