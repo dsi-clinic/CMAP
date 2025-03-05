@@ -101,16 +101,12 @@ To include RiverDataset in training:
 
 ## DEM Information
 
-To include DEM in training:
-* Include --dem flag in command
-* Assumes false if not called
-
-Similarly, to include Filled DEM in training(**WIP**):
-* Include --filled_dem flag in command
-* Assumes false if not called
-```
-python train.py configs.config --dem --filled_dem
-```
+There are two options of DEM to include in training. Only one should be set to true at once.
+1. Difference DEM
+ * Difference between baseline DEM and filled DEM
+ * Set config.USE_DIFFDEM to True
+2. Baseline DEM
+ * Set config.USE_BASEDEM to True
 
 ## Git Usage
 
