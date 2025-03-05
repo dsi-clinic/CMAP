@@ -181,17 +181,7 @@ def initialize_dataset(config):
 
         return naip_dataset, combined_dataset
 
-    else:  # this is the default; uses KC only, includes NIR
-        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-        dataset_config = (
-            config.KC_LAYER,
-            config.KC_LABELS,
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
-        )
-        kc_dataset = KaneCounty(shape_path, dataset_config)
-
+    else:  # this is the default; uses KC only
         return naip_dataset, kc_dataset
 
 
@@ -454,8 +444,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         if config.USE_DIFFDEM:
             plot_tensors.update(
                 {
-                    "Difference DEM": x[i][-1, :, :].cpu() / 255.0,
-                    "Augmented Difference DEM": x_aug_denorm[i][-1, :, :]
+                    "Difference DEM": x[i][-2, :, :].cpu() / 255.0,
+                    "Augmented Difference DEM": x_aug_denorm[i][-2, :, :]
                     .cpu()
                     .clip(0, 1),
                 }
@@ -464,8 +454,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         if config.USE_BASEDEM:
             plot_tensors.update(
                 {
-                    "Base DEM": x[i][-1, :, :].cpu() / 255.0,
-                    "Augmented Base DEM": x_aug_denorm[i][-1, :, :].cpu().clip(0, 1),
+                    "Base DEM": x[i][-2, :, :].cpu() / 255.0,
+                    "Augmented Base DEM": x_aug_denorm[i][-2, :, :].cpu().clip(0, 1),
                 }
             )
 
@@ -827,12 +817,10 @@ def test(
                     # Add DEM if enabled
                     if config.USE_DIFFDEM:
                         plot_tensors["Difference DEM"] = (
-                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
+                            x_denorm[i][3, :, :].cpu().clip(0, 1)
                         )
                     if config.USE_BASEDEM:
-                        plot_tensors["Base DEM"] = (
-                            x_denorm[i][-1, :, :].cpu().clip(0, 1)
-                        )
+                        plot_tensors["Base DEM"] = x_denorm[i][3, :, :].cpu().clip(0, 1)
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)

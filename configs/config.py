@@ -33,15 +33,13 @@ DATASET_MEAN = [
     0.485,  # R
     0.456,  # G
     0.406,  # B
-    # 0.4,  # NIR
-    # 0.08,  # DEM (optional)
+    # 0.2,  # DEM (optional)
 ]
 DATASET_STD = [
     0.229,  # R
     0.224,  # G
     0.225,  # B
-    # 0.2,  # NIR
-    # 0.05,  # DEM (optional)
+    # 0.1,  # DEM (optional)
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
