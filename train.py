@@ -838,7 +838,6 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-
                         label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
                         save_dir = Path(epoch_dir) / label_name
 
