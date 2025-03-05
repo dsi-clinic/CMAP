@@ -99,6 +99,14 @@ To include RiverDataset in training:
 
 *When USE_RIVER_DATASET is set to True, train.py becomes stuck after correctly loading the KC and RD datasets. **This needs to be debugged.***
 
+## DEM Information
+
+There are two options of DEM to include in training. Only one should be set to true at once.
+1. Difference DEM
+ * Difference between baseline DEM and filled DEM
+ * Set config.USE_DIFFDEM to True
+2. Baseline DEM
+ * Set config.USE_BASEDEM to True
 
 ## Git Usage
 

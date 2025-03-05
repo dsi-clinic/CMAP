@@ -10,6 +10,7 @@ import torch
 from einops import rearrange
 from torchgeo.datasets import NAIP
 
+from configs import config
 from data.dem import KaneDEM
 from data.sampler import BalancedGridGeoSampler
 
@@ -30,7 +31,8 @@ def calculate_image_stats(dem_image):
     Parameters
     ----------
     file_path : str
-        Path to the image file
+        Path
+        to the image file
 
     Returns:
     -------
@@ -48,7 +50,13 @@ def main():
     means = []
     stds = []
     naip_dataset = NAIP(KC_IMAGE_ROOT)
-    dem = KaneDEM(KC_DEM_ROOT, crs=naip_dataset.crs, res=naip_dataset.res)
+    dem = KaneDEM(
+        KC_DEM_ROOT,
+        config=config,
+        crs=naip_dataset.crs,
+        res=naip_dataset.res,
+        use_filled=True,
+    )
     sampler = BalancedGridGeoSampler(
         config={"dataset": naip_dataset, "size": 256, "stride": 256}
     )

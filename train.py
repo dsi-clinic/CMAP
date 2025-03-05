@@ -141,19 +141,23 @@ def initialize_dataset(config):
                 return sample
 
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
-        config.DATASET_MEAN = config.DATASET_MEAN[:3]
-        config.DATASET_STD = config.DATASET_STD[:3]
+
     else:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    # Load DEM if specified
-    if config.KC_DEM_ROOT is not None:
+    # Load Difference DEM if specified
+    if config.USE_DIFFDEM:
+        dem = KaneDEM(config.KC_DEM_ROOT, config, use_difference=True)
+        naip_dataset = naip_dataset & dem
+
+        print("difference dem loaded")
+
+    # Load Base DEM if specified
+    elif config.USE_BASEDEM:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
-        if not config.USE_NIR:
-            config.DATASET_MEAN.append(0.0)  # DEM mean
-            config.DATASET_STD.append(1.0)  # DEM std
-        print("dem loaded")
+
+        print("base dem loaded")
 
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
@@ -319,7 +323,7 @@ def create_model(
     in_channels = 3  # base RGB channels
     if config.USE_NIR:
         in_channels += 1  # add NIR channel
-    if config.KC_DEM_ROOT is not None:
+    if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
     model_configs = {
@@ -458,16 +462,21 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             )
 
         # Add DEM if enabled
-        if config.KC_DEM_ROOT is not None:
-            dem_idx = (
-                3 if not config.USE_NIR else 4
-            )  # DEM is after NIR if NIR is enabled
+        if config.USE_DIFFDEM:
             plot_tensors.update(
                 {
-                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
-                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
+                    "Difference DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
                     .cpu()
                     .clip(0, 1),
+                }
+            )
+
+        elif config.USE_BASEDEM:
+            plot_tensors.update(
+                {
+                    "Base DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu().clip(0, 1),
                 }
             )
 
@@ -540,18 +549,26 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "raw input", logging.getLogger())
 
-    # Scale to [0,1]
-    x = x / 255.0
+    # Scale all channels to 0 to 1
+    for i in range(x.shape[1]):  # Loop over all channels after the 3rd
+        max_val = torch.max(x[:, i])
+        min_val = torch.min(x[:, i])
+        x[:, i] = (x[:, i] - min_val.clone()) / (max_val.clone() - min_val.clone())
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
 
-    # Extend mean/std if needed
+    # Extend mean/std dynamically if needed
     data_mean = config.DATASET_MEAN  # ImageNet mean
     data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
-        data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
-        data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+        missing_channels = model.in_channels - len(data_mean)
+        computed_means = torch.mean(x[:, len(data_mean) :], dim=[0, 2, 3]).tolist()
+        data_mean = data_mean + computed_means[:missing_channels]
+    if len(data_std) < model.in_channels:
+        missing_channels = model.in_channels - len(data_std)
+        computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+        data_std = data_std + computed_stds[:missing_channels]
 
     # Normalize using ImageNet statistics
     normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -782,22 +799,30 @@ def test(
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
-            # Scale to [0,1] before normalization
-            x = x / 255.0
+            # Loop over all channels to scale to 0 to 1
+            for i in range(x.shape[1]):
+                max_val = torch.max(x[:, i])
+                min_val = torch.min(x[:, i])
+                x[:, i] = (x[:, i] - min_val.clone()) / (
+                    max_val.clone() - min_val.clone()
+                )
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
 
-            # Extend mean/std if needed
+            # Extend mean/std dynamically if needed
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (
-                    model.in_channels - len(data_mean)
-                )
-                data_std = data_std + [data_std[0]] * (
-                    model.in_channels - len(data_std)
-                )
+                missing_channels = model.in_channels - len(data_mean)
+                computed_means = torch.mean(
+                    x[:, len(data_mean) :], dim=[0, 2, 3]
+                ).tolist()
+                data_mean = data_mean + computed_means[:missing_channels]
+            if len(data_std) < model.in_channels:
+                missing_channels = model.in_channels - len(data_std)
+                computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+                data_std = data_std + computed_stds[:missing_channels]
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -859,15 +884,13 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.KC_DEM_ROOT is not None:
-                        dem_idx = 3 if not config.USE_NIR else 4
-                        plot_tensors.update(
-                            {
-                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
-                                .cpu()
-                                .clip(0, 1),
-                            }
+                    # Add DEM if enabled
+                    if config.USE_DIFFDEM:
+                        plot_tensors["Difference DEM"] = (
+                            x_denorm[i][3, :, :].cpu().clip(0, 1)
                         )
+                    if config.USE_BASEDEM:
+                        plot_tensors["Base DEM"] = x_denorm[i][3, :, :].cpu().clip(0, 1)
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
