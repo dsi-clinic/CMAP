@@ -43,7 +43,6 @@ DATASET_STD = [
 ]
 BATCH_SIZE = 16
 PATCH_SIZE = 512
-NUM_CLASSES = 5  # predicting 4 classes + background
 LEARNING_RATE = 1e-5
 NUM_WORKERS = 8
 EPOCHS = 4
@@ -61,11 +60,11 @@ CLIP_VALUE = 1.0
 SPATIAL_AUG_INDICES = [
     0,  # HorizontalFlip
     1,  # VerticalFlip
-    2,  # Rotate
-    3,  # Affine
-    4,  # Elastic
-    5,  # Perspective
-    6,  # ResizedCrop
+    # 2,  # Rotate
+    # 3,  # Affine
+    # 4,  # Elastic
+    # 5,  # Perspective
+    # 6,  # ResizedCrop
 ]
 
 # only applied to images-- not masks
@@ -114,10 +113,6 @@ KC_LABELS = {
 # River data
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
-RD_LABELS = {
-    "BACKGROUND": 0,
-    "STREAM/RIVER": 5,
-}
 
 USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
