@@ -145,51 +145,51 @@ def initialize_dataset(config):
     else:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-    dataset_config = (
-        config.KC_LAYER,
-        config.KC_LABELS,
-        config.PATCH_SIZE,
-        naip_dataset.crs,
-        naip_dataset.res,
-    )
-    kc_dataset = KaneCounty(shape_path, dataset_config)
-
+    # Load Difference DEM if specified
     if config.USE_DIFFDEM:
         dem = KaneDEM(config.KC_DEM_ROOT, config, use_difference=True)
         naip_dataset = naip_dataset & dem
-        print("naip and difference dem loaded")
 
-    if config.USE_BASEDEM:
+        print("difference dem loaded")
+
+    # Load Base DEM if specified
+    elif config.USE_BASEDEM:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
-        print("naip and difference dem loaded")
 
+        print("base dem loaded")
+
+    # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-
-        config.NUM_CLASSES = 6  # predicting 5 classes + background
-
         rd_config = (
-            config.RD_LABELS,
             config.PATCH_SIZE,
             naip_dataset.crs,
             naip_dataset.res,
         )
+        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+        print("river dataset loaded")
+    else:
+        # Default: use Kane County dataset
+        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        dataset_config = (
+            config.KC_LAYER,
+            config.KC_LABELS,
+            config.PATCH_SIZE,
+            naip_dataset.crs,
+            naip_dataset.res,
+        )
+        label_dataset = KaneCounty(shape_path, dataset_config)
+        print("kc dataset loaded")
+    return naip_dataset, label_dataset
 
-        combined_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
 
-        return naip_dataset, combined_dataset
-
-    else:  # this is the default; uses KC only
-        return naip_dataset, kc_dataset
-
-
-def build_dataset(naip_set, split_rate, config):
+def build_dataloaders(images, labels, split_rate, config):
     """Randomly split and load data to be the test and train sets
 
     Args:
-    naip_set (Dataset): The NAIP (imagery) dataset
+    images (Dataset): The images dataset
+    labels (Dataset): The labels dataset
     split_rate (float): Ratio of data in training set (e.g., 0.8 for 80%)
     config (module): Configuration object containing PATCH_SIZE, BATCH_SIZE, NUM_WORKERS.
 
@@ -199,13 +199,24 @@ def build_dataset(naip_set, split_rate, config):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
+    logging.info(f"Initial NAIP dataset size: {len(images)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
-        naip_set, [split_rate, 1 - split_rate], generator
+        images, [split_rate, 1 - split_rate], generator
     )
-    train_dataset = train_portion & initialize_dataset(config)[1]
-    test_dataset = test_portion & initialize_dataset(config)[1]
+    train_dataset = train_portion & labels
+    test_dataset = test_portion & labels
+
+    logging.info("After intersection:")
+    logging.info(f"Train dataset size: {len(train_dataset)}")
+    logging.info(f"Test dataset size: {len(test_dataset)}")
+
+    # Check if datasets are empty before creating samplers
+    if len(train_dataset) == 0:
+        raise ValueError("Train dataset is empty after intersection!")
+    if len(test_dataset) == 0:
+        raise ValueError("Test dataset is empty after intersection!")
 
     train_sampler = BalancedRandomBatchGeoSampler(
         config={
@@ -222,6 +233,10 @@ def build_dataset(naip_set, split_rate, config):
         }
     )
 
+    # Log sampler lengths
+    logging.info(f"Train sampler length: {len(train_sampler)}")
+    logging.info(f"Test sampler length: {len(test_sampler)}")
+
     # create dataloaders (must use batch_sampler)
     train_dataloader = DataLoader(
         dataset=train_dataset,
@@ -236,6 +251,10 @@ def build_dataset(naip_set, split_rate, config):
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
     )
+
+    logging.info(f"Train dataloader length: {len(train_dataloader)}")
+    logging.info(f"Test dataloader length: {len(test_dataloader)}")
+
     return train_dataloader, test_dataloader
 
 
@@ -284,16 +303,10 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
 
 
 def create_model(
-    model_type,
-    backbone,
+    config,
     num_classes,
-    weights,
-    dropout,
-    loss_function_name,
-    ignore_index,
-    learning_rate,
-    weight_decay,
     device="cpu",
+    debug=False,
 ):
     """Setting up training model, loss function and measuring metrics
 
@@ -306,22 +319,30 @@ def create_model(
             - jaccard_per_class: The metric to measure Jaccard index per class.
             - optimizer: The optimizer for training the model.
     """
-    # create the model
+    # calculate input channels based on config
+    in_channels = 3  # base RGB channels
+    if config.USE_NIR:
+        in_channels += 1  # add NIR channel
+    if config.USE_DIFFDEM or config.USE_BASEDEM:
+        in_channels += 1  # add DEM channel
+
     model_configs = {
-        "model": model_type,
-        "backbone": backbone,
+        "model": config.MODEL,
+        "backbone": config.BACKBONE,
         "num_classes": num_classes,
-        "weights": weights,
-        "dropout": dropout,
+        "weights": config.WEIGHTS,
+        "dropout": config.DROPOUT,
+        "in_channels": in_channels,
     }
 
     model = SegmentationModel(model_configs).model.to(device)
-    logging.info(model)
+    if not debug:
+        logging.info(model)
 
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
         importlib.import_module("segmentation_models_pytorch.losses"),
-        loss_function_name,
+        config.LOSS_FUNCTION,
     )
     # Initialize the loss function with the required parameters
     loss_fn = loss_fn_class(mode="multiclass")
@@ -329,24 +350,24 @@ def create_model(
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(device)
 
     optimizer = AdamW(
         model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay,
+        lr=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
     )
 
     return (
@@ -444,18 +465,18 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         if config.USE_DIFFDEM:
             plot_tensors.update(
                 {
-                    "Difference DEM": x[i][-2, :, :].cpu() / 255.0,
-                    "Augmented Difference DEM": x_aug_denorm[i][-2, :, :]
+                    "Difference DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
                     .cpu()
                     .clip(0, 1),
                 }
             )
 
-        if config.USE_BASEDEM:
+        elif config.USE_BASEDEM:
             plot_tensors.update(
                 {
-                    "Base DEM": x[i][-2, :, :].cpu() / 255.0,
-                    "Augmented Base DEM": x_aug_denorm[i][-2, :, :].cpu().clip(0, 1),
+                    "Base DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu().clip(0, 1),
                 }
             )
 
@@ -463,8 +484,8 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
         plot_from_tensors(
             plot_tensors,
             sample_fname,
-            kc.colors,
-            kc.labels_inverse,
+            labels.colors,
+            labels.labels_inverse,
             sample["bbox"][i],
         )
 
@@ -480,6 +501,31 @@ def log_channel_stats(tensor: torch.Tensor, name: str, logger: logging.Logger):
         )
 
 
+def log_per_class_iou_tensor(
+    writer: SummaryWriter,
+    class_labels,
+    per_class_iou_tensor: torch.Tensor,
+    prefix: str,
+    epoch: int,
+):
+    """Logs per-class IoU values to TensorBoard.
+
+    Args:
+        writer: TensorBoard SummaryWriter.
+        class_labels: Iterable of class labels
+        per_class_iou_tensor: Tensor containing per-class IoU values.
+        prefix: String prefix for the metric key (e.g., "IoU/train" or "IoU/test").
+        epoch: Current epoch number.
+    """
+    class_labels = {
+        label_id: label_name for label_name, label_id in class_labels
+    }  # kc.labels.items()
+    for i in sorted(class_labels.keys()):
+        writer.add_scalar(
+            f"{prefix}/{class_labels[i]}", per_class_iou_tensor[i].item(), epoch
+        )
+
+
 def train_setup(
     sample: defaultdict[str, Any],
     train_config,
@@ -488,7 +534,7 @@ def train_setup(
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
     epoch, batch, train_images_root = train_config
-    spatial_aug_mode, color_aug_mode, spatial_augs, color_augs = aug_config
+    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -541,16 +587,16 @@ def train_setup(
         log_channel_stats(x_aug, "augmented input", logging.getLogger())
 
     # Save training sample images if first batch
-    if batch == 0:
-        save_training_images(
-            epoch,
-            train_images_root,
-            samp_image,  # Save original images
-            samp_mask,
-            x_aug,
-            y_squeezed,
-            sample,
-        )
+    # if batch == 0:
+    save_training_images(
+        epoch,
+        train_images_root,
+        samp_image,  # Save original images
+        samp_mask,
+        x_aug,
+        y_squeezed,
+        sample,
+    )
 
     return x_aug.to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 
@@ -585,21 +631,27 @@ def train_epoch(
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
-    loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
+    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     num_batches = len(dataloader)
+
+    class_area_counts = {i: 0 for i in range(num_classes)}
+    total_pixels = 0
+
     model.train()
     jaccard.reset()
+
+    train_jaccard_per_class = MulticlassJaccardIndex(
+        num_classes=num_classes,
+        ignore_index=config.IGNORE_INDEX,
+        average=None,
+    ).to(MODEL_DEVICE)
+
     train_loss = 0
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
-        aug_config = (
-            spatial_aug_mode,
-            color_aug_mode,
-            spatial_augs,
-            color_augs,
-        )
+        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
             train_config,
@@ -608,6 +660,13 @@ def train_epoch(
         )
         x = x.to(MODEL_DEVICE)
         y = y.to(MODEL_DEVICE)
+
+        mask_int = y.long()
+        batch_pixels = mask_int.numel()
+        total_pixels += batch_pixels
+        for i in range(num_classes):
+            class_area_counts[i] += (mask_int == i).sum().item()
+
         # Break after the first batch in debug mode
         if args.debug and batch == 0:
             print("Debug mode: Exiting training loop after first batch.")
@@ -630,6 +689,7 @@ def train_epoch(
         # update jaccard index
         preds = outputs.argmax(dim=1)
         jaccard.update(preds, y)
+        train_jaccard_per_class.update(preds, y)
 
         # backpropagation
         loss.backward()
@@ -645,17 +705,24 @@ def train_epoch(
         if batch % 100 == 0:
             loss, current = loss.item(), (batch + 1)
             logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
-
-        # Break after the first batch in debug mode
-        if args.debug and batch == 0:
-            print("Debug mode: Exiting training loop after first batch.")
-            break
-
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
+    class_area_percentages = {
+        i: (class_area_counts[i] / total_pixels * 100) for i in range(num_classes)
+    }
+    logging.info(
+        "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
+    )
+
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
+
+    final_train_iou = train_jaccard_per_class.compute()
+    log_per_class_iou_tensor(
+        writer, labels.labels.items(), final_train_iou, "IoU/train", epoch
+    )
+
     logging.info("Train Jaccard index: %.4f", final_jaccard)
 
     if wandb_tune:
@@ -677,6 +744,7 @@ def test(
     test_config,
     writer,
     wandb_tune: bool,
+    labels,
     num_examples: int = 10,
 ) -> float:
     """Executes a testing step for the model and saves sample output images.
@@ -696,6 +764,7 @@ def test(
             - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
+        labels: The labels for the dataset.
         num_examples: The number of examples to save.
 
     Returns:
@@ -815,6 +884,7 @@ def test(
                     }
 
                     # Add DEM if enabled
+                    # Add DEM if enabled
                     if config.USE_DIFFDEM:
                         plot_tensors["Difference DEM"] = (
                             x_denorm[i][3, :, :].cpu().clip(0, 1)
@@ -826,9 +896,8 @@ def test(
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
-                        label_name = kc.labels_inverse.get(label_id, "UNKNOWN")
-                        save_dir = Path(epoch_dir) / label_name
-
+                        label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
+                        save_dir = Path(epoch_dir) / label_name.replace("/", "-")
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
@@ -837,8 +906,8 @@ def test(
                         plot_from_tensors(
                             plot_tensors,
                             sample_fname,
-                            kc.colors,
-                            kc.labels_inverse,
+                            labels.colors,
+                            labels.labels_inverse,
                             sample["bbox"][i],
                         )
     test_loss /= num_batches
@@ -846,6 +915,11 @@ def test(
     final_jaccard_per_class = jaccard_per_class.compute()
     writer.add_scalar("loss/test", test_loss, epoch)
     writer.add_scalar("IoU/test", final_jaccard, epoch)
+
+    log_per_class_iou_tensor(
+        writer, labels.labels.items(), final_jaccard_per_class, "IoU/test", epoch
+    )
+
     logger = logging.getLogger()
     logger.info("Test error:")
     logger.info(f"Jaccard index: {final_jaccard:.3f}")
@@ -862,7 +936,7 @@ def test(
 
     # Access the labels and their names
     _labels = {}
-    for label_name, label_id in kc.labels.items():
+    for label_name, label_id in labels.labels.items():
         _labels[label_id] = label_name
         if len(_labels) == num_classes:
             break
@@ -882,6 +956,7 @@ def train(
     wandb_tune: bool,
     args,
     epoch,
+    labels,
 ) -> tuple[float, float]:
     """Train a deep learning model using the specified configuration and parameters.
 
@@ -906,6 +981,7 @@ def train(
         wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
         epoch: The configuration for the number of epochs.
+        labels: The labels for the dataset.
 
     Returns:
         Tuple[float, float]: A tuple containing the Jaccard index for the last
@@ -942,9 +1018,6 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    # How many classes we're predicting
-    num_classes = config.NUM_CLASSES
-
     # reducing number of epoch in debugging or hyperparameter tuning
     if args.debug:
         epoch = 1
@@ -962,7 +1035,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                num_classes,
+                len(labels.labels),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -971,6 +1044,7 @@ def train(
                 test_config,
                 writer,
                 args,
+                labels,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
@@ -981,6 +1055,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
+            len(labels.labels),
         )
         aug_config = (
             spatial_augs,
@@ -1005,7 +1080,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            num_classes,
+            len(labels),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1014,6 +1089,7 @@ def train(
             test_config,
             writer,
             wandb_tune,
+            labels,
         )
         # Checks for plateau
         if best_loss is None:
@@ -1051,7 +1127,7 @@ def train(
     return epoch_jaccard, t_jaccard
 
 
-def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
+def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     """Runing a single trial of training
 
     Input:
@@ -1072,7 +1148,9 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
     else:
         epoch = config.EPOCHS
     # randomly splitting the data at every trial
-    train_dataloader, test_dataloader = build_dataset(naip_set, split_rate, config)
+    train_dataloader, test_dataloader = build_dataloaders(
+        images, labels, split_rate, config
+    )
     (
         model,
         loss_fn,
@@ -1081,16 +1159,10 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         jaccard_per_class,
         optimizer,
     ) = create_model(
-        model_type=config.MODEL,
-        backbone=config.BACKBONE,
-        num_classes=config.NUM_CLASSES,
-        weights=config.WEIGHTS,
-        dropout=config.DROPOUT,
-        loss_function_name=config.LOSS_FUNCTION,
-        ignore_index=config.IGNORE_INDEX,
-        learning_rate=config.LEARNING_RATE,
-        weight_decay=config.WEIGHT_DECAY,
+        config,
+        len(labels.labels),
         device=MODEL_DEVICE,
+        debug=args.debug,
     )
     spatial_augs, color_augs = create_augmentation_pipelines(
         config,
@@ -1126,6 +1198,7 @@ def one_trial(exp_n, num, wandb_tune, naip_set, split_rate, args):
         wandb_tune,
         args,
         epoch,
+        labels,
     )
     writer.close()
     logger.handlers.clear()
@@ -1186,7 +1259,7 @@ if __name__ == "__main__":
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    naip, kc = initialize_dataset(config)
+    images, labels = initialize_dataset(config)
 
     def run_trials():
         """Running training for multiple trials"""
@@ -1204,7 +1277,7 @@ if __name__ == "__main__":
 
         for num in range(num_trials):
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, naip, split, args
+                exp_name, num, wandb_tune, images, labels, split, args
             )
             train_ious.append(round(float(train_iou), 3))
             test_ious.append(round(float(test_iou), 3))
