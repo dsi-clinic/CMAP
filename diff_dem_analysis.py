@@ -1,4 +1,8 @@
-"""Module finds difference between filled/unfilled DEMs and exports it"""
+"""Module finds difference between filled/unfilled DEMs and exports it
+
+To run, request a large amount of memory from the cluster.
+750gb was used previously, but less may be possible.
+"""
 
 from pathlib import Path
 

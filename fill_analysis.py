@@ -1,8 +1,11 @@
-"""Module performs fill analysis, finds the difference, and exports it"""
+"""Module performs fill analysis on baseline DEM and exports it
+
+Run this prior to diff_dem_analysis.py to fill all depressions prior to finding difference.
+diff_dem_analysis.py will take the filled DEM exported from here and the baseline DEM and find difference to emphasize depressions.
+"""
 
 from pathlib import Path
 
-import numpy as np
 from pysheds.grid import Grid
 
 import configs.config as config
@@ -23,27 +26,6 @@ def export_filled_dem(fill_dem, grid, output_path):
     return
 
 
-def normalize_diff_dem(diff_dem):
-    """Normalizes difference DEM(WIP) - should be done in train.py?
-
-    Args:
-        diff_dem: DEM containing difference between filled and original DEM
-    Returns:
-        normalized: normalized diff_dem with mean=0 and stddev=1
-    """
-    # Consider local normalization as shown in Castillo et al.(2014)
-
-    mean = np.mean(diff_dem)
-    std = np.std(diff_dem)
-
-    if std == 0:  # Prevent division by zero
-        return diff_dem - mean  # If no variation, just center to 0
-
-    normalized = (diff_dem - mean) / std
-
-    return normalized
-
-
 def fill_analysis(tiff_path):
     """Loads DEM tiff file, performs fill analysis, and finds the difference
 
@@ -61,9 +43,6 @@ def fill_analysis(tiff_path):
     # Fill Pits and Depressions in place to limit memory usage
     grid.fill_pits(dem, out=dem)
     grid.fill_depressions(dem, out=dem)
-
-    # # Normalize Difference DEM with Z-score normalization (mean = 0, stddev = 1)
-    # normalized_diff_dem = normalize_diff_dem(diff_dem)
 
     return dem, grid
 
