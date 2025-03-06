@@ -1,3 +1,4 @@
+# Performance
 Updated 1/27/2025 -
 
 All image and spatial augments work individually, as set in **SPATIAL_AUG_INDICES** and **IMAGE_AUG_INDICES** within config.py. When working together, however, some indices are no longer activated - resized crop, for example, seems to not always be present and needs to be investigated further to insure.
@@ -72,3 +73,22 @@ average: 0.422, standard deviation:0.000
 
 
 The results of the DEM tests return lower than running without the DEM. Randomness is involved in these tests, however, and this may not be an accurate reading of the effectiveness of DEM vs. no DEM.
+
+# Processes Involved
+Updated 2/24/2025:
+The DEM files are normalized on an image by image basis, though the RGB files are normalized across the entire population of images. This is working as intended. The Bare Earth DEM is used rather than the Hydro-Enforced DEM. This is wonderful, as long as it is being processed correctly. Data and Kane County documentation can be found in /net/projects/cmap/data/kane-county-data.
+
+Castillo et al.(2014, doi: 10.1002/esp.3595) has more detail on normalization techniques necessary, and recommends normalizing slope data. In this case, the filled/difference DEM is the equivalent of slope data.
+
+# Results - 5 trials, 4 epochs
+SA refers to spatial augmentations chosen. **0** and **1** are the horizontal and vertical flip augmentations. **2** is the rotation augmentation, and was the primary focus of these exploratory tests. For all but one test, all image augmentations(IA) were active. Where not all active, the best configuration of image augmentations without DEM was chosen from previous work on the model.
+
+| Configuration       | Overall IOU  | Pond IOU | Wetland IOU | Dry Bottom Turf IOU | Dry Bottom Mesic Prairie IOU |
+|---------------------|------------------|------------------|------------------|----------------------|-----------------------------|
+| No DEM SA(0-1) IA(0-7)  | .5102 ± .0413 | .6964 ± .0310 | .3391 ± .1098 | .3575 ± .0637 | .0775 ± .0708 |
+| No DEM SA(0-2) IA(0-7)    | .5067 ± .0448 | .7198 ± .0244 | .304 ± .0679 | .3768 ± .0416 | .0948 ± .0522 |
+| DEM SA(0-1) IA(0-7)    | .5544 ± .0456 | .7452 ± .0274 | .3891 ± .0745 | .4689 ± .1278 | .0680 ± .0253 |
+| DEM, SA(0-2) IA(0-7)     | .4718 ± .0569 | .6924 ± .0559 | .3185 ± .0573 | .4868 ± .0258 | .0821 ± .0263 |
+| *DEM SA(0-1) IA(0-5)* *      | .4648 ± .0289 | .6453 ± .0037 | .3849 ± .1031 | .5562 ± .0153 | .0588 ± .0320 |
+
+*Run finished before ending trials. Documents 3 completed trials and one trial that completed 3 of the 4 epochs.
