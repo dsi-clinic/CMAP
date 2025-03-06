@@ -1,19 +1,20 @@
 """This module provides a custom PyTorch GeoDataset for working with vector data.
 
-The vector data represents geospatial features from the GIBI dataset, stored in a 
-shapefile. This module allows retrieving and rasterizing point features as masks 
+The vector data represents geospatial features from the GIBI dataset, stored in a
+shapefile. This module allows retrieving and rasterizing point features as masks
 within specified bounding boxes.
 """
 
 import math
 import sys
+
 import geopandas as gpd
 import numpy as np
 import rasterio
 import torch
-from torchgeo.datasets import BoundingBox, GeoDataset
 from rasterio.features import rasterize
-from shapely.geometry import box
+from torchgeo.datasets import BoundingBox, GeoDataset
+
 
 class GIBIDataset(GeoDataset):
     """Custom vector dataset for GIBI point-based data."""
@@ -55,7 +56,6 @@ class GIBIDataset(GeoDataset):
         gdf = gdf[gdf["GI_Type"].isin(labels.keys())]
         gdf = gdf.to_crs(dest_crs)
         return gdf
-
 
     def _populate_index(self, path, gdf, context_size):
         """Populate spatial index with the filtered data."""
@@ -100,7 +100,7 @@ class GIBIDataset(GeoDataset):
             shapes,
             out_shape=(round(height), round(width)),
             transform=transform,
-            dtype=np.uint8
+            dtype=np.uint8,
         )
 
         sample = {

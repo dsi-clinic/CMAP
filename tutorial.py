@@ -1,3 +1,11 @@
+"""This module defines a simple neural network for classifying FashionMNIST images.
+
+It includes:
+- Downloading and preparing the dataset.
+- Defining a neural network using PyTorch.
+- Setting up data loaders.
+"""
+
 import torch
 from torch import nn
 from torch.utils.data import DataLoader
@@ -41,23 +49,36 @@ device = (
 )
 print(f"Using {device} device")
 
-# Define model
+
 class NeuralNetwork(nn.Module):
+    """A simple feedforward neural network for image classification."""
+
     def __init__(self):
+        """Initialize the neural network with three fully connected layers."""
         super().__init__()
         self.flatten = nn.Flatten()
         self.linear_relu_stack = nn.Sequential(
-            nn.Linear(28*28, 512),
+            nn.Linear(28 * 28, 512),
             nn.ReLU(),
             nn.Linear(512, 512),
             nn.ReLU(),
-            nn.Linear(512, 10)
+            nn.Linear(512, 10),
         )
 
     def forward(self, x):
+        """Perform a forward pass through the network.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (N, C, H, W).
+
+        Returns:
+            torch.Tensor: Output logits of shape (N, 10).
+        """
         x = self.flatten(x)
         logits = self.linear_relu_stack(x)
         return logits
 
+
+# Instantiate and print the model
 model = NeuralNetwork().to(device)
 print(model)
