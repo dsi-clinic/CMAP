@@ -676,9 +676,6 @@ def train_epoch(
 
     num_batches = len(dataloader)
 
-    # Add prefetching for the dataloader
-    prefetch_factor = 2  # Adjust based on your system's memory
-
     class_area_counts = {i: 0 for i in range(num_classes)}
     total_pixels = 0
 
