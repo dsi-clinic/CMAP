@@ -107,7 +107,6 @@ def plot_from_tensors(
     nrows = len(sample) // 2 + len(sample) % 2
     ncols = min(len(sample), 2)
     fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
-    fig, axs = plt.subplots(nrows, ncols, figsize=(8, 8))
     axs = np.array(axs).reshape(-1)
 
     # Track unique values in mask tensors
@@ -167,7 +166,7 @@ def plot_from_tensors(
 
     # Save the figure
     plt.savefig(save_path, bbox_inches="tight")
-    plt.close()
+    plt.close(fig)
 
 
 def determine_dominant_label(ground_truth: Tensor) -> int:

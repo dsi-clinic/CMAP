@@ -12,6 +12,7 @@ import logging
 import random
 import shutil
 import sys
+import time  # Add time module for timing
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -237,12 +238,16 @@ def build_dataloaders(images, labels, split_rate, config):
     logging.info(f"Train sampler length: {len(train_sampler)}")
     logging.info(f"Test sampler length: {len(test_sampler)}")
 
-    # create dataloaders (must use batch_sampler)
+    # Add prefetching and persistent workers
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
+        prefetch_factor=2,  # Add prefetching
+        persistent_workers=True
+        if config.NUM_WORKERS > 0
+        else False,  # Keep workers alive between epochs
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
@@ -250,6 +255,10 @@ def build_dataloaders(images, labels, split_rate, config):
         sampler=test_sampler,
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
+        prefetch_factor=2,  # Add prefetching
+        persistent_workers=True
+        if config.NUM_WORKERS > 0
+        else False,  # Keep workers alive between epochs
     )
 
     logging.info(f"Train dataloader length: {len(train_dataloader)}")
@@ -526,6 +535,31 @@ def log_per_class_iou_tensor(
         )
 
 
+def normalize_channels(x):
+    """Normalize all channels in a batch efficiently.
+
+    Args:
+        x: Input tensor of shape [batch, channels, height, width]
+
+    Returns:
+        Normalized tensor with values between 0 and 1
+    """
+    # find min and max per channel across batch
+    min_vals = (
+        x.min(dim=0, keepdim=True)[0]
+        .min(dim=2, keepdim=True)[0]
+        .min(dim=3, keepdim=True)[0]
+    )
+    max_vals = (
+        x.max(dim=0, keepdim=True)[0]
+        .max(dim=2, keepdim=True)[0]
+        .max(dim=3, keepdim=True)[0]
+    )
+    return (x - min_vals) / (
+        max_vals - min_vals + 1e-8
+    )  # add epsilon to avoid division by zero
+
+
 def train_setup(
     sample: defaultdict[str, Any],
     train_config,
@@ -549,11 +583,7 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "raw input", logging.getLogger())
 
-    # Scale all channels to 0 to 1
-    for i in range(x.shape[1]):  # Loop over all channels after the 3rd
-        max_val = torch.max(x[:, i])
-        min_val = torch.min(x[:, i])
-        x[:, i] = (x[:, i] - min_val.clone()) / (max_val.clone() - min_val.clone())
+    x = normalize_channels(x)
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
@@ -587,16 +617,16 @@ def train_setup(
         log_channel_stats(x_aug, "augmented input", logging.getLogger())
 
     # Save training sample images if first batch
-    # if batch == 0:
-    save_training_images(
-        epoch,
-        train_images_root,
-        samp_image,  # Save original images
-        samp_mask,
-        x_aug,
-        y_squeezed,
-        sample,
-    )
+    if batch == 0:
+        save_training_images(
+            epoch,
+            train_images_root,
+            samp_image,  # Save original images
+            samp_mask,
+            x_aug,
+            y_squeezed,
+            sample,
+        )
 
     return x_aug.to(MODEL_DEVICE), y_squeezed.to(MODEL_DEVICE)
 
@@ -631,8 +661,18 @@ def train_epoch(
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
+    # Add timing for dataloader initialization
+    dataloader_start = time.time()
+
     loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
+
+    # start timing for this epoch
+    epoch_start_time = time.time()
+
+    # Log dataloader initialization time
+    dataloader_time = epoch_start_time - dataloader_start
+    logging.info(f"Dataloader initialization took {dataloader_time:.2f}s")
 
     num_batches = len(dataloader)
 
@@ -649,6 +689,7 @@ def train_epoch(
     ).to(MODEL_DEVICE)
 
     train_loss = 0
+    iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
         aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
@@ -703,20 +744,36 @@ def train_epoch(
 
         train_loss += loss.item()
         if batch % 100 == 0:
+            current_time = time.time()
+            iteration_time = current_time - iteration_start_time
             loss, current = loss.item(), (batch + 1)
-            logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
+            avg_time_per_iteration = (
+                iteration_time / 100 if batch > 0 else iteration_time
+            )
+            logging.info(
+                f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}] time: {avg_time_per_iteration:.1f}s/it"
+            )
+            iteration_start_time = current_time
+
+    # calculate epoch duration
+    epoch_duration = time.time() - epoch_start_time
+
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
     class_area_percentages = {
         i: (class_area_counts[i] / total_pixels * 100) for i in range(num_classes)
     }
-    logging.info(
-        "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
-    )
+    logging.info(f"Per-class area percentages for epoch {epoch}:")
+    for class_id, percentage in class_area_percentages.items():
+        class_name = labels.labels.get(class_id, f"Class {class_id}")
+        logging.info(f"  {class_name}: {percentage:.2f}%")
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
+    writer.add_scalar(
+        "time/epoch_duration", epoch_duration, epoch
+    )  # log epoch duration
 
     final_train_iou = train_jaccard_per_class.compute()
     log_per_class_iou_tensor(
@@ -724,6 +781,9 @@ def train_epoch(
     )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
+    logging.info(
+        f"Epoch {epoch} completed in {epoch_duration:.0f} seconds"
+    )  # log epoch duration
 
     if wandb_tune:
         wandb.log(
@@ -732,6 +792,7 @@ def train_epoch(
                 "train_jaccard": final_jaccard.item(),
                 "epoch": epoch,
                 "batch": batch,
+                "epoch_duration": epoch_duration,  # log epoch duration to wandb
             }
         )
 
@@ -799,13 +860,8 @@ def test(
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
-            # Loop over all channels to scale to 0 to 1
-            for i in range(x.shape[1]):
-                max_val = torch.max(x[:, i])
-                min_val = torch.min(x[:, i])
-                x[:, i] = (x[:, i] - min_val.clone()) / (
-                    max_val.clone() - min_val.clone()
-                )
+            # Scale all channels to 0 to 1 using vectorized operation
+            x = normalize_channels(x)
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
@@ -1026,6 +1082,9 @@ def train(
     else:
         epoch = config.EPOCHS
 
+    # track total training time
+    total_training_start = time.time()
+
     for t in range(epoch):
         if t == 0:
             test_config = (
@@ -1118,6 +1177,14 @@ def train(
         if args.debug and t == 0:
             print("Debug mode: Skipping the rest of the training loop")
             break
+
+    # calculate and log total training time
+    total_training_time = time.time() - total_training_start
+    logging.info(f"Total training completed in {total_training_time:.2f} seconds")
+    writer.add_scalar("time/total_training_time", total_training_time, 0)
+
+    if wandb_tune:
+        wandb.log({"total_training_time": total_training_time})
 
     print("Done!")
 
