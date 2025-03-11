@@ -117,8 +117,8 @@ RD_LAYER = 1
 USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
 # DEM data - a max of one should be enabled at a time
-USE_DIFFDEM = False  # change to True if training w/ difference DEM
-USE_BASEDEM = True  # change to True if training w/ baseline DEM
+USE_DIFFDEM = True  # change to True if training w/ difference DEM
+USE_BASEDEM = False  # change to True if training w/ baseline DEM
 
-# for wandb
+# for wand
 WANDB_API = ""
