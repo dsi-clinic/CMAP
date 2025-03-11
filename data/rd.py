@@ -98,7 +98,7 @@ class RiverDataset(GeoDataset):
 
             # Merge indices and labels
             i = 0
-            max_kc = 10
+            max_kc = 5000
 
             for item in kc_dataset.index.intersection(
                 kc_dataset.index.bounds,
@@ -115,7 +115,6 @@ class RiverDataset(GeoDataset):
                     [obj_dict],  # wrap in list to match RD format
                 )
                 print(f"KC inserting coords {item.bounds}")
-                # FIXME debug hack for fewer KC
                 i += 1
                 if i > max_kc:
                     break
@@ -175,7 +174,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, gdf, total_points=177, box_size=150):
+    def _populate_index(self, gdf, total_points=900, box_size=150):
         """Populate spatial index with random points within river polygons."""
         import time
 

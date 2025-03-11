@@ -44,7 +44,7 @@ DATASET_STD = [
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 LEARNING_RATE = 1e-5
-NUM_WORKERS = 8
+NUM_WORKERS = 1
 EPOCHS = 8
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
@@ -117,8 +117,8 @@ RD_LAYER = 1
 USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
 # DEM data - a max of one should be enabled at a time
-USE_DIFFDEM = True  # change to True if training w/ difference DEM
-USE_BASEDEM = False  # change to True if training w/ baseline DEM
+USE_DIFFDEM = False  # change to True if training w/ difference DEM
+USE_BASEDEM = True  # change to True if training w/ baseline DEM
 
 # for wandb
 WANDB_API = ""
