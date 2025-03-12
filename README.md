@@ -149,6 +149,40 @@ If the data is larger than 50MB than you should not add it to the repo and inste
 
 Source attribution and descriptions included in the [README](data/README.md) file.
 
+### Segment Anything Integration & Slurm Processing
+
+- **Overview:**
+  - We integrated [Segment Anything](https://github.com/facebookresearch/segment-anything) (source code in `segment_anything_source_code/`) to automate stormwater basin segmentation.
+  - The current workflow selects a point within each manually labeled basin polygon, rasterizes it, and uses SAM to generate an object mask from that point prompt.
+
+- **Parallel Processing:**
+  - The segmentation script (`segment_kc.py`) is run in parallel via Slurm array jobs (7 tasks). Each task processes a subset of patches and outputs partial CSVs (named `per_class_ious_subset_*.csv`) and up to 10 debug images.
+  - Partial outputs are saved in `kc_sam_outputs/` (this directory is generated at runtime and should not be committed).
+
+- **Aggregation & Visualization:**
+  - After segmentation, the aggregator script (`aggregate_kc.py`) merges all partial CSVs from the subfolders in `kc_sam_outputs/`, computes weighted mean IoU and pooled standard deviation per class, and adds an "Overall" row.
+  - A bar chart is generated with classes on the x-axis and mean IoU on the y-axis (with error bars showing standard deviation). Both the final CSV and the PNG are saved in `kc_sam_statistics/`.
+
+- **How to Run:**
+  1. **Segment & Process:**
+     - Edit `run_sam.sh` with CNETID.
+     - Submit the array job:
+       ```bash
+       sbatch run_sam.sh
+       ```
+     - This executes `segment_kc.py` in parallel and saves outputs in `kc_sam_outputs/kc_sam_run_<JOBID>/`.
+  2. **Aggregate & Visualize:**
+     - Once segmentation completes, run:
+       ```bash
+       python aggregate_kc.py
+       ```
+     - This creates a final aggregated CSV and a bar chart with error bars in `kc_sam_statistic/`.
+
+- **Future work:**
+  - Refine the point-selection and rasterization steps and adjust input image preprocessing (e.g., contrast adjustments, stitching neighboring cells) to improve segmentation performance.
+  - Modify `aggregate_kc.py` to compute additional metrics or generate alternative visualizations.
+  - Adapt the workflow to incorporate new datasets or geographic regions.
+
 ## Final Results
 The below results were obtained with these specifications:
 * Classes: "POND" "WETLAND" "DRY BOTTOM - TURF" "DRY BOTTOM - MESIC PRAIRIE"
