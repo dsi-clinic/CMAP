@@ -55,6 +55,7 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
         self,
     ):
         """Calculate hits (candidate patches) and  adjusted areas (weights) for the dataset.
+
             Weights are based on hits size (bounds) and per-class area. Larger hits and less frequent classes are oversampled.
 
         Returns:
@@ -83,13 +84,9 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
                     self.length += 1
                 hits.append(hit)
 
-                fixed_bbox = get_random_bounding_box(
-                    bounds, self.size, self.res
-                )  
+                fixed_bbox = get_random_bounding_box(bounds, self.size, self.res)
                 sample = self.dataset[fixed_bbox]
-                patch_mask_int = (
-                    sample["mask"].squeeze().long()
-                ) 
+                patch_mask_int = sample["mask"].squeeze().long()
                 total_pixels = patch_mask_int.numel()
                 class_pixel_counts = [
                     (patch_mask_int == i).sum().item()
