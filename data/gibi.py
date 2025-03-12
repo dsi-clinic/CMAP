@@ -1,8 +1,8 @@
-"""This module provides a custom PyTorch GeoDataset for working with vector data.
+"""Custom PyTorch GeoDataset for GIBI point data.
 
-The vector data represents geospatial features from the GIBI dataset, stored in a
-shapefile. This module allows retrieving and rasterizing point features as masks
-within specified bounding boxes.
+This module reads point features from a shapefile and rasterizes them to create masks.
+Since the data consists of points (not polygons), each point is mapped directly to a pixel,
+which may cause slight positional offsets without buffering.
 """
 
 import math
