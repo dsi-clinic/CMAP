@@ -180,7 +180,7 @@ def initialize_dataset(config):
             naip_dataset.crs,
             naip_dataset.res,
         )
-        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=True)
+        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=False)
         print("kc dataset loaded")
     return naip_dataset, label_dataset
 
