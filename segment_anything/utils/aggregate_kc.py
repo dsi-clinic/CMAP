@@ -28,7 +28,7 @@ def find_all_runs(base_out_dir):
 def main():
     """Aggregates IoU results from multiple kc_sam_runs and generates summary statistics."""
     home_dir = Path.home()
-    base_out_dir = home_dir / "CMAP" / "segment_anything_CMAP" / "kc_sam_outputs"
+    base_out_dir = home_dir / "CMAP" / "segment_anything" / "kc_sam_outputs"
     run_folders = find_all_runs(base_out_dir)
 
     if not run_folders:
@@ -38,7 +38,7 @@ def main():
     print(f"[INFO] Found {len(run_folders)} completed runs.")
 
     # Output directory for final CSV + plot
-    stats_dir = home_dir / "CMAP" / "segment_anything_CMAP" / "kc_sam_statistics"
+    stats_dir = home_dir / "CMAP" / "segment_anything" / "kc_sam_statistics"
     stats_dir.mkdir(parents=True, exist_ok=True)
 
     # Gather all per_class_ious_subset_*.csv files from all runs

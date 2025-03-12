@@ -18,7 +18,7 @@ eval "$(micromamba shell hook -s bash)"
 micromamba activate cmap
 
 # Adjust user as needed
-cd /home/gregoryc25/CMAP/segment_anything_CMAP/utils
+cd /home/gregoryc25/CMAP/segment_anything/utils
 
 # Run segment_kc.py with array-based subset logic
 python segment_kc.py \
@@ -29,6 +29,6 @@ python segment_kc.py \
 # NOTE:
 # - This job will produce partial CSVs named
 #   per_class_ious_subset_{0..6}.csv
-#   inside /home/gregoryc25/CMAP/segment_anything_CMAP/kc_sam_outputs/kc_sam_run_<JOBID>/
+#   inside /home/gregoryc25/CMAP/segment_anything/kc_sam_outputs/kc_sam_run_<JOBID>/
 # - It may also produce up to 20 debug images per task in a 'plots/' subdir.
 # - No final aggregator logic is here.

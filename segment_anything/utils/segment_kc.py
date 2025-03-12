@@ -71,7 +71,7 @@ def main():
 
     # Output directory setup
     home_dir = Path.home()
-    base_out_dir = home_dir / "CMAP" / "segment_anything_CMAP" / "kc_sam_outputs"
+    base_out_dir = home_dir / "CMAP" / "segment_anything" / "kc_sam_outputs"
     base_out_dir.mkdir(parents=True, exist_ok=True)
 
     job_id = (
