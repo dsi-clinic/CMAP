@@ -140,4 +140,4 @@ venv.bak/
 *.avro
 
 #wandb results
-wandb*
+wandb*segment_anything_source_code/

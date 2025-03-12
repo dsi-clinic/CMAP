@@ -84,6 +84,9 @@ class KaneCounty(GeoDataset):
         self.gdf = gdf
 
         context_size = math.ceil(patch_size / 2 * res)
+        print(f"context_size: {context_size}")
+        print(f"patch_size: {patch_size}")
+        print(f"res: {res}")
         self.context_size = context_size
         self._crs = dest_crs
         self._res = res

@@ -12,6 +12,7 @@ import logging
 import random
 import shutil
 import sys
+import time  # Add time module for timing
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -141,26 +142,28 @@ def initialize_dataset(config):
                 return sample
 
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
-        config.DATASET_MEAN = config.DATASET_MEAN[:3]
-        config.DATASET_STD = config.DATASET_STD[:3]
+
     else:
         naip_dataset = NAIP(config.KC_IMAGE_ROOT)
 
-    # Load DEM if specified
-    if config.KC_DEM_ROOT is not None:
+    # Load Difference DEM if specified
+    if config.USE_DIFFDEM:
+        dem = KaneDEM(config.KC_DEM_ROOT, config, use_difference=True)
+        naip_dataset = naip_dataset & dem
+
+        print("difference dem loaded")
+
+    # Load Base DEM if specified
+    elif config.USE_BASEDEM:
         dem = KaneDEM(config.KC_DEM_ROOT, config)
         naip_dataset = naip_dataset & dem
-        if not config.USE_NIR:
-            config.DATASET_MEAN.append(0.0)  # DEM mean
-            config.DATASET_STD.append(1.0)  # DEM std
-        print("dem loaded")
+
+        print("base dem loaded")
 
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        config.NUM_CLASSES = 6  # predicting 5 classes + background
         rd_config = (
-            config.RD_LABELS,
             config.PATCH_SIZE,
             naip_dataset.crs,
             naip_dataset.res,
@@ -197,6 +200,7 @@ def build_dataloaders(images, labels, split_rate, config):
     seed = random.SystemRandom().randint(0, sys.maxsize)
     logging.info("Dataset random split seed: %d", seed)
     generator = torch.Generator().manual_seed(seed)
+    logging.info(f"Initial NAIP dataset size: {len(images)}")
 
     # split the dataset
     train_portion, test_portion = random_bbox_assignment(
@@ -205,14 +209,22 @@ def build_dataloaders(images, labels, split_rate, config):
     train_dataset = train_portion & labels
     test_dataset = test_portion & labels
 
-    train_sampler = (
-        BalancedRandomBatchGeoSampler( 
-            config={
-                "dataset": train_dataset,
-                "size": config.PATCH_SIZE,
-                "batch_size": config.BATCH_SIZE,
-            }
-        )
+    logging.info("After intersection:")
+    logging.info(f"Train dataset size: {len(train_dataset)}")
+    logging.info(f"Test dataset size: {len(test_dataset)}")
+
+    # Check if datasets are empty before creating samplers
+    if len(train_dataset) == 0:
+        raise ValueError("Train dataset is empty after intersection!")
+    if len(test_dataset) == 0:
+        raise ValueError("Test dataset is empty after intersection!")
+
+    train_sampler = BalancedRandomBatchGeoSampler(
+        config={
+            "dataset": train_dataset,
+            "size": config.PATCH_SIZE,
+            "batch_size": config.BATCH_SIZE,
+        }
     )
     test_sampler = BalancedGridGeoSampler(
         config={
@@ -222,12 +234,20 @@ def build_dataloaders(images, labels, split_rate, config):
         }
     )
 
-    # create dataloaders (must use batch_sampler)
+    # Log sampler lengths
+    logging.info(f"Train sampler length: {len(train_sampler)}")
+    logging.info(f"Test sampler length: {len(test_sampler)}")
+
+    # Add prefetching and persistent workers
     train_dataloader = DataLoader(
         dataset=train_dataset,
         batch_sampler=train_sampler,
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
+        prefetch_factor=2,  # Add prefetching
+        persistent_workers=True
+        if config.NUM_WORKERS > 0
+        else False,  # Keep workers alive between epochs
     )
     test_dataloader = DataLoader(
         dataset=test_dataset,
@@ -235,7 +255,15 @@ def build_dataloaders(images, labels, split_rate, config):
         sampler=test_sampler,
         collate_fn=stack_samples,
         num_workers=config.NUM_WORKERS,
+        prefetch_factor=2,  # Add prefetching
+        persistent_workers=True
+        if config.NUM_WORKERS > 0
+        else False,  # Keep workers alive between epochs
     )
+
+    logging.info(f"Train dataloader length: {len(train_dataloader)}")
+    logging.info(f"Test dataloader length: {len(test_dataloader)}")
+
     return train_dataloader, test_dataloader
 
 
@@ -284,15 +312,8 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
 
 
 def create_model(
-    model_type,
-    backbone,
+    config,
     num_classes,
-    weights,
-    dropout,
-    loss_function_name,
-    ignore_index,
-    learning_rate,
-    weight_decay,
     device="cpu",
     debug=False,
 ):
@@ -307,13 +328,20 @@ def create_model(
             - jaccard_per_class: The metric to measure Jaccard index per class.
             - optimizer: The optimizer for training the model.
     """
-    # create the model
+    # calculate input channels based on config
+    in_channels = 3  # base RGB channels
+    if config.USE_NIR:
+        in_channels += 1  # add NIR channel
+    if config.USE_DIFFDEM or config.USE_BASEDEM:
+        in_channels += 1  # add DEM channel
+
     model_configs = {
-        "model": model_type,
-        "backbone": backbone,
+        "model": config.MODEL,
+        "backbone": config.BACKBONE,
         "num_classes": num_classes,
-        "weights": weights,
-        "dropout": dropout,
+        "weights": config.WEIGHTS,
+        "dropout": config.DROPOUT,
+        "in_channels": in_channels,
     }
 
     model = SegmentationModel(model_configs).model.to(device)
@@ -323,7 +351,7 @@ def create_model(
     # set the loss function, metrics, and optimizer
     loss_fn_class = getattr(
         importlib.import_module("segmentation_models_pytorch.losses"),
-        loss_function_name,
+        config.LOSS_FUNCTION,
     )
     # Initialize the loss function with the required parameters
     loss_fn = loss_fn_class(mode="multiclass")
@@ -331,24 +359,24 @@ def create_model(
     # IoU metric
     train_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     test_jaccard = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average="micro",
     ).to(device)
     jaccard_per_class = MulticlassJaccardIndex(
         num_classes=num_classes,
-        ignore_index=ignore_index,
+        ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(device)
 
     optimizer = AdamW(
         model.parameters(),
-        lr=learning_rate,
-        weight_decay=weight_decay,
+        lr=config.LEARNING_RATE,
+        weight_decay=config.WEIGHT_DECAY,
     )
 
     return (
@@ -443,16 +471,21 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             )
 
         # Add DEM if enabled
-        if config.KC_DEM_ROOT is not None:
-            dem_idx = (
-                3 if not config.USE_NIR else 4
-            )  # DEM is after NIR if NIR is enabled
+        if config.USE_DIFFDEM:
             plot_tensors.update(
                 {
-                    "DEM": x[i][dem_idx : dem_idx + 1, :, :].cpu() / 255.0,
-                    "augmented DEM": x_aug_denorm[i][dem_idx : dem_idx + 1, :, :]
+                    "Difference DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
                     .cpu()
                     .clip(0, 1),
+                }
+            )
+
+        elif config.USE_BASEDEM:
+            plot_tensors.update(
+                {
+                    "Base DEM": x[i][3, :, :].cpu() / 255.0,
+                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu().clip(0, 1),
                 }
             )
 
@@ -502,6 +535,31 @@ def log_per_class_iou_tensor(
         )
 
 
+def normalize_channels(x):
+    """Normalize all channels in a batch efficiently.
+
+    Args:
+        x: Input tensor of shape [batch, channels, height, width]
+
+    Returns:
+        Normalized tensor with values between 0 and 1
+    """
+    # find min and max per channel across batch
+    min_vals = (
+        x.min(dim=0, keepdim=True)[0]
+        .min(dim=2, keepdim=True)[0]
+        .min(dim=3, keepdim=True)[0]
+    )
+    max_vals = (
+        x.max(dim=0, keepdim=True)[0]
+        .max(dim=2, keepdim=True)[0]
+        .max(dim=3, keepdim=True)[0]
+    )
+    return (x - min_vals) / (
+        max_vals - min_vals + 1e-8
+    )  # add epsilon to avoid division by zero
+
+
 def train_setup(
     sample: defaultdict[str, Any],
     train_config,
@@ -525,18 +583,22 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "raw input", logging.getLogger())
 
-    # Scale to [0,1]
-    x = x / 255.0
+    x = normalize_channels(x)
 
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x, "scaled input", logging.getLogger())
 
-    # Extend mean/std if needed
+    # Extend mean/std dynamically if needed
     data_mean = config.DATASET_MEAN  # ImageNet mean
     data_std = config.DATASET_STD  # ImageNet std
     if len(data_mean) < model.in_channels:
-        data_mean = data_mean + [data_mean[0]] * (model.in_channels - len(data_mean))
-        data_std = data_std + [data_std[0]] * (model.in_channels - len(data_std))
+        missing_channels = model.in_channels - len(data_mean)
+        computed_means = torch.mean(x[:, len(data_mean) :], dim=[0, 2, 3]).tolist()
+        data_mean = data_mean + computed_means[:missing_channels]
+    if len(data_std) < model.in_channels:
+        missing_channels = model.in_channels - len(data_std)
+        computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+        data_std = data_std + computed_stds[:missing_channels]
 
     # Normalize using ImageNet statistics
     normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -599,24 +661,35 @@ def train_epoch(
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
-    loss_fn, jaccard, optimizer, epoch, train_images_root = train_config
+    # Add timing for dataloader initialization
+    dataloader_start = time.time()
+
+    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
     spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
+
+    # start timing for this epoch
+    epoch_start_time = time.time()
+
+    # Log dataloader initialization time
+    dataloader_time = epoch_start_time - dataloader_start
+    logging.info(f"Dataloader initialization took {dataloader_time:.2f}s")
 
     num_batches = len(dataloader)
 
-    class_area_counts = {i: 0 for i in range(config.NUM_CLASSES)}
+    class_area_counts = {i: 0 for i in range(num_classes)}
     total_pixels = 0
 
     model.train()
     jaccard.reset()
 
     train_jaccard_per_class = MulticlassJaccardIndex(
-        num_classes=config.NUM_CLASSES,
+        num_classes=num_classes,
         ignore_index=config.IGNORE_INDEX,
         average=None,
     ).to(MODEL_DEVICE)
 
     train_loss = 0
+    iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
         aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
@@ -632,7 +705,7 @@ def train_epoch(
         mask_int = y.long()
         batch_pixels = mask_int.numel()
         total_pixels += batch_pixels
-        for i in range(config.NUM_CLASSES):
+        for i in range(num_classes):
             class_area_counts[i] += (mask_int == i).sum().item()
 
         # Break after the first batch in debug mode
@@ -671,21 +744,36 @@ def train_epoch(
 
         train_loss += loss.item()
         if batch % 100 == 0:
+            current_time = time.time()
+            iteration_time = current_time - iteration_start_time
             loss, current = loss.item(), (batch + 1)
-            logging.info(f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}]")
+            avg_time_per_iteration = (
+                iteration_time / 100 if batch > 0 else iteration_time
+            )
+            logging.info(
+                f"loss: {loss:7.7f}  [{current:5d}/{num_batches:5d}] time: {avg_time_per_iteration:.1f}s/it"
+            )
+            iteration_start_time = current_time
+
+    # calculate epoch duration
+    epoch_duration = time.time() - epoch_start_time
+
     train_loss /= num_batches
     final_jaccard = jaccard.compute()
 
     class_area_percentages = {
-        i: (class_area_counts[i] / total_pixels * 100)
-        for i in range(config.NUM_CLASSES)
+        i: (class_area_counts[i] / total_pixels * 100) for i in range(num_classes)
     }
-    logging.info(
-        "Per-class area percentages for epoch %d: %s", epoch, class_area_percentages
-    )
+    logging.info(f"Per-class area percentages for epoch {epoch}:")
+    for class_id, percentage in class_area_percentages.items():
+        class_name = labels.labels.get(class_id, f"Class {class_id}")
+        logging.info(f"  {class_name}: {percentage:.2f}%")
 
     writer.add_scalar("loss/train", train_loss, epoch)
     writer.add_scalar("IoU/train", final_jaccard, epoch)
+    writer.add_scalar(
+        "time/epoch_duration", epoch_duration, epoch
+    )  # log epoch duration
 
     final_train_iou = train_jaccard_per_class.compute()
     log_per_class_iou_tensor(
@@ -693,6 +781,9 @@ def train_epoch(
     )
 
     logging.info("Train Jaccard index: %.4f", final_jaccard)
+    logging.info(
+        f"Epoch {epoch} completed in {epoch_duration:.0f} seconds"
+    )  # log epoch duration
 
     if wandb_tune:
         wandb.log(
@@ -701,6 +792,7 @@ def train_epoch(
                 "train_jaccard": final_jaccard.item(),
                 "epoch": epoch,
                 "batch": batch,
+                "epoch_duration": epoch_duration,  # log epoch duration to wandb
             }
         )
 
@@ -768,22 +860,25 @@ def test(
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test raw input", logging.getLogger())
 
-            # Scale to [0,1] before normalization
-            x = x / 255.0
+            # Scale all channels to 0 to 1 using vectorized operation
+            x = normalize_channels(x)
 
             if batch == 0:  # Log stats for first batch only
                 log_channel_stats(x, "test scaled input", logging.getLogger())
 
-            # Extend mean/std if needed
+            # Extend mean/std dynamically if needed
             data_mean = config.DATASET_MEAN
             data_std = config.DATASET_STD
             if len(data_mean) < model.in_channels:
-                data_mean = data_mean + [data_mean[0]] * (
-                    model.in_channels - len(data_mean)
-                )
-                data_std = data_std + [data_std[0]] * (
-                    model.in_channels - len(data_std)
-                )
+                missing_channels = model.in_channels - len(data_mean)
+                computed_means = torch.mean(
+                    x[:, len(data_mean) :], dim=[0, 2, 3]
+                ).tolist()
+                data_mean = data_mean + computed_means[:missing_channels]
+            if len(data_std) < model.in_channels:
+                missing_channels = model.in_channels - len(data_std)
+                computed_stds = torch.std(x[:, len(data_std) :], dim=[0, 2, 3]).tolist()
+                data_std = data_std + computed_stds[:missing_channels]
 
             # Normalize
             normalize = K.Normalize(mean=data_mean, std=data_std)
@@ -845,22 +940,20 @@ def test(
                     }
 
                     # Add DEM if enabled
-                    if config.KC_DEM_ROOT is not None:
-                        dem_idx = 3 if not config.USE_NIR else 4
-                        plot_tensors.update(
-                            {
-                                "DEM": x_denorm[i][dem_idx : dem_idx + 1, :, :]
-                                .cpu()
-                                .clip(0, 1),
-                            }
+                    # Add DEM if enabled
+                    if config.USE_DIFFDEM:
+                        plot_tensors["Difference DEM"] = (
+                            x_denorm[i][3, :, :].cpu().clip(0, 1)
                         )
+                    if config.USE_BASEDEM:
+                        plot_tensors["Base DEM"] = x_denorm[i][3, :, :].cpu().clip(0, 1)
 
                     ground_truth = samp_mask[i]
                     label_ids = find_labels_in_ground_truth(ground_truth)
 
                     for label_id in label_ids:
                         label_name = labels.labels_inverse.get(label_id, "UNKNOWN")
-                        save_dir = Path(epoch_dir) / label_name
+                        save_dir = Path(epoch_dir) / label_name.replace("/", "-")
                         if not Path.exists(save_dir):
                             Path.mkdir(save_dir)
                         sample_fname = (
@@ -981,9 +1074,6 @@ def train(
     # How long it's been plateauing
     plateau_count = 0
 
-    # How many classes we're predicting
-    num_classes = config.NUM_CLASSES
-
     # reducing number of epoch in debugging or hyperparameter tuning
     if args.debug:
         epoch = 1
@@ -991,6 +1081,9 @@ def train(
         epoch = 10
     else:
         epoch = config.EPOCHS
+
+    # track total training time
+    total_training_start = time.time()
 
     for t in range(epoch):
         if t == 0:
@@ -1001,7 +1094,7 @@ def train(
                 plateau_count,
                 test_image_root,
                 writer,
-                num_classes,
+                len(labels.labels),
                 jaccard_per_class,
             )
             test_loss, t_jaccard = test(
@@ -1021,6 +1114,7 @@ def train(
             optimizer,
             t + 1,
             train_images_root,
+            len(labels.labels),
         )
         aug_config = (
             spatial_augs,
@@ -1045,7 +1139,7 @@ def train(
             plateau_count,
             test_image_root,
             writer,
-            num_classes,
+            len(labels),
             jaccard_per_class,
         )
         test_loss, t_jaccard = test(
@@ -1083,6 +1177,14 @@ def train(
         if args.debug and t == 0:
             print("Debug mode: Skipping the rest of the training loop")
             break
+
+    # calculate and log total training time
+    total_training_time = time.time() - total_training_start
+    logging.info(f"Total training completed in {total_training_time:.2f} seconds")
+    writer.add_scalar("time/total_training_time", total_training_time, 0)
+
+    if wandb_tune:
+        wandb.log({"total_training_time": total_training_time})
 
     print("Done!")
 
@@ -1124,15 +1226,8 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         jaccard_per_class,
         optimizer,
     ) = create_model(
-        model_type=config.MODEL,
-        backbone=config.BACKBONE,
-        num_classes=config.NUM_CLASSES,
-        weights=config.WEIGHTS,
-        dropout=config.DROPOUT,
-        loss_function_name=config.LOSS_FUNCTION,
-        ignore_index=config.IGNORE_INDEX,
-        learning_rate=config.LEARNING_RATE,
-        weight_decay=config.WEIGHT_DECAY,
+        config,
+        len(labels.labels),
         device=MODEL_DEVICE,
         debug=args.debug,
     )
