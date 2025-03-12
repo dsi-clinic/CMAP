@@ -44,7 +44,7 @@ DATASET_STD = [
 BATCH_SIZE = 16
 PATCH_SIZE = 512
 LEARNING_RATE = 1e-5
-NUM_WORKERS = 8
+NUM_WORKERS = 1
 EPOCHS = 8
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
 LOSS_FUNCTION = "JaccardLoss"  # JaccardLoss, DiceLoss, TverskyLoss, LovaszLoss
@@ -120,5 +120,5 @@ USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 USE_DIFFDEM = True  # change to True if training w/ difference DEM
 USE_BASEDEM = False  # change to True if training w/ baseline DEM
 
-# for wandb
+# for wand
 WANDB_API = ""
