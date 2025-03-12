@@ -34,7 +34,7 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
                 - length: number of samples per epoch
                 - roi: region of interest to sample from
                 - units: defines if size is in pixel or CRS units
-                - NUM_CLASSES: number of classes in dataset [config.NUM_CLASSES]  #this is new and should be reflected in train.py
+                - NUM_CLASSES: number of classes in dataset [config.NUM_CLASSES]
         """
         self.config = config
         self.dataset = config["dataset"]
@@ -55,6 +55,7 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
         self,
     ):
         """Calculate hits (candidate patches) and  adjusted areas (weights) for the dataset.
+            Weights are based on hits size (bounds) and per-class area. Larger hits and less frequent classes are oversampled.
 
         Returns:
             hits: List of hits within the region of interest.
@@ -82,33 +83,27 @@ class ClassBalancedRandomBatchGeoSampler(BatchGeoSampler):
                     self.length += 1
                 hits.append(hit)
 
-                ## START: OBTAINING PER HIT CLASS STATISTICS AND ADJUSTING THE SAMPLING WEIGHT
-
-                # 1) Find per class areas in each hit
-                fixed_bbox = get_random_bounding_box(bounds, self.size, self.res)
+                fixed_bbox = get_random_bounding_box(
+                    bounds, self.size, self.res
+                )  
                 sample = self.dataset[fixed_bbox]
                 patch_mask_int = (
                     sample["mask"].squeeze().long()
-                )  # I need the sample["mask"] here, the Mask tensor for a given bounding box. It should be squeezed .long().
+                ) 
                 total_pixels = patch_mask_int.numel()
                 class_pixel_counts = [
                     (patch_mask_int == i).sum().item()
                     for i in range(self.config["NUM_CLASSES"])
                 ]
-
                 patch_distribution = {
                     i: class_pixel_counts[i] / total_pixels
                     for i in range(self.config["NUM_CLASSES"])
                 }
-
-                print("Test:", patch_distribution)
-
-                # 2) Adjust the weight:
-                underrepresented_score = patch_distribution.get(3, 0) + patch_distribution.get(4, 0)
-                adjusted_weight = shape_bounds.area * (1 + underrepresented_score)
+                underrepresented_score = patch_distribution.get(
+                    3, 0
+                ) + patch_distribution.get(4, 0)
+                adjusted_weight = shape_bounds.area * (1 + 10 * underrepresented_score)
                 weight.append(adjusted_weight)
-
-                ## END: OBTAINING PER HIT CLASS STATISTICS AND ADJUSTING THE SAMPLING WEIGHT
 
         adjusted_weight_tensor = torch.tensor(weight, dtype=torch.float)
         if torch.sum(adjusted_weight_tensor) == 0:
