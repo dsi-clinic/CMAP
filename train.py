@@ -27,11 +27,10 @@ from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, random_bbox_assignment, stack_samples
 from torchmetrics.classification import MulticlassJaccardIndex
 
-from data.class_balanced_sampler import ClassBalancedRandomBatchGeoSampler
 from data.dem import KaneDEM
 from data.kc import KaneCounty
 from data.rd import RiverDataset
-from data.sampler import BalancedGridGeoSampler
+from data.sampler import BalancedGridGeoSampler, BalancedRandomBatchGeoSampler
 from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
@@ -178,7 +177,7 @@ def initialize_dataset(config):
             naip_dataset.crs,
             naip_dataset.res,
         )
-        label_dataset = KaneCounty(shape_path, dataset_config)
+        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=True)
         print("kc dataset loaded")
     return naip_dataset, label_dataset
 
@@ -206,13 +205,14 @@ def build_dataloaders(images, labels, split_rate, config):
     train_dataset = train_portion & labels
     test_dataset = test_portion & labels
 
-    train_sampler = ClassBalancedRandomBatchGeoSampler(
-        config={
-            "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
-            "NUM_CLASSES": config.NUM_CLASSES,
-        }
+    train_sampler = (
+        BalancedRandomBatchGeoSampler( 
+            config={
+                "dataset": train_dataset,
+                "size": config.PATCH_SIZE,
+                "batch_size": config.BATCH_SIZE,
+            }
+        )
     )
     test_sampler = BalancedGridGeoSampler(
         config={
