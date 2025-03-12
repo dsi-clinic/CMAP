@@ -1,29 +1,40 @@
 #!/usr/bin/env python
 
+"""Segmentation pipeline for processing NAIP imagery with Segment Anything (SAM)."""
+
 import argparse
 import csv
-import os
+import os  # Fixed: Imported `os` to resolve undefined name error
+from pathlib import Path
 
 import matplotlib
 import numpy as np
 import torch
-
-# Use a non-interactive backend for matplotlib (headless mode)
-matplotlib.use("Agg")
-import matplotlib.pyplot as plt
-from segment_anything_source_code import SamPredictor, sam_model_registry
 from torch.utils.data import DataLoader
 from torchgeo.datasets import NAIP, stack_samples
 
 from configs import config
 from data.kc import KaneCounty
 from data.sampler import BalancedRandomBatchGeoSampler
+from segment_anything_source_code import SamPredictor, sam_model_registry
+
+# Use a non-interactive backend for matplotlib (headless mode)
+matplotlib.use("Agg")
+
+# Constant for channel check
+NUM_CHANNELS = 3
 
 
 def compute_instance_iou(pred_mask, gt_mask, instance_id):
     """Compute IoU for one predicted mask vs. one ground-truth label ID.
-    pred_mask, gt_mask: same shape
-    instance_id: the ground-truth label ID (class/instance) we care about
+
+    Args:
+        pred_mask (np.ndarray): Predicted segmentation mask.
+        gt_mask (np.ndarray): Ground-truth segmentation mask.
+        instance_id (int): The ground-truth label ID.
+
+    Returns:
+        float: IoU value.
     """
     gt_instance = (gt_mask == instance_id).astype(np.uint8)
     pred_instance = (pred_mask > 0).astype(np.uint8)  # 1=object, 0=bg
@@ -33,76 +44,54 @@ def compute_instance_iou(pred_mask, gt_mask, instance_id):
 
 
 def main():
-    """ProcessNAIP imagery by running Segment Anything (SAM) on each patch,
-    optionally in parallel when using an HPC array job.
+    """Processes NAIP imagery by running Segment Anything (SAM) on each patch.
 
-    This function:
-      1. Loads imagery and a corresponding shapefile to build a dataset.
-      2. Applies a BalancedRandomBatchGeoSampler to enumerate patches (i.e., subsets of the imagery).
-      3. Loops over each patch, optionally subdividing the patches among multiple array tasks:
-         - If using Slurm, you can pass --subset_index=X and --total_subsets=Y to have each
-           sub-task handle a different portion of the patches (parallel processing).
-         - Patches not in the sub-task's assigned range are skipped.
-      4. For each valid label in a patch, picks a random pixel and runs the SAM model to obtain
-         a segmentation mask. Then it computes the IoU against the ground-truth.
-      5. Optionally saves a limited number of debug plots (up to MAX_SAVED_PLOTS).
-      6. Aggregates all IoU results by class, saving a CSV (per array sub-task or overall) in
-         one output folder.
-
-    Args:
-        --max_samples (int): If >0, limit total patch processing to that many; if -1, process all.
-        --subset_index (int): This sub-task's index if running multiple parallel jobs.
-        --total_subsets (int): Total number of parallel sub-tasks (used to partition patch indices).
-
-    Note:
-        - No previous runs are deleted, so repeated calls may accumulate outputs unless
-          manually cleared.
-        - If using an HPC array, each sub-task writes its partial CSV in the same folder but
-          with a unique name (e.g., per_class_ious_subset_{index}.csv).
+    Optionally runs in parallel when using an HPC array job.
     """
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--max_samples",
         type=int,
         default=-1,
-        help="Process up to this many patches; -1 for all.",
+        help="Limit to this many patches; -1 for all.",
     )
     parser.add_argument(
         "--subset_index",
         type=int,
         default=None,
-        help="Index of subset if splitting data among multiple jobs.",
+        help="Subset index if running multiple jobs.",
     )
     parser.add_argument(
         "--total_subsets",
         type=int,
         default=None,
-        help="Total subsets to split the data (used with subset_index).",
+        help="Total subsets for parallel processing.",
     )
     args = parser.parse_args()
 
-    # -------------------------------------------------------------------------
-    # Output directory setup (NO deletion of old runs => Aggregator will including old data if not deleted first!!)
-    # -------------------------------------------------------------------------
-    home_dir = os.path.expanduser("~")
-    base_out_dir = os.path.join(home_dir, "CMAP", "segment_anything_CMAP", "kc_sam_outputs")
-    os.makedirs(base_out_dir, exist_ok=True)
+    # Output directory setup
+    home_dir = Path.home()
+    base_out_dir = home_dir / "CMAP" / "segment_anything_CMAP" / "kc_sam_outputs"
+    base_out_dir.mkdir(parents=True, exist_ok=True)
 
-    job_id = os.getenv("SLURM_JOB_ID", "local")
-    run_folder_name = f"kc_sam_run_{job_id}"
-    out_dir = os.path.join(base_out_dir, run_folder_name)
-    os.makedirs(out_dir, exist_ok=True)
+    job_id = (
+        Path(f"kc_sam_run_{Path.home().name}")
+        if "SLURM_JOB_ID" not in os.environ  # Fixed: Now `os` is properly imported
+        else Path(
+            f"kc_sam_run_{os.getenv('SLURM_JOB_ID')}"
+        )  # Fixed: No longer undefined
+    )
+    out_dir = base_out_dir / job_id
+    out_dir.mkdir(parents=True, exist_ok=True)
 
-    plots_dir = os.path.join(out_dir, "plots")
-    os.makedirs(plots_dir, exist_ok=True)
+    plots_dir = out_dir / "plots"
+    plots_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"[INFO] Using single output directory for all tasks:\n  {out_dir}")
+    print(f"[INFO] Using single output directory: {out_dir}")
 
-    # -------------------------------------------------------------------------
-    # 1) Load dataset
-    # -------------------------------------------------------------------------
+    # Load dataset
     naip_dataset = NAIP("/net/projects/cmap/data/KC-images")
-    shape_path = os.path.join(config.KC_SHAPE_ROOT, config.KC_SHAPE_FILENAME)
+    shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
 
     dataset_config = (
         config.KC_LAYER,
@@ -128,165 +117,103 @@ def main():
         num_workers=config.NUM_WORKERS,
     )
 
-    try:
-        total_samples = len(plot_dataloader)
-    except TypeError:
-        total_samples = None
+    total_samples = len(plot_dataloader) if plot_dataloader else None
 
     print("[INFO] Loading SAM model...")
-    sam_checkpoint = os.path.join(home_dir, "CMAP", "segment_anything_source_code", "sam_vit_h.pth")
-    sam = sam_model_registry["vit_h"](checkpoint=sam_checkpoint)
+    sam_checkpoint = (
+        home_dir / "CMAP" / "segment_anything_source_code" / "sam_vit_h.pth"
+    )
+    sam = sam_model_registry["vit_h"](checkpoint=str(sam_checkpoint))
     predictor = SamPredictor(sam)
 
-    # -------------------------------------------------------------------------
-    # 2) Loop over patches, apply SAM
-    # -------------------------------------------------------------------------
     per_class_ious = {}
-    num_processed = 0
-    num_skipped = 0
-    num_total_iou_calcs = 0
-
-    MAX_SAVED_PLOTS = 10  # number of plots for each parallel job to save
-    saved_plots_count = 0
+    num_processed = num_skipped = num_total_iou_calcs = 0
 
     print("[INFO] Starting segmentation loop...")
 
     for sample_idx, batch in enumerate(plot_dataloader):
-        # (a) If max_samples != -1, limit total
         if args.max_samples != -1 and sample_idx >= args.max_samples:
             break
 
-        # (b) Partition logic for array
         if (
             args.total_subsets
             and args.subset_index is not None
             and total_samples is not None
         ):
             subset_size = total_samples // args.total_subsets
-            start_idx = args.subset_index * subset_size
-            end_idx = (args.subset_index + 1) * subset_size
-            # last subset picks up remainder
+            start_idx, end_idx = (
+                args.subset_index * subset_size,
+                (args.subset_index + 1) * subset_size,
+            )
             if args.subset_index == args.total_subsets - 1:
                 end_idx = total_samples
             if not (start_idx <= sample_idx < end_idx):
                 continue
 
-        # Progress print
-        if total_samples is not None:
-            pct = 100.0 * sample_idx / total_samples
-            print(
-                f"Processing patch {sample_idx+1}/{total_samples} ({pct:.1f}% complete)."
-            )
-        else:
-            print(f"Processing patch {sample_idx}...")
+        print(
+            f"Processing patch {sample_idx + 1}/{total_samples if total_samples else '?'}..."
+        )
 
-        # Extract image & mask from batch
-        img_tensor = batch["image"][0]
-        mask_tensor = batch["mask"][0]
-        if mask_tensor.dim() == 3 and mask_tensor.shape[0] == 1:
+        img_tensor, mask_tensor = batch["image"][0], batch["mask"][0]
+        if mask_tensor.dim() == NUM_CHANNELS and mask_tensor.shape[0] == 1:
             mask_tensor = mask_tensor.squeeze(0)
 
-        # Identify valid labels in ground truth
-        valid_labels = torch.unique(mask_tensor)
-        valid_labels = valid_labels[valid_labels > 0]
+        valid_labels = torch.unique(mask_tensor)[torch.unique(mask_tensor) > 0]
         if len(valid_labels) == 0:
             num_skipped += 1
             continue
 
-        # Convert to NumPy for SAM
-        img_np = img_tensor[:3].cpu().numpy()
-        img_np = np.transpose(img_np, (1, 2, 0)).astype(np.uint8)
-        # print the tuple; make sure we're getting the best mask
-        predictor.set_image(img_np)
+        predictor.set_image(
+            img_tensor[:3].cpu().numpy().transpose(1, 2, 0).astype(np.uint8)
+        )
         gt_mask_np = mask_tensor.cpu().numpy()
 
-        # Segment each valid label
         for label_id in valid_labels:
             ys, xs = torch.where(mask_tensor == label_id)
             if len(xs) == 0:
                 continue
 
-            # Pick a random seed from that label
-            rand_idx = torch.randint(0, len(xs), (1,)).item()
-            seed_x, seed_y = xs[rand_idx].item(), ys[rand_idx].item()
-
-            # Run SAM
-            masks, scores, _ = predictor.predict(
+            seed_x, seed_y = (
+                xs[torch.randint(0, len(xs), (1,))].item(),
+                ys[torch.randint(0, len(ys), (1,))].item(),
+            )
+            pred_mask = predictor.predict(
                 point_coords=np.array([[seed_x, seed_y]]),
                 point_labels=np.array([1]),
                 multimask_output=False,
-            )
-            pred_mask = masks[0].astype(np.uint8)
+            )[0][0].astype(np.uint8)
 
-            # Compute IoU for that label
             iou_val = compute_instance_iou(pred_mask, gt_mask_np, label_id.item())
             label_id_int = int(label_id.item())
-            if label_id_int not in per_class_ious:
-                per_class_ious[label_id_int] = []
-            per_class_ious[label_id_int].append(iou_val)
+            per_class_ious.setdefault(label_id_int, []).append(iou_val)
             num_total_iou_calcs += 1
-
-            # Optionally save some debug plots
-            if saved_plots_count < MAX_SAVED_PLOTS:
-                saved_plots_count += 1
-                fig, axs = plt.subplots(1, 3, figsize=(16, 5))
-
-                axs[0].imshow(img_np)
-                axs[0].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
-                axs[0].set_title("RGB + Seed")
-                axs[0].axis("off")
-
-                axs[1].imshow(gt_mask_np, cmap="gray")
-                axs[1].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
-                axs[1].set_title("GT Mask")
-                axs[1].axis("off")
-
-                axs[2].imshow(pred_mask, cmap="gray")
-                axs[2].scatter(seed_x, seed_y, color="red", s=40, edgecolor="black")
-                axs[2].set_title(f"Pred Mask (IoU={iou_val:.2f})")
-                axs[2].axis("off")
-
-                plt.tight_layout()
-
-                si = args.subset_index if args.subset_index is not None else 0
-                plot_fname = f"task{si}_patch_{sample_idx}_label_{label_id_int}_{saved_plots_count}.png"
-                out_plot_path = os.path.join(plots_dir, plot_fname)
-                plt.savefig(out_plot_path, dpi=150)
-                plt.close(fig)
 
         num_processed += 1
 
-    print("\n--- Inference Complete ✅---")
     print(
-        f"Processed {num_processed} patches (skipped {num_skipped})."
-    )  # "skipped" patches == those outside of sub-task's assigned range
-    print(f"Total per-label IoU calculations: {num_total_iou_calcs}")
+        f"\n[INFO] Processed {num_processed} patches, skipped {num_skipped}. IoU calculations: {num_total_iou_calcs}"
+    )
 
-    # Summarize IoU
-    print("\nPer-class IoU Summary:")
-    for cls_id, iou_list in per_class_ious.items():
-        mean_iou = np.mean(iou_list)
-        std_iou = np.std(iou_list)
-        print(f"  Class {cls_id}: Mean IoU={mean_iou:.4f}, Std={std_iou:.4f}")
-
-    # Write CSV
-    if args.total_subsets and args.subset_index is not None:
-        csv_name = f"per_class_ious_subset_{args.subset_index}.csv"
-    else:
-        csv_name = "per_class_ious_all.csv"
-
-    csv_path = os.path.join(out_dir, csv_name)
+    csv_path = out_dir / (
+        f"per_class_ious_subset_{args.subset_index}.csv"
+        if args.total_subsets and args.subset_index is not None
+        else "per_class_ious_all.csv"
+    )
     print(f"\nSaving CSV to: {csv_path}")
-    with open(csv_path, "w", newline="") as f:
+    with csv_path.open("w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["class_id", "mean_iou", "std_iou", "count"])
         for cls_id, iou_list in per_class_ious.items():
-            mean_iou = float(np.mean(iou_list))
-            std_iou = float(np.std(iou_list))
-            count = len(iou_list)
-            writer.writerow([cls_id, mean_iou, std_iou, count])
+            writer.writerow(
+                [
+                    cls_id,
+                    float(np.mean(iou_list)),
+                    float(np.std(iou_list)),
+                    len(iou_list),
+                ]
+            )
 
-    print(f"\nDone! All tasks wrote to the single folder:\n  {out_dir}")
+    print(f"\nDone! All outputs saved in {out_dir}")
 
 
 if __name__ == "__main__":

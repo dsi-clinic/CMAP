@@ -1,4 +1,15 @@
+"""IoU Computation Utilities for Segmentation.
+
+This module provides functions to compute Intersection over Union (IoU) for
+segmentation tasks, including per-class IoU and instance-level IoU.
+
+Functions:
+    - compute_iou_per_class: Computes IoU for each segmentation class in a given mask.
+    - compute_instance_iou: Computes IoU for a specific instance within a segmentation mask.
+"""
+
 import numpy as np
+
 
 def compute_iou_per_class(pred_mask, gt_mask, num_classes):
     """Calculate per-class IoU for a single predicted mask vs. a single ground-truth mask.
