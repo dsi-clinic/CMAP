@@ -60,7 +60,7 @@ class KaneCounty(GeoDataset):
         15: "UNKNOWN",
     }
 
-    def __init__(self, path: str, configs) -> None:
+    def __init__(self, path: str, configs, balance_classes: bool = False) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
@@ -71,6 +71,7 @@ class KaneCounty(GeoDataset):
                 patch_size: the patch size used for the model
                 dest_crs: the coordinate reference system (CRS) to convert to
                 res: resolution of the dataset in units of CRS
+            balance_classes: whether to balance classes by repeating underrepresented ones
 
         Raises:
             FileNotFoundError: if no files are found in path
@@ -90,7 +91,7 @@ class KaneCounty(GeoDataset):
         self._crs = dest_crs
         self._res = res
 
-        self._populate_index(path, gdf, context_size)
+        self._populate_index(path, gdf, context_size, balance_classes)
         self.labels = labels
         self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
@@ -112,14 +113,46 @@ class KaneCounty(GeoDataset):
         gdf = gdf.to_crs(dest_crs)
         return gdf
 
-    def _populate_index(self, path, gdf, context_size):
+    def _populate_index(self, path, gdf, context_size, balance_classes=False):
         """Populate the spatial index with data from the GeoDataFrame.
 
         Args:
             path: directory to the file to load
             gdf: GeoDataFrame containing the data
             context_size: size of the context around shapes for sampling
+            balance_classes: whether to balance classes by repeating underrepresented ones
         """
+        # get counts of each class
+        class_counts = gdf["BasinType"].value_counts()
+        total_samples = len(gdf)
+
+        # log before-balancing distribution
+        print("Class distribution before balancing:")
+        for cls, count in class_counts.items():
+            percentage = (count / total_samples) * 100
+            print(f"  {cls}: {count} samples ({percentage:.2f}%)")
+
+        if balance_classes:
+            max_count = class_counts.max()
+            class_multipliers = {
+                cls: max(1, int(max_count / count))
+                for cls, count in class_counts.items()
+            }
+
+            # calculate post-balancing counts and distribution
+            balanced_counts = {
+                cls: count * class_multipliers[cls]
+                for cls, count in class_counts.items()
+            }
+            total_balanced = sum(balanced_counts.values())
+
+            print("\nClass distribution after balancing:")
+            for cls, count in balanced_counts.items():
+                percentage = (count / total_balanced) * 100
+                print(f"  {cls}: {count} samples ({percentage:.2f}%)")
+
+            print(f"\nClass balancing multipliers: {class_multipliers}")
+
         i = 0
         for _, row in gdf.iterrows():
             minx, miny, maxx, maxy = row["geometry"].bounds
@@ -132,8 +165,19 @@ class KaneCounty(GeoDataset):
                 mint,
                 maxt,
             )
+
+            # insert this item once normally
             self.index.insert(i, coords, row)
             i += 1
+
+            # if balancing is enabled, repeat underrepresented classes
+            if balance_classes:
+                basin_type = row["BasinType"]
+                # repeat this item (multiplier-1) more times
+                for _ in range(class_multipliers[basin_type] - 1):
+                    self.index.insert(i, coords, row)
+                    i += 1
+
         if i == 0:
             msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
             raise FileNotFoundError(msg)
