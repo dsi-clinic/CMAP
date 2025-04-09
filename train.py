@@ -1100,7 +1100,14 @@ def train(
         train_images_root,
         test_image_root,
     ) = path_config
-    (spatial_augs, color_augs, dem_augs) = aug_config
+    (
+        spatial_augs,
+        color_augs,
+        dem_augs,
+        config.SPATIAL_AUG_MODE,
+        config.COLOR_AUG_MODE,
+        config.DEM_AUG_MODE,
+    ) = aug_config
 
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
@@ -1292,6 +1299,10 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     aug_config = (
         spatial_augs,
         color_augs,
+        dem_augs,
+        config.SPATIAL_AUG_MODE,
+        config.COLOR_AUG_MODE,
+        config.DEM_AUG_MODE,
     )
     path_config = (
         out_root,
