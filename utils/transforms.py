@@ -83,11 +83,21 @@ def create_augmentation_pipelines(
     # Define all possible DEM augmentations
     # (applied only to the DEM channel of the image)
     all_dem_transforms = [
+        K.RandomContrast(contrast=config.COLOR_CONTRAST, p=0.5),
+        K.RandomBrightness(brightness=config.COLOR_BRIGHTNESS, p=0.5),
         K.RandomGaussianBlur(
             kernel_size=config.GAUSSIAN_BLUR_KERNEL,
             sigma=config.GAUSSIAN_BLUR_SIGMA,
             p=0.5,
         ),
+        K.RandomGaussianNoise(
+            mean=0.0,
+            std=config.GAUSSIAN_NOISE_STD,
+            p=config.GAUSSIAN_NOISE_PROB,
+        ),
+        K.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.0), value=0.0, p=0.5),
+        K.RandomElasticTransform(alpha=1.0, sigma=10.0, p=0.5),
+        K.RandomGamma(gamma=config.GAMMA, p=0.5),
     ]
 
     # Select the specific augmentations for this pipeline based on the given indices
