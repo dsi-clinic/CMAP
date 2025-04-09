@@ -79,6 +79,11 @@ IMAGE_AUG_INDICES = [
     7,  # Gamma
 ]
 
+# only applied to DEM
+DEM_AUG_INDICES = [
+    0,  # Gaussian Blur
+]
+
 # Augmentation
 ROTATION_DEGREES = 360
 COLOR_CONTRAST = 0.1
@@ -98,6 +103,7 @@ GAMMA = (0.8, 1.2)
 
 SPATIAL_AUG_MODE = "all"  # all or random
 COLOR_AUG_MODE = "all"  # all or random
+DEM_AUG_MODE = "all"  # all or random
 
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"
