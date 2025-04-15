@@ -96,7 +96,7 @@ def create_augmentation_pipelines(
             p=config.GAUSSIAN_NOISE_PROB,
         ),
         K.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.0), value=0.0, p=0.5),
-        K.RandomElasticTransform(alpha=1.0, sigma=10.0, p=0.5),
+        K.RandomElasticTransform(alpha=(1.0, 2.0), sigma=(9.0, 11.0), p=0.5),
         K.RandomGamma(gamma=config.GAMMA, p=0.5),
     ]
 
