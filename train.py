@@ -288,7 +288,7 @@ def regularization_loss(model, reg_type, weight):
     return weight * reg_loss
 
 
-def compute_loss(model, mask, y, loss_fn, reg_config):
+def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     """Compute the total loss optionally the regularization loss.
 
     Args:
@@ -304,7 +304,6 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    reg_type, reg_weight = reg_config
     if reg_type is not None:
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
@@ -724,7 +723,8 @@ def train_epoch(
             outputs,
             y,
             loss_fn,
-            (config.REGULARIZATION_TYPE, config.REGULARIZATION_WEIGHT),
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
         )
 
         # update jaccard index
