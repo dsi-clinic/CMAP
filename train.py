@@ -305,7 +305,7 @@ def compute_loss(model, mask, y, loss_fn):
     """
     base_loss = loss_fn(mask, y)
     if config.REGULARIZATION_TYPE is not None:
-        reg_loss = regularization_loss(model, reg_type, reg_weight)
+        reg_loss = regularization_loss(model)
         base_loss += reg_loss
     return base_loss
 
