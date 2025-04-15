@@ -277,7 +277,7 @@ def build_dataloaders(images, labels, split_rate, config):
     return train_dataloader, test_dataloader
 
 
-def regularization_loss(model, reg_type, weight):
+def regularization_loss(model):
     """Calculate the regularization loss for the model parameters.
 
     Args:
@@ -289,16 +289,16 @@ def regularization_loss(model, reg_type, weight):
     - float: The calculated regularization loss.
     """
     reg_loss = 0.0
-    if reg_type == "l1":
+    if config.REGULARIZATION_TYPE == "l1":
         for param in model.parameters():
             reg_loss += torch.sum(torch.abs(param))
-    elif reg_type == "l2":
+    elif config.REGULARIZATION_TYPE == "l2":
         for param in model.parameters():
             reg_loss += torch.sum(param**2)
-    return weight * reg_loss
+    return config.REGULARIZATION_WEIGHT * reg_loss
 
 
-def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
+def compute_loss(model, mask, y, loss_fn):
     """Compute the total loss optionally the regularization loss.
 
     Args:
@@ -314,7 +314,7 @@ def compute_loss(model, mask, y, loss_fn, reg_type, reg_weight):
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    if reg_type is not None:
+    if config.REGULARIZATION_TYPE is not None:
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
     return base_loss
@@ -773,8 +773,6 @@ def train_epoch(
             outputs,
             y,
             loss_fn,
-            config.REGULARIZATION_TYPE,
-            config.REGULARIZATION_WEIGHT,
         )
 
         # update jaccard index
