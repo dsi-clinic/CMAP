@@ -55,7 +55,7 @@ class RiverDataset(GeoDataset):
         1: (255, 255, 0, 255),
     }
 
-    def __init__(self, patch_size, dest_crs, res, path: str, kc: False) -> None:
+    def __init__(self, river_config) -> None:
         """Initialize a new river dataset instance.
 
         Args:
@@ -70,25 +70,35 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
-        gdf = self._load_and_prepare_data(path, dest_crs)
-        self.gdf = gdf
+        self.patch_size = river_config["patch_size"]
+        self.dest_crs = river_config["dest_crs"]
+        self.res = river_config["res"]
+        self.path = river_config["path"]
+        self.kc = river_config.get("kc", False)
 
-        box_size = math.ceil(patch_size / 2 * res) * 2
-        self.box_size = box_size
-        self._crs = dest_crs
-        self._res = res
+        gdf = self._load_and_prepare_data()
+        self.gdf = gdf
+        box_size = math.ceil(self.patch_size / 2 * self.res) * 2
+        # self.box_size = box_size
 
         self.labels = {"BACKGROUND": 0, "STREAM/RIVER": 1}
         self.colors = {
             label_value: self.all_colors[label_value]
             for label_value in self.labels.values()
         }
-        self._populate_index(self.gdf, box_size=box_size)
+        self._populate_index(box_size=box_size)
 
-        if kc:
+        if self.kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-            kc_config = (KC_LAYER, KC_LABELS, patch_size, dest_crs, res)
-            kc_dataset = KaneCounty(kc_shape_path, kc_config)
+            kc_config = {
+                "layer": KC_LAYER, 
+                "labels": KC_LABELS,
+                "patch_size": self.patch_size,
+                "dest_crs": self.dest_crs,
+                "res": self.res,
+                "path": kc_shape_path,
+            }
+            kc_dataset = KaneCounty(kc_config)
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
 
@@ -116,9 +126,7 @@ class RiverDataset(GeoDataset):
                     break
 
             # Preserve label ordering when combining
-            rd_labels = (
-                self.labels.copy()
-            )  # Make a copy to avoid modifying the original
+            rd_labels = self.labels.copy() # Make a copy to avoid modifying the original
             combined_labels = {}
             next_idx = 0
 
@@ -148,9 +156,9 @@ class RiverDataset(GeoDataset):
             self.colors = combined_colors
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
-        print(f"Initialized RiverDataset with configs: {rd_configs}")
+        print(f"Initialized RiverDataset with configs: {river_config}")
 
-    def _load_and_prepare_data(self, path, dest_crs):
+    def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
 
         Args:
@@ -161,16 +169,16 @@ class RiverDataset(GeoDataset):
             gdf: A GeoDataFrame filtered and converted to the target CRS
         """
         # Read the shapefile into a GeoDataFrame
-        gdf = gpd.read_file(path)
+        gdf = gpd.read_file(self.path)
 
         # Transform the GeoDataFrame to dest_crs
-        gdf = gdf.to_crs(dest_crs)
+        gdf = gdf.to_crs(self.dest_crs)
         gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
         gdf["BasinType"] = gdf["FCODE"]
 
         return gdf
 
-    def _populate_index(self, gdf, total_points=900, box_size=150):
+    def _populate_index(self, total_points=900, box_size=150):
         """Populate spatial index with random points within river polygons."""
         import time
 
@@ -182,15 +190,15 @@ class RiverDataset(GeoDataset):
         half_box = box_size / 2
 
         # calculate total area and points per geometry
-        total_area = gdf["geometry"].area.sum()
-        if len(gdf) > total_points:
+        total_area = self.gdf["geometry"].area.sum()
+        if len(self.gdf) > total_points:
             raise ValueError(
-                f"total_points ({total_points}) must be >= number of geometries ({len(gdf)})"
+                f"total_points ({total_points}) must be >= number of geometries ({len(self.gdf)})"
             )
 
         # allocate points proportionally with minimum 1 point per geometry
-        areas = gdf["geometry"].area
-        relative_points = areas / total_area * (total_points - len(gdf))
+        areas = self.gdf["geometry"].area
+        relative_points = areas / total_area * (total_points - len(self.gdf))
         points_per_geom = np.maximum(1, np.floor(relative_points))
 
         print(f"\nInitial allocation: {points_per_geom.sum():.0f} points")
@@ -205,7 +213,7 @@ class RiverDataset(GeoDataset):
 
         i = 0  # point counter
         # iterate through each river polygon
-        for idx, row in tqdm(gdf.iterrows(), desc="Processing rivers", total=len(gdf)):
+        for idx, row in tqdm(self.gdf.iterrows(), desc="Processing rivers", total=len(self.gdf)):
             geom = row["geometry"]
             n_points = int(points_per_geom[idx])
 
@@ -264,7 +272,7 @@ class RiverDataset(GeoDataset):
 
                     # find all geometries that intersect with this box
                     t2 = time.time()
-                    intersecting_rows = gdf[gdf.intersects(bbox)]
+                    intersecting_rows = self.gdf[self.gdf.intersects(bbox)]
                     t3 = time.time()
 
                     if not intersecting_rows.empty:
@@ -330,8 +338,8 @@ class RiverDataset(GeoDataset):
                 label = self.labels[obj["BasinType"]]
                 shapes.append((shape, label))
 
-        width = (query.maxx - query.minx) / self._res
-        height = (query.maxy - query.miny) / self._res
+        width = (query.maxx - query.minx) / self.res
+        height = (query.maxy - query.miny) / self.res
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
