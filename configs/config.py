@@ -27,6 +27,8 @@ WEIGHTS = True
 
 DROPOUT = 0.0
 
+MULTIPROCESSING = True
+
 # model hyperparams
 # mean/std of imagenet for pretrained model
 DATASET_MEAN = [

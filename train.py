@@ -9,6 +9,8 @@ import argparse
 import datetime
 import importlib.util
 import logging
+import multiprocessing
+import os
 import random
 import shutil
 import sys
@@ -1329,6 +1331,8 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
 if __name__ == "__main__":
     # Check GPU availability; if GPU available, run on compute node, else exit
     check_gpu_availability()
+    num_gpus = torch.cuda.device_count()
+    print("The number of GPUs available is:", num_gpus)
 
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -1377,14 +1381,18 @@ if __name__ == "__main__":
     config.DEBUG_MODE = args.debug
 
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    num_trials = int(num_trials)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
     images, labels = initialize_dataset(config)
 
-    def run_trials():
+    def run_trials(trial_id, gpu_id):
         """Running training for multiple trials"""
         # Extract config dictionary from module
+
+        os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
+        torch.cuda.set_device(0)
 
         if wandb_tune:
             wandb.init(project="CMAP")
@@ -1396,12 +1404,19 @@ if __name__ == "__main__":
         train_ious = []
         test_ious = []
 
-        for num in range(num_trials):
+        if config.MULTIPROCESSING:
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, images, labels, split, args
+                exp_name, trial_id, wandb_tune, images, labels, split, args
             )
             train_ious.append(round(float(train_iou), 3))
             test_ious.append(round(float(test_iou), 3))
+        else:
+            for num in range(num_trials):
+                train_iou, test_iou = one_trial(
+                    exp_name, num, wandb_tune, images, labels, split, args
+                )
+                train_ious.append(round(float(train_iou), 3))
+                test_ious.append(round(float(test_iou), 3))
 
         test_average = mean(test_ious)
         train_average = mean(train_ious)
@@ -1426,4 +1441,15 @@ if __name__ == "__main__":
             wandb.run.summary["average_test_jaccard_index"] = test_average
             wandb.finish()
 
-    run_trials()
+    if config.MULTIPROCESSING:
+        processes = []
+        for trial_id in range(int(args.num_trials)):
+            gpu_id = trial_id % num_gpus
+            p = multiprocessing.Process(target=run_trials, args=(trial_id, gpu_id))
+            p.start()
+            processes.append(p)
+
+        for p in processes:
+            p.join()
+    else:
+        run_trials(0, 0)
