@@ -60,28 +60,18 @@ class KaneCounty(GeoDataset):
         15: "UNKNOWN",
     }
 
-    def __init__(
-            self,
-            kc_config,
-            layer,
-            labels,
-            patch_size, 
-            dest_crs,
-            res,
-            path: str,
-            balance_classes: bool = False,
-    ) -> None:
+    def __init__(self, kc_config) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
-            path: directory to the file to load
-            configs: a tuple containing
+            kc_configs: a tuple containing
                 layer: specifying layer of GPKG
                 labels: a dictionary containing a label mapping for masks
                 patch_size: the patch size used for the model
                 dest_crs: the coordinate reference system (CRS) to convert to
                 res: resolution of the dataset in units of CRS
-            balance_classes: whether to balance classes by repeating underrepresented ones
+                path: directory to the file to load
+                balance_classes: whether to balance classes by repeating underrepresented ones
 
         Raises:
             FileNotFoundError: if no files are found in path
@@ -105,18 +95,12 @@ class KaneCounty(GeoDataset):
         print(f"res: {self.res}")
         self.context_size = context_size
 
-        self._populate_index(path, gdf, context_size, balance_classes)
+        self._populate_index()
         self.colors = {i: self.all_colors[i] for i in self.labels.values()}
         self.labels_inverse = {v: k for k, v in self.labels.items()}
 
     def _load_and_prepare_data(self):
-        """Load and prepare the GeoDataFrame.
-
-        Args:
-            path: directory to the file to load
-            layer: specifying layer of GPKG
-            labels: a dictionary containing a label mapping for masks
-            dest_crs: the coordinate reference system (CRS) to convert to
+        """Loads and prepares the GeoDataFrame.
 
         Returns:
             gdf: A GeoDataFrame filtered and converted to the target CRS
@@ -127,13 +111,10 @@ class KaneCounty(GeoDataset):
         return gdf
 
     def _populate_index(self):
-        """Populate the spatial index with data from the GeoDataFrame.
+        """Populates the spatial index with data from the GeoDataFrame.
 
-        Args:
-            path: directory to the file to load
-            gdf: GeoDataFrame containing the data
-            context_size: size of the context around shapes for sampling
-            balance_classes: whether to balance classes by repeating underrepresented ones
+        Raises:
+            FileNotFoundError: if no files are found in path
         """
         # get counts of each class
         class_counts = self.gdf["BasinType"].value_counts()
