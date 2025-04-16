@@ -55,17 +55,14 @@ class RiverDataset(GeoDataset):
         1: (255, 255, 0, 255),
     }
 
-    def __init__(self, path: str, rd_configs, kc: False) -> None:
+    def __init__(self, patch_size, dest_crs, res, path: str, kc: False) -> None:
         """Initialize a new river dataset instance.
 
         Args:
+            patch_size: the patch size used for the model
+            dest_crs: the coordinate reference system (CRS) to convert to
+            res: resolution of the dataset in units of CRS
             path: directory to the file to load
-            rd_configs: a tuple containing
-                layer: specifying layer of GPKG
-                labels: a dictionary containing a label mapping for masks
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
             kc: a boolean to include the KC dataset or not; default is True
 
         Raises:
@@ -73,7 +70,6 @@ class RiverDataset(GeoDataset):
         """
         super().__init__()
 
-        patch_size, dest_crs, res = rd_configs
         gdf = self._load_and_prepare_data(path, dest_crs)
         self.gdf = gdf
 
