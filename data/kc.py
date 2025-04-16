@@ -64,7 +64,7 @@ class KaneCounty(GeoDataset):
         """Initialize a new KaneCounty dataset instance.
 
         Args:
-            kc_configs: a tuple containing
+            kc_config: a dictionary containing
                 layer: specifying layer of GPKG
                 labels: a dictionary containing a label mapping for masks
                 patch_size: the patch size used for the model

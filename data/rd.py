@@ -59,11 +59,12 @@ class RiverDataset(GeoDataset):
         """Initialize a new river dataset instance.
 
         Args:
-            patch_size: the patch size used for the model
-            dest_crs: the coordinate reference system (CRS) to convert to
-            res: resolution of the dataset in units of CRS
-            path: directory to the file to load
-            kc: a boolean to include the KC dataset or not; default is True
+            river_config: a dictionary containing
+                patch_size: the patch size used for the model
+                dest_crs: the coordinate reference system (CRS) to convert to
+                res: resolution of the dataset in units of CRS
+                path: directory to the file to load
+                kc: a boolean to include the KC dataset or not; default is True
 
         Raises:
             FileNotFoundError: if no files are found in path
