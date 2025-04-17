@@ -60,7 +60,16 @@ class KaneCounty(GeoDataset):
         15: "UNKNOWN",
     }
 
-    def __init__(self, kc_config) -> None:
+    def __init__(
+            self,
+            layer: int,
+            labels: dict,
+            patch_size: int,
+            dest_crs: str,
+            res: float,
+            path: str,
+            balance_classes: bool = False,
+        ) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
@@ -78,22 +87,23 @@ class KaneCounty(GeoDataset):
         """
         super().__init__()
 
-        self.layer = kc_config["layer"]
-        self.labels = kc_config["labels"]
-        self.patch_size = kc_config["patch_size"]
-        self.dest_crs = kc_config["dest_crs"]
-        self.res = kc_config["res"]
-        self.path = kc_config["path"]
-        self.balance_classes = kc_config.get("balance_classes", False)
+        self.layer = layer
+        self.labels = labels
+        self.patch_size = patch_size
+        self.dest_crs = dest_crs
+        self.res = res
+        self.path = path
+        self.balance_classes = balance_classes
 
         gdf = self._load_and_prepare_data()
         self.gdf = gdf
 
         context_size = math.ceil(self.patch_size / 2 * self.res)
+        self.context_size = context_size
+
         print(f"context_size: {context_size}")
         print(f"patch_size: {self.patch_size}")
         print(f"res: {self.res}")
-        self.context_size = context_size
 
         self._populate_index()
         self.colors = {i: self.all_colors[i] for i in self.labels.values()}
