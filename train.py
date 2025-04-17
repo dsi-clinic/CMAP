@@ -163,24 +163,26 @@ def initialize_dataset(config):
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        rd_config = (
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        label_dataset = RiverDataset(
+            patch_size=config.PATCH_SIZE,
+            crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            path=rd_shape_path,
+            kc=True,
         )
-        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
-        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-        dataset_config = (
-            config.KC_LAYER,
-            config.KC_LABELS,
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        label_dataset = KaneCounty(
+            layers=config.KC_LAYER,
+            labels=config.KC_LABELS,
+            patch_size=config.PATCH_SIZE,
+            dest_crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            path=kc_shape_path,
+            balance_classes=False,
         )
-        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=False)
         print("kc dataset loaded")
     return naip_dataset, label_dataset
 
@@ -267,7 +269,7 @@ def build_dataloaders(images, labels, split_rate, config):
     return train_dataloader, test_dataloader
 
 
-def regularization_loss(model):
+def regularization_loss(model, reg_type, reg_weight):
     """Calculate the regularization loss for the model parameters.
 
     Args:
@@ -279,16 +281,23 @@ def regularization_loss(model):
     - float: The calculated regularization loss.
     """
     reg_loss = 0.0
-    if config.REGULARIZATION_TYPE == "l1":
+    if reg_type == "l1":
         for param in model.parameters():
             reg_loss += torch.sum(torch.abs(param))
-    elif config.REGULARIZATION_TYPE == "l2":
+    elif reg_type == "l2":
         for param in model.parameters():
             reg_loss += torch.sum(param**2)
-    return config.REGULARIZATION_WEIGHT * reg_loss
+    return reg_weight * reg_loss
 
 
-def compute_loss(model, mask, y, loss_fn):
+def compute_loss(
+        model,
+        mask,
+        y,
+        loss_fn,
+        reg_type: str, 
+        reg_weight: float,
+):
     """Compute the total loss optionally the regularization loss.
 
     Args:
@@ -296,16 +305,15 @@ def compute_loss(model, mask, y, loss_fn):
         mask: The input mask tensor.
         y: The target tensor.
         loss_fn: The loss function to use for computing the base loss.
-        reg_config: a tuple of
-            reg_type: The type of regularization, either "l1" or "l2".
-            reg_weight: The weight or strength of the regularization term.
+        reg_type: The type of regularization, either "l1" or "l2".
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    if config.REGULARIZATION_TYPE is not None:
-        reg_loss = regularization_loss(model)
+    if reg_type is not None:
+        reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
     return base_loss
 
@@ -334,7 +342,7 @@ def create_model(
     if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
-    model_configs = {
+    model_config = {
         "model": config.MODEL,
         "backbone": config.BACKBONE,
         "num_classes": num_classes,
@@ -343,7 +351,7 @@ def create_model(
         "in_channels": in_channels,
     }
 
-    model = SegmentationModel(model_configs).model.to(device)
+    model = SegmentationModel(model_config).model.to(device)
     if not debug:
         logging.info(model)
 
@@ -723,6 +731,8 @@ def train_epoch(
             outputs,
             y,
             loss_fn,
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
         )
 
         # update jaccard index

@@ -55,27 +55,33 @@ class RiverDataset(GeoDataset):
         1: (255, 255, 0, 255),
     }
 
-    def __init__(self, river_config) -> None:
+    def __init__(
+            self,
+            patch_size: int,
+            dest_crs: str,
+            res: float,
+            path: str,
+            kc: bool = False,
+        ) -> None:
         """Initialize a new river dataset instance.
 
         Args:
-            river_config: a dictionary containing
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
-                path: directory to the file to load
-                kc: a boolean to include the KC dataset or not; default is True
+            patch_size: the patch size used for the model
+            dest_crs: the coordinate reference system (CRS) to convert to
+            res: resolution of the dataset in units of CRS
+            path: directory to the file to load
+            kc: a boolean to include the KC dataset or not; default is True
 
         Raises:
             FileNotFoundError: if no files are found in path
         """
         super().__init__()
 
-        self.patch_size = river_config["patch_size"]
-        self.dest_crs = river_config["dest_crs"]
-        self.res = river_config["res"]
-        self.path = river_config["path"]
-        self.kc = river_config.get("kc", False)
+        self.patch_size = patch_size
+        self.dest_crs = dest_crs
+        self.res = res
+        self.path = path
+        self.kc = kc
 
         gdf = self._load_and_prepare_data()
         self.gdf = gdf
@@ -157,14 +163,10 @@ class RiverDataset(GeoDataset):
             self.colors = combined_colors
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
-        print(f"Initialized RiverDataset with configs: {river_config}")
+        #print(f"Initialized RiverDataset with configs: {river_config}")
 
     def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
-
-        Args:
-            path: directory to the file to load
-            dest_crs: the coordinate reference system (CRS) to convert to
 
         Returns:
             gdf: A GeoDataFrame filtered and converted to the target CRS
@@ -179,7 +181,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, total_points=900, box_size=150):
+    def _populate_index(self, total_points: int = 900, box_size: int = 150.):
         """Populate spatial index with random points within river polygons."""
         import time
 
