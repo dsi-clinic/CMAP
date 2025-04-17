@@ -1,11 +1,9 @@
+"""Submit one `train.py` run through Slurm/submitit and append its average Train/Test IoU to a cumulative `all_iou_summaries.json`.
 
-"""
-Submit a single `train.py` run via Slurm/submitit and append its average
-Train/Test IoU to a cumulative `all_iou_summaries.json`.
-
-How to Use: 
-1) On the Login Node run `micromamba activate cmap`
-2) To submit a `train.py` run: `python launcher_submitit.py ,<Experiemnt_Name>, <Num_Trials> (Optional: --debug)`
+Usage
+-----
+1. On the login node: `micromamba activate cmap`
+2. Launch: `python launcher_submitit.py <experiment_name> <num_trials> [--debug]`
 """
 
 import argparse
@@ -22,7 +20,9 @@ GLOBAL_LOG = LAUNCHER_DIR / "all_iou_summaries.json"
 
 ## Helper Functions: (1) Build `train.py` command, (2) Parse standard output for Train/Test IOUs
 
+
 def _build_cmd(args):
+    """Return the shell command that executes *one* train.py call."""
     cmd = [
         "python",
         "train.py",
@@ -35,18 +35,24 @@ def _build_cmd(args):
     return cmd
 
 
-def _parse_stdout(text):
+def _parse_stdout(text, expected_num_vals=2):
+    """Extract Train and Test IoU averages from train.py stdout."""
     avg_re = re.compile(r"average:\s*([0-9.]+)")
     vals = avg_re.findall(text)
-    if len(vals) < 2:
+    if len(vals) < expected_num_vals:
         raise RuntimeError("Missing 'average:' lines in stdout")
     return float(vals[0]), float(vals[1])
 
-## Main Function: 
+
+## Main Function:
+
 
 def main():
+    """Parse CLI args, submit the Slurm job, and update the global IoU log."""
     p = argparse.ArgumentParser()
-    p.add_argument("experiment", nargs="?", default=datetime.now().strftime("%Y%m%d-%H%M%S"))
+    p.add_argument(
+        "experiment", nargs="?", default=datetime.now().strftime("%Y%m%d-%H%M%S")
+    )
     p.add_argument("num_trial", type=int, default=5)
     p.add_argument("--debug", action="store_true")
     # Slurm resources with explicit types
@@ -88,6 +94,7 @@ def main():
         json.dump(global_data, fp, indent=2)
 
     print("Global log updated at", GLOBAL_LOG)
+
 
 if __name__ == "__main__":
     main()
