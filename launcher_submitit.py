@@ -1,9 +1,9 @@
-"""Submit one `train.py` run through Slurm/submitit and append its average Train/Test IoU to a cumulative `all_iou_summaries.json`.
+"""Submit one `train.py` run through Slurm/submitit and append its results to a JSON summary file.
 
 Usage
 -----
-1. On the login node: `micromamba activate cmap`
-2. Launch: `python launcher_submitit.py <experiment_name> <num_trials> [--debug]`
+On login node run: python launcher_submitit.py <experiment_name> <num_trials> [--debug] [--log_file path]
+`--log_file` specifies the cumulative log path. Defaults to a file named `iou_summary.json` in the same directory as this launcher.
 """
 
 import argparse
@@ -15,14 +15,14 @@ from pathlib import Path
 import submitit
 from submitit.helpers import CommandFunction
 
-LAUNCHER_DIR = Path(__file__).resolve().parent
-GLOBAL_LOG = LAUNCHER_DIR / "all_iou_summaries.json"
+from configs import config
 
-## Helper Functions: (1) Build `train.py` command, (2) Parse standard output for Train/Test IOUs
+LAUNCHER_DIR = Path(__file__).resolve().parent
+DEFAULT_LOG = LAUNCHER_DIR / "iou_summary.json"
 
 
 def _build_cmd(args):
-    """Return the shell command that executes *one* train.py call."""
+    """Build command to be submitted to the Slurm cluster"""
     cmd = [
         "python",
         "train.py",
@@ -35,33 +35,44 @@ def _build_cmd(args):
     return cmd
 
 
-def _parse_stdout(text, expected_num_vals=2):
-    """Extract Train and Test IoU averages from train.py stdout."""
-    avg_re = re.compile(r"average:\s*([0-9.]+)")
-    vals = avg_re.findall(text)
-    if len(vals) < expected_num_vals:
-        raise RuntimeError("Missing 'average:' lines in stdout")
-    return float(vals[0]), float(vals[1])
+def _parse_stdout(text):
+    """Return (avg_train, avg_test, train_list, test_list)."""
+    avg_vals = re.findall(r"average:\s*([0-9.]+)", text)
+    avg_train, avg_test = map(float, avg_vals[:2])
 
-
-## Main Function:
+    train_match = re.search(r"Training result:\s*\[([^]]*)]", text)
+    test_match = re.search(r"Test result:\s*\[([^]]*)]", text)
+    train_list = (
+        [s.strip() for s in train_match.group(1).split(",") if s.strip()]
+        if train_match
+        else []
+    )
+    test_list = (
+        [s.strip() for s in test_match.group(1).split(",") if s.strip()]
+        if test_match
+        else []
+    )
+    return avg_train, avg_test, train_list, test_list
 
 
 def main():
-    """Parse CLI args, submit the Slurm job, and update the global IoU log."""
+    """Submit one `train.py` run through Slurm/submitit and append its results to a JSON summary file"""
     p = argparse.ArgumentParser()
     p.add_argument(
         "experiment", nargs="?", default=datetime.now().strftime("%Y%m%d-%H%M%S")
     )
     p.add_argument("num_trial", type=int, default=5)
     p.add_argument("--debug", action="store_true")
-    # Slurm resources with explicit types
+    p.add_argument("--log_file", default=str(DEFAULT_LOG))
+    # Slurm knobs
     p.add_argument("--partition", default="general")
     p.add_argument("--gpus", type=int, default=1)
     p.add_argument("--cpus", type=int, default=8)
     p.add_argument("--mem", type=int, default=128)
     p.add_argument("--time", type=int, default=360)
     args = p.parse_args()
+
+    cumulative_log = Path(args.log_file)
 
     log_root = Path("slurm_logs") / args.experiment
     log_root.mkdir(parents=True, exist_ok=True)
@@ -81,19 +92,23 @@ def main():
     print(f"Submitted job {job.job_id}. Waiting…")
 
     stdout = job.result()
-    train_iou, test_iou = _parse_stdout(stdout)
+    avg_train, avg_test, train_list, test_list = _parse_stdout(stdout)
 
-    if GLOBAL_LOG.exists():
-        with GLOBAL_LOG.open() as fp:
-            global_data = json.load(fp)
-    else:
-        global_data = {}
+    out_dir = Path(config.OUTPUT_ROOT) / f"{args.experiment}_trial_0"
 
-    global_data[args.experiment] = [train_iou, test_iou]
-    with GLOBAL_LOG.open("w") as fp:
-        json.dump(global_data, fp, indent=2)
+    summary_entry = {
+        "Experiment": args.experiment,
+        "AvgTrainIoU": round(avg_train, 3),
+        "AvgTestIoU": round(avg_test, 3),
+        "TrainList": train_list,
+        "TestList": test_list,
+        "OutputDir": str(out_dir),
+    }
 
-    print("Global log updated at", GLOBAL_LOG)
+    global_data = json.load(cumulative_log.open()) if cumulative_log.exists() else {}
+    global_data[args.experiment] = summary_entry
+    json.dump(global_data, cumulative_log.open("w"), indent=2)
+    print("Global log updated at", cumulative_log)
 
 
 if __name__ == "__main__":
