@@ -275,7 +275,7 @@ def regularization_loss(model, reg_type, reg_weight):
     Args:
         model: The PyTorch model for which to calculate the regularization loss.
         reg_type: The type of regularization, either "l1" or "l2".
-        weight: The weight or strength of the regularization term.
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - float: The calculated regularization loss.
@@ -342,16 +342,14 @@ def create_model(
     if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
-    model_config = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
-        "num_classes": num_classes,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
-        "in_channels": in_channels,
-    }
-
-    model = SegmentationModel(model_config).model.to(device)
+    model = SegmentationModel(
+        model_type=config.MODEL,
+        backbone=config.BACKBONE,
+        weights=config.WEIGHTS,
+        num_classes=num_classes,
+        in_channels=in_channels,
+        dropout=config.DROPOUT,
+    ).model.to(device)
     if not debug:
         logging.info(model)
 
