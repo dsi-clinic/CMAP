@@ -114,7 +114,7 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
-USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
 
 # DEM data - a max of one should be enabled at a time
 USE_DIFFDEM = True  # change to True if training w/ difference DEM
