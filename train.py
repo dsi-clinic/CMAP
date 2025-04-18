@@ -168,7 +168,7 @@ def initialize_dataset(config):
             naip_dataset.crs,
             naip_dataset.res,
         )
-        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
+        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=False)
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
