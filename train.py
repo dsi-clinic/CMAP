@@ -178,14 +178,14 @@ def initialize_dataset(config):
             crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
-            kc=True,
+            kc=False,
         )
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
-            layers=config.KC_LAYER,
+            layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
             dest_crs=naip_dataset.crs,
