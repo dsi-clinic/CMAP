@@ -61,26 +61,25 @@ class KaneCounty(GeoDataset):
     }
 
     def __init__(
-            self,
-            layer: int,
-            labels: dict,
-            patch_size: int,
-            dest_crs: str,
-            res: float,
-            path: str,
-            balance_classes: bool = False,
-        ) -> None:
+        self,
+        layer: int,
+        labels: dict,
+        patch_size: int,
+        dest_crs: str,
+        res: float,
+        path: str,
+        balance_classes: bool = False,
+    ) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
-            kc_config: a dictionary containing
-                layer: specifying layer of GPKG
-                labels: a dictionary containing a label mapping for masks
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
-                path: directory to the file to load
-                balance_classes: whether to balance classes by repeating underrepresented ones
+            layer: specifying layer of GPKG
+            labels: a dictionary containing a label mapping for masks
+            patch_size: the patch size used for the model
+            dest_crs: the coordinate reference system (CRS) to convert to
+            res: resolution of the dataset in units of CRS
+            path: directory to the file to load
+            balance_classes: whether to balance classes by repeating underrepresented ones
 
         Raises:
             FileNotFoundError: if no files are found in path
@@ -90,41 +89,51 @@ class KaneCounty(GeoDataset):
         self.layer = layer
         self.labels = labels
         self.patch_size = patch_size
-        self.dest_crs = dest_crs
-        self.res = res
+        self._crs = dest_crs
+        self._res = res
         self.path = path
         self.balance_classes = balance_classes
 
         gdf = self._load_and_prepare_data()
         self.gdf = gdf
 
-        context_size = math.ceil(self.patch_size / 2 * self.res)
+        context_size = math.ceil(self.patch_size / 2 * self._res)
         self.context_size = context_size
 
         print(f"context_size: {context_size}")
         print(f"patch_size: {self.patch_size}")
-        print(f"res: {self.res}")
+        print(f"res: {self._res}")
 
         self._populate_index()
-        self.colors = {i: self.all_colors[i] for i in self.labels.values()}
-        self.labels_inverse = {v: k for k, v in self.labels.items()}
+        self.labels = labels
+        self.colors = {i: self.all_colors[i] for i in labels.values()}
+        self.labels_inverse = {v: k for k, v in labels.items()}
 
     def _load_and_prepare_data(self):
-        """Loads and prepares the GeoDataFrame.
+        """Load and prepare the GeoDataFrame.
+
+        Args:
+            path: directory to the file to load
+            layer: specifying layer of GPKG
+            labels: a dictionary containing a label mapping for masks
+            dest_crs: the coordinate reference system (CRS) to convert to
 
         Returns:
             gdf: A GeoDataFrame filtered and converted to the target CRS
         """
         gdf = gpd.read_file(self.path, layer=self.layer)[["BasinType", "geometry"]]
         gdf = gdf[gdf["BasinType"].isin(self.labels.keys())]
-        gdf = gdf.to_crs(self.dest_crs)
+        gdf = gdf.to_crs(self._crs)
         return gdf
 
     def _populate_index(self):
-        """Populates the spatial index with data from the GeoDataFrame.
+        """Populate the spatial index with data from the GeoDataFrame.
 
-        Raises:
-            FileNotFoundError: if no files are found in path
+        Args:
+            path: directory to the file to load
+            gdf: GeoDataFrame containing the data
+            context_size: size of the context around shapes for sampling
+            balance_classes: whether to balance classes by repeating underrepresented ones
         """
         # get counts of each class
         class_counts = self.gdf["BasinType"].value_counts()
@@ -230,7 +239,7 @@ class KaneCounty(GeoDataset):
 
         sample = {
             "mask": torch.Tensor(masks).long(),
-            "crs": self.crs,
+            "crs": self._crs,
             "bbox": query,
         }
 

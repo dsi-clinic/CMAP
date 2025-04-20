@@ -165,7 +165,7 @@ def initialize_dataset(config):
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
         label_dataset = RiverDataset(
             patch_size=config.PATCH_SIZE,
-            crs=naip_dataset.crs,
+            dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
             kc=False,
@@ -175,13 +175,13 @@ def initialize_dataset(config):
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
+            paht=kc_shape_path, 
             layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
-            path=kc_shape_path,
-            balance_classes=False,
+            balance_classes=False
         )
         print("kc dataset loaded")
     return naip_dataset, label_dataset
@@ -350,6 +350,7 @@ def create_model(
         in_channels=in_channels,
         dropout=config.DROPOUT,
     ).model.to(device)
+    
     if not debug:
         logging.info(model)
 
