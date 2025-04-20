@@ -78,14 +78,14 @@ class RiverDataset(GeoDataset):
         super().__init__()
 
         self.patch_size = patch_size
-        self.dest_crs = dest_crs
-        self.res = res
+        self._crs = dest_crs
+        self._res = res
         self.path = path
         self.kc = kc
 
         gdf = self._load_and_prepare_data()
         self.gdf = gdf
-        box_size = math.ceil(self.patch_size / 2 * self.res) * 2
+        box_size = math.ceil(self.patch_size / 2 * self._res) * 2
         # self.box_size = box_size
 
         self.labels = {"BACKGROUND": 0, "STREAM/RIVER": 1}
@@ -97,15 +97,14 @@ class RiverDataset(GeoDataset):
 
         if self.kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
-            kc_config = {
-                "layer": KC_LAYER, 
-                "labels": KC_LABELS,
-                "patch_size": self.patch_size,
-                "dest_crs": self.dest_crs,
-                "res": self.res,
-                "path": kc_shape_path,
-            }
-            kc_dataset = KaneCounty(kc_config)
+            kc_dataset = KaneCounty(
+                kc_shape_path,
+                KC_LAYER,
+                KC_LABELS,
+                self.patch_size,
+                self._crs,
+                self._res
+            )
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
 
@@ -175,7 +174,7 @@ class RiverDataset(GeoDataset):
         gdf = gpd.read_file(self.path)
 
         # Transform the GeoDataFrame to dest_crs
-        gdf = gdf.to_crs(self.dest_crs)
+        gdf = gdf.to_crs(self._crs)
         gdf = gdf[gdf["FCODE"] == "STREAM/RIVER"]
         gdf["BasinType"] = gdf["FCODE"]
 
@@ -341,8 +340,8 @@ class RiverDataset(GeoDataset):
                 label = self.labels[obj["BasinType"]]
                 shapes.append((shape, label))
 
-        width = (query.maxx - query.minx) / self.res
-        height = (query.maxy - query.miny) / self.res
+        width = (query.maxx - query.minx) / self._res
+        height = (query.maxy - query.miny) / self._res
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )

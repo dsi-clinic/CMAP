@@ -45,22 +45,19 @@ class SegmentationModel:
         in_channels: int,
         dropout: float = 0.3
     ):
-        """Initialize the SegmentationModel object with the provided model 
-        configuration.
+        """Initialize the SegmentationModel object with the provided model configuration.
 
         Parameters
         ----------
-        - "model_type": str, The model type to use ('unet', 'deeplabv3+', and 'fcn'
-        - "backbone": str, The encoder to use, which is the classification
-        model that will be used to extract features. Options are
-        listed on the smp docs.
-        - "weights": Union[str, bool], The weights to use for the model.
-        If True, uses imagenet weights. Can also accept a string path
-        to a weights file, or a WeightsEnum with pretrained weights.
-        - "num_classes": int, The number of classes to predict. Should
-        match the number of classes in the mask.
-        - "in_channels: int, The number of input channels
-        - "dropout": float, The rate to use for dropout regularization
+            model_type: The model type to use ('unet', 'deeplabv3+', and 'fcn')
+            backbone: The encoder to use, which is the classification model 
+            that will be used to extract features. Options are listed on the 
+            smp docs.
+            weights: Union[str, bool], The weights to use for the model.
+            If True, uses imagenet weights. Can also accept a string path
+            to a weights file, or a WeightsEnum with pretrained weights.
+            num_classes: int, The number of classes to predict. Should match
+            the number of classes in the mask.
 
         Returns:
         -------
@@ -72,6 +69,7 @@ class SegmentationModel:
         self.num_classes = num_classes
         self.in_channels = in_channels
         self.dropout = dropout
+
         if model != "fcn":
             state_dict = None
             # set custom weights
