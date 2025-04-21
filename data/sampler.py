@@ -31,19 +31,19 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
         dataset,
         size,
         batch_size,
-        length = None,
-        roi = None,
-        units = None,
+        length=None,
+        roi=None,
+        units=None,
     ) -> None:
         """Initialize a new Sampler instance.
 
         Args:
-            - dataset: dataset to index from
-            - size: dimensions of each patch
-            - batch_size: number of samples per batch
-            - length: number of samples per epoch
-            - roi: region of interest to sample from
-            - units: defines if size is in pixel or CRS units
+            dataset: dataset to index from
+            size: dimensions of each patch
+            batch_size: number of samples per batch
+            length: number of samples per epoch
+            roi: region of interest to sample from
+            units: defines if size is in pixel or CRS units
         """
         super().__init__(dataset, roi)
         self.size = _to_tuple(size)
@@ -154,18 +154,17 @@ class BalancedGridGeoSampler(GeoSampler):
         dataset,
         size,
         stride,
-        roi = None,
-        units = None,
+        roi=None,
+        units=None,
     ) -> None:
         """Initialize a new Sampler instance.
 
         Args:
-            config: A dictionary containing the following keys:
-                - dataset: dataset to index from
-                - size: dimensions of each patch
-                - stride: distance to skip between each patch
-                - roi: region of interest to sample from
-                - units: defines if size and stride are in pixel or CRS units
+            dataset: dataset to index from
+            size: dimensions of each patch
+            stride: distance to skip between each patch
+            roi: region of interest to sample from
+            units: defines if size and stride are in pixel or CRS units
         """
         super().__init__(dataset, roi)
         self.size = _to_tuple(size)

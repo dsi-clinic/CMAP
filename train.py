@@ -175,13 +175,13 @@ def initialize_dataset(config):
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
-            paht=kc_shape_path, 
+            paht=kc_shape_path,
             layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
-            balance_classes=False
+            balance_classes=False,
         )
         print("kc dataset loaded")
     return naip_dataset, label_dataset
@@ -221,20 +221,17 @@ def build_dataloaders(images, labels, split_rate, config):
     if len(test_dataset) == 0:
         raise ValueError("Test dataset is empty after intersection!")
 
-    print(1)
     train_sampler = BalancedRandomBatchGeoSampler(
         dataset=train_dataset,
         size=config.PATCH_SIZE,
         batch_size=config.BATCH_SIZE,
     )
-    print(2)
     test_sampler = BalancedGridGeoSampler(
         dataset=test_dataset,
         size=config.PATCH_SIZE,
         stride=config.PATCH_SIZE,
     )
-    print(3)
-    
+
     # Log sampler lengths
     logging.info(f"Train sampler length: {len(train_sampler)}")
     logging.info(f"Test sampler length: {len(test_sampler)}")
@@ -290,12 +287,12 @@ def regularization_loss(model, reg_type, reg_weight):
 
 
 def compute_loss(
-        model,
-        mask,
-        y,
-        loss_fn,
-        reg_type: str, 
-        reg_weight: float,
+    model,
+    mask,
+    y,
+    loss_fn,
+    reg_type: str,
+    reg_weight: float,
 ):
     """Compute the total loss optionally the regularization loss.
 
@@ -349,7 +346,7 @@ def create_model(
         in_channels=in_channels,
         dropout=config.DROPOUT,
     ).model.to(device)
-    
+
     if not debug:
         logging.info(model)
 

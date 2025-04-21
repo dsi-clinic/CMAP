@@ -56,13 +56,13 @@ class RiverDataset(GeoDataset):
     }
 
     def __init__(
-            self,
-            patch_size: int,
-            dest_crs: str,
-            res: float,
-            path: str,
-            kc: bool = False,
-        ) -> None:
+        self,
+        patch_size: int,
+        dest_crs: str,
+        res: float,
+        path: str,
+        kc: bool = False,
+    ) -> None:
         """Initialize a new river dataset instance.
 
         Args:
@@ -103,7 +103,7 @@ class RiverDataset(GeoDataset):
                 KC_LABELS,
                 self.patch_size,
                 self._crs,
-                self._res
+                self._res,
             )
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
@@ -132,7 +132,9 @@ class RiverDataset(GeoDataset):
                     break
 
             # Preserve label ordering when combining
-            rd_labels = self.labels.copy() # Make a copy to avoid modifying the original
+            rd_labels = (
+                self.labels.copy()
+            )  # Make a copy to avoid modifying the original
             combined_labels = {}
             next_idx = 0
 
@@ -162,7 +164,7 @@ class RiverDataset(GeoDataset):
             self.colors = combined_colors
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
-        #print(f"Initialized RiverDataset with configs: {river_config}")
+        # print(f"Initialized RiverDataset with configs: {river_config}")
 
     def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
@@ -180,7 +182,7 @@ class RiverDataset(GeoDataset):
 
         return gdf
 
-    def _populate_index(self, total_points: int = 900, box_size: int = 150.):
+    def _populate_index(self, total_points: int = 900, box_size: int = 150.0):
         """Populate spatial index with random points within river polygons."""
         import time
 
@@ -215,7 +217,9 @@ class RiverDataset(GeoDataset):
 
         i = 0  # point counter
         # iterate through each river polygon
-        for idx, row in tqdm(self.gdf.iterrows(), desc="Processing rivers", total=len(self.gdf)):
+        for idx, row in tqdm(
+            self.gdf.iterrows(), desc="Processing rivers", total=len(self.gdf)
+        ):
             geom = row["geometry"]
             n_points = int(points_per_geom[idx])
 
