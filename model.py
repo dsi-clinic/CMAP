@@ -43,15 +43,15 @@ class SegmentationModel:
         weights: bool,
         num_classes: int,
         in_channels: int,
-        dropout: float = 0.3
+        dropout: float = 0.3,
     ):
         """Initialize the SegmentationModel object with the provided model configuration.
 
         Parameters
         ----------
             model_type: The model type to use ('unet', 'deeplabv3+', and 'fcn')
-            backbone: The encoder to use, which is the classification model 
-            that will be used to extract features. Options are listed on the 
+            backbone: The encoder to use, which is the classification model
+            that will be used to extract features. Options are listed on the
             smp docs.
             weights: Union[str, bool], The weights to use for the model.
             If True, uses imagenet weights. Can also accept a string path
