@@ -231,21 +231,20 @@ def build_dataloaders(images, labels, split_rate, config):
     if len(test_dataset) == 0:
         raise ValueError("Test dataset is empty after intersection!")
 
+    print(1)
     train_sampler = BalancedRandomBatchGeoSampler(
-        config={
-            "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
-        }
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
     )
+    print(2)
     test_sampler = BalancedGridGeoSampler(
-        config={
-            "dataset": test_dataset,
-            "size": config.PATCH_SIZE,
-            "stride": config.PATCH_SIZE,
-        }
+        dataset=test_dataset,
+        size=config.PATCH_SIZE,
+        stride=config.PATCH_SIZE,
     )
-
+    print(3)
+    
     # Log sampler lengths
     logging.info(f"Train sampler length: {len(train_sampler)}")
     logging.info(f"Test sampler length: {len(test_sampler)}")
