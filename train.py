@@ -9,16 +9,15 @@ import argparse
 import datetime
 import importlib.util
 import logging
-import os
 import random
 import shutil
 import sys
 import time  # Add time module for timing
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any
-from argparse import Namespace
 
 import kornia.augmentation as K
 import torch
@@ -41,12 +40,14 @@ from utils.transforms import apply_augs, create_augmentation_pipelines
 
 
 def get_model_device():
+    """Returns model device for interpretation by multiprocessing"""
     if torch.cuda.is_available():
         return "cuda"
     elif torch.backends.mps.is_available():
         return "mps"
     else:
         return "cpu"
+
 
 MODEL_DEVICE = get_model_device()
 
@@ -137,16 +138,19 @@ def writer_prep(exp_n, trial_num, wandb_tune, config):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
+class RGBOnlyNAIP(NAIP):
+    """Generates RGB Dataset"""
+
+    def __getitem__(self, query):
+        """Returns sample from dataset"""
+        sample = super().__getitem__(query)
+        sample["image"] = sample["image"][:3]  # Keep only RGB channels
+        return sample
+
+
 def initialize_dataset(config):
     """Load and merge NAIP, KaneCounty, and optional DEM data."""
     if not config.USE_NIR:
-
-        class RGBOnlyNAIP(NAIP):
-            def __getitem__(self, query):
-                sample = super().__getitem__(query)
-                sample["image"] = sample["image"][:3]  # Keep only RGB channels
-                return sample
-
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
 
     else:
@@ -1278,14 +1282,13 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     return train_iou, test_iou
 
 
-def run_trials(
-    trial_id, gpu_id, args_dict, split, exp_name, wandb_tune, num_trials
-):
+def run_trials(trial_id, gpu_id, args_dict, split, exp_name, wandb_tune, num_trials):
     """Running training for multiple trials"""
     torch.cuda.set_device(gpu_id)
 
-    global config
+    global config, images, labels
     config = importlib.import_module(args_dict["config"])
+    print("Multiprocessing:", config.MULTIPROCESSING)
     images, labels = initialize_dataset(config)
 
     args = Namespace(**args_dict)
@@ -1413,6 +1416,4 @@ if __name__ == "__main__":
         for p in processes:
             p.join()
     else:
-        run_trials(
-            0, 0, args_dict, split, exp_name, wandb_tune, num_trials
-        )
+        run_trials(0, 0, args_dict, split, exp_name, wandb_tune, num_trials)
