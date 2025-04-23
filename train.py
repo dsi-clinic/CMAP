@@ -38,13 +38,16 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
-MODEL_DEVICE = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+
+def get_model_device():
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+MODEL_DEVICE = get_model_device()
 
 
 def arg_parsing(argument):
@@ -1278,12 +1281,10 @@ def run_trials(
     trial_id, gpu_id, config_dict, args_dict, split, exp_name, wandb_tune, num_trials
 ):
     """Running training for multiple trials"""
-    # Extract config dictionary from module
+    # import torch
+    # os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-    import torch
-
-    torch.cuda.set_device(0)
+    torch.cuda.set_device(gpu_id)
 
     images, labels = initialize_dataset(config)
 
@@ -1296,8 +1297,6 @@ def run_trials(
 
     train_ious = []
     test_ious = []
-
-    logging.info("Using %s device", MODEL_DEVICE)
 
     if config.MULTIPROCESSING:
         train_iou, test_iou = one_trial(
@@ -1394,6 +1393,8 @@ if __name__ == "__main__":
     print(args_dict)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
     num_trials = int(num_trials)
+
+    logging.info("Using %s device", MODEL_DEVICE)
 
     if config.MULTIPROCESSING:
         processes = []
