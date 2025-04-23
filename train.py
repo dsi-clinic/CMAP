@@ -18,6 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any
+from argparse import Namespace
 
 import kornia.augmentation as K
 import torch
@@ -1332,36 +1333,37 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
 
 
 def run_trials(
-    trial_id, gpu_id, config_dict, args_dict, split, exp_name, wandb_tune, num_trials
+    trial_id, gpu_id, args_dict, split, exp_name, wandb_tune, num_trials
 ):
     """Running training for multiple trials"""
-    # import torch
-    # os.environ["CUDA_VISIBLE_DEVICES"] = str(gpu_id)
-
     torch.cuda.set_device(gpu_id)
 
+    global config
+    config = importlib.import_module(args_dict["config"])
     images, labels = initialize_dataset(config)
+
+    args = Namespace(**args_dict)
 
     if wandb_tune:
         wandb.init(project="CMAP")
         print("wandb taken over config")
     else:
         # Initialize wandb with default configuration but disable logging
-        wandb.init(project="CMAP", config=config_dict, mode="disabled")
+        wandb.init(project="CMAP", config=config, mode="disabled")
 
     train_ious = []
     test_ious = []
 
     if config.MULTIPROCESSING:
         train_iou, test_iou = one_trial(
-            exp_name, trial_id, wandb_tune, images, labels, split, args_dict
+            exp_name, trial_id, wandb_tune, images, labels, split, args
         )
         train_ious.append(round(float(train_iou), 3))
         test_ious.append(round(float(test_iou), 3))
     else:
         for num in range(num_trials):
             train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, images, labels, split, args_dict
+                exp_name, num, wandb_tune, images, labels, split, args
             )
             train_ious.append(round(float(train_iou), 3))
             test_ious.append(round(float(test_iou), 3))
@@ -1436,14 +1438,7 @@ if __name__ == "__main__":
 
     config = importlib.import_module(args.config)
 
-    config_dict = {
-        "EPOCHS": 1 if args.debug else config.EPOCHS,
-        "MULTIPROCESSING": config.MULTIPROCESSING,
-        "DEBUG_MODE": args.debug,
-    }
-
     args_dict = vars(args)  # make argparse Namespace pickle-safe
-    print(config_dict)
     print(args_dict)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
     num_trials = int(num_trials)
@@ -1459,7 +1454,6 @@ if __name__ == "__main__":
                 args=(
                     trial_id,
                     gpu_id,
-                    config_dict,
                     args_dict,
                     split,
                     exp_name,
@@ -1474,5 +1468,5 @@ if __name__ == "__main__":
             p.join()
     else:
         run_trials(
-            0, 0, config_dict, args_dict, split, exp_name, wandb_tune, num_trials
+            0, 0, args_dict, split, exp_name, wandb_tune, num_trials
         )
