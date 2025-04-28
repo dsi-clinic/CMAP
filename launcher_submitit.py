@@ -2,8 +2,12 @@
 
 Usage
 -----
-On login node run: python launcher_submitit.py <experiment_name> <num_trials> [--debug] [--log_file path]
-`--log_file` specifies the cumulative log path. Defaults to a file named `iou_summary.json` in the same directory as this launcher.
+On login node run: `micromamba activate cmap`
+Then:
+    python launcher_submitit.py <experiment_name> <num_trials> [--debug] [--config CONFIG] [--log_file PATH]
+
+`--config` specifies the Python import path to the config module (default: `configs.config`).
+`--log_file` specifies the cumulative log path (default: `iou_summary.json` next to this script).
 """
 
 import argparse
@@ -26,7 +30,7 @@ def _build_cmd(args):
     cmd = [
         "python",
         "train.py",
-        "configs.config",
+        args.config,
         f"--experiment_name={args.experiment}",
         f"--num_trials={args.num_trial}",
     ]
@@ -63,6 +67,7 @@ def main():
     )
     p.add_argument("num_trial", type=int, default=5)
     p.add_argument("--debug", action="store_true")
+    p.add_argument("--config", default="configs.config")
     p.add_argument("--log_file", default=str(DEFAULT_LOG))
     # Slurm knobs
     p.add_argument("--partition", default="general")
@@ -100,8 +105,8 @@ def main():
         "Experiment": args.experiment,
         "AvgTrainIoU": round(avg_train, 3),
         "AvgTestIoU": round(avg_test, 3),
-        "TrainList": train_list,
-        "TestList": test_list,
+        "TrainIOUs": train_list,
+        "TestIOUs": test_list,
         "OutputDir": str(out_dir),
     }
 
