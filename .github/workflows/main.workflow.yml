@@ -31,8 +31,4 @@ jobs:
           python -m pip install --upgrade pip
           if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
       - name: Lint with pre-commit
-<<<<<<< HEAD
         uses: pre-commit/action@v3.0.1
-=======
-        uses: pre-commit/action@v3.0.0
->>>>>>> f00897a (Update main.workflow.yml)
