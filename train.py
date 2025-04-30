@@ -499,8 +499,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
                 {
                     "Difference DEM": x[i][3, :, :].cpu() / 255.0,
                     "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
-                    .cpu()
-                    .clip(0, 1),
+                    .cpu() / 255.0,
                 }
             )
 
@@ -508,7 +507,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             plot_tensors.update(
                 {
                     "Base DEM": x[i][3, :, :].cpu() / 255.0,
-                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu().clip(0, 1),
+                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu() / 255.0,
                 }
             )
 
@@ -1296,6 +1295,7 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         config.IMAGE_AUG_INDICES,
         config.DEM_AUG_INDICES,
     )
+    print("In one_trial(), DEM augs are:", config.DEM_AUG_INDICES)
     logging.info("Trial %d\n====================================", num + 1)
     train_test_config = (
         train_dataloader,
