@@ -83,8 +83,6 @@ def create_augmentation_pipelines(
     # Define all possible DEM augmentations
     # (applied only to the DEM channel of the image)
     all_dem_transforms = [
-        K.RandomContrast(contrast=config.COLOR_CONTRAST, p=0.5),
-        K.RandomBrightness(brightness=config.COLOR_BRIGHTNESS, p=0.5),
         K.RandomGaussianBlur(
             kernel_size=config.GAUSSIAN_BLUR_KERNEL,
             sigma=config.GAUSSIAN_BLUR_SIGMA,
@@ -158,15 +156,17 @@ def apply_augs(
         augmented_rgb, non_rgb, rgb_mask, image.shape
     )
 
-    # Generate a mask of non-padded areas in the augmented image
-    # and ensure color augmentations do not affect non-RGB channels
-    mask = augmented_image.any(dim=1, keepdim=True).to(augmented_image.device)
-    fully_augmented_image = torch.where(
-        rgb_mask.view(1, -1, 1, 1).to(augmented_image.device),
-        fully_augmented_image * mask,  # Apply mask only to RGB channels
-        augmented_image,  # Keep original values for non-RGB channels
-    )
+    # Generate mask of non-padded areas in the spatially augmented image
+    non_pad_mask = augmented_image.any(dim=1, keepdim=True).to(augmented_image.device)
 
+    # Only apply the mask to the RGB channels
+    rgb_mask = rgb_mask.view(1, -1, 1, 1).to(augmented_image.device)
+
+    # Apply mask to RGB channels in-place, leave other channels untouched
+    fully_augmented_image = fully_augmented_image * torch.where(
+        rgb_mask, non_pad_mask, torch.ones_like(non_pad_mask)
+    )
+    
     return fully_augmented_image, augmented_mask
 
 

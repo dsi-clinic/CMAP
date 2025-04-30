@@ -83,13 +83,11 @@ IMAGE_AUG_INDICES = [
 
 # only applied to DEM
 DEM_AUG_INDICES = [
-    0,  # Contrast
-    1,  # Brightness
-    2,  # Gaussian Blur
-    3,  # Gaussian Noise
-    4,  # Random Erasing
-    5,  # Elastic Transform
-    6,  # Gamma
+    0,  # Gaussian Blur
+    1,  # Gaussian Noise
+    2,  # Random Erasing
+    3,  # Elastic Transform
+    4,  # Gamma
 ]
 
 # Augmentation
