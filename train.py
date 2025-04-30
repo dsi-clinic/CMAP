@@ -13,6 +13,7 @@ import random
 import shutil
 import sys
 import time  # Add time module for timing
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -20,6 +21,7 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
+import torch.multiprocessing as mp
 import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW
@@ -36,13 +38,18 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
-MODEL_DEVICE = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+
+def get_model_device():
+    """Returns model device for interpretation by multiprocessing"""
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+
+MODEL_DEVICE = get_model_device()
 
 
 def arg_parsing(argument):
@@ -131,16 +138,19 @@ def writer_prep(exp_n, trial_num, wandb_tune, config):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
+class RGBOnlyNAIP(NAIP):
+    """Generates RGB Dataset"""
+
+    def __getitem__(self, query):
+        """Returns sample from dataset"""
+        sample = super().__getitem__(query)
+        sample["image"] = sample["image"][:3]  # Keep only RGB channels
+        return sample
+
+
 def initialize_dataset(config):
     """Load and merge NAIP, KaneCounty, and optional DEM data."""
     if not config.USE_NIR:
-
-        class RGBOnlyNAIP(NAIP):
-            def __getitem__(self, query):
-                sample = super().__getitem__(query)
-                sample["image"] = sample["image"][:3]  # Keep only RGB channels
-                return sample
-
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
 
     else:
@@ -1275,9 +1285,72 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     return train_iou, test_iou
 
 
+def run_trials(trial_id, gpu_id, args_dict, split, exp_name, wandb_tune, num_trials):
+    """Running training for multiple trials"""
+    torch.cuda.set_device(gpu_id)
+
+    global config, images, labels
+    config = importlib.import_module(args_dict["config"])
+    print("Multiprocessing:", config.MULTIPROCESSING)
+    images, labels = initialize_dataset(config)
+
+    args = Namespace(**args_dict)
+
+    if wandb_tune:
+        wandb.init(project="CMAP")
+        print("wandb taken over config")
+    else:
+        # Initialize wandb with default configuration but disable logging
+        wandb.init(project="CMAP", config=config, mode="disabled")
+
+    train_ious = []
+    test_ious = []
+
+    if config.MULTIPROCESSING:
+        train_iou, test_iou = one_trial(
+            exp_name, trial_id, wandb_tune, images, labels, split, args
+        )
+        train_ious.append(round(float(train_iou), 3))
+        test_ious.append(round(float(test_iou), 3))
+    else:
+        for num in range(num_trials):
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, images, labels, split, args
+            )
+            train_ious.append(round(float(train_iou), 3))
+            test_ious.append(round(float(test_iou), 3))
+
+    test_average = mean(test_ious)
+    train_average = mean(train_ious)
+    test_std = 0
+    train_std = 0
+    if num_trials > 1:
+        test_std = stdev(test_ious)
+        train_std = stdev(train_ious)
+
+    print(
+        f"""
+        Training result: {train_ious},
+        average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
+    )
+    print(
+        f"""
+        Test result: {test_ious},
+        average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+    )
+
+    if wandb_tune:
+        wandb.run.summary["average_test_jaccard_index"] = test_average
+        wandb.finish()
+
+
 if __name__ == "__main__":
     # Check GPU availability; if GPU available, run on compute node, else exit
+    mp.set_start_method("spawn", force=True)
+
     check_gpu_availability()
+    num_gpus = torch.cuda.device_count()
+    print("The number of GPUs available is:", num_gpus)
 
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -1317,62 +1390,33 @@ if __name__ == "__main__":
 
     config = importlib.import_module(args.config)
 
-    # enable debug mode
-    if args.debug:
-        epoch = 1
-    else:
-        epoch = config.EPOCHS
-    # Enable debug mode in config
-    config.DEBUG_MODE = args.debug
-
+    args_dict = vars(args)  # make argparse Namespace pickle-safe
+    print(args_dict)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    num_trials = int(num_trials)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    images, labels = initialize_dataset(config)
-
-    def run_trials():
-        """Running training for multiple trials"""
-        # Extract config dictionary from module
-
-        if wandb_tune:
-            wandb.init(project="CMAP")
-            print("wandb taken over config")
-        else:
-            # Initialize wandb with default configuration but disable logging
-            wandb.init(project="CMAP", config=config, mode="disabled")
-
-        train_ious = []
-        test_ious = []
-
-        for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, images, labels, split, args
+    if config.MULTIPROCESSING:
+        processes = []
+        for trial_id in range(num_trials):
+            gpu_id = trial_id % num_gpus
+            p = mp.Process(
+                target=run_trials,
+                args=(
+                    trial_id,
+                    gpu_id,
+                    args_dict,
+                    split,
+                    exp_name,
+                    wandb_tune,
+                    num_trials,
+                ),
             )
-            train_ious.append(round(float(train_iou), 3))
-            test_ious.append(round(float(test_iou), 3))
+            p.start()
+            processes.append(p)
 
-        test_average = mean(test_ious)
-        train_average = mean(train_ious)
-        test_std = 0
-        train_std = 0
-        if num_trials > 1:
-            test_std = stdev(test_ious)
-            train_std = stdev(train_ious)
-
-        print(
-            f"""
-            Training result: {train_ious},
-            average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
-        )
-        print(
-            f"""
-            Test result: {test_ious},
-            average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
-        )
-
-        if wandb_tune:
-            wandb.run.summary["average_test_jaccard_index"] = test_average
-            wandb.finish()
-
-    run_trials()
+        for p in processes:
+            p.join()
+    else:
+        run_trials(0, 0, args_dict, split, exp_name, wandb_tune, num_trials)
