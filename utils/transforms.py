@@ -166,7 +166,7 @@ def apply_augs(
     fully_augmented_image = fully_augmented_image * torch.where(
         rgb_mask, non_pad_mask, torch.ones_like(non_pad_mask)
     )
-    
+
     return fully_augmented_image, augmented_mask
 
 

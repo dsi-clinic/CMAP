@@ -498,8 +498,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             plot_tensors.update(
                 {
                     "Difference DEM": x[i][3, :, :].cpu() / 255.0,
-                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
-                    .cpu() / 255.0,
+                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :].cpu() / 255.0,
                 }
             )
 
