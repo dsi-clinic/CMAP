@@ -93,8 +93,17 @@ def create_augmentation_pipelines(
             std=config.GAUSSIAN_NOISE_STD,
             p=config.GAUSSIAN_NOISE_PROB,
         ),
-        K.RandomErasing(scale=(0.02, 0.1), ratio=(0.3, 3.0), value=0.0, p=0.5),
-        K.RandomElasticTransform(alpha=(1.0, 2.0), sigma=(9.0, 11.0), p=0.5),
+        K.RandomErasing(
+            scale=config.RANDOM_ERASING_SCALE,
+            ratio=config.RANDOM_ERASING_RATIO,
+            value=0.0,
+            p=0.5,
+        ),
+        K.RandomElasticTransform(
+            alpha=config.RANDOM_ELASTIC_TRANSFORM_ALPHA,
+            sigma=config.RANDOM_ELASTIC_TRANSFORM_SIGMA,
+            p=0.5,
+        ),
         K.RandomGamma(gamma=config.GAMMA, p=0.5),
     ]
 
