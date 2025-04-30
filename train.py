@@ -173,24 +173,26 @@ def initialize_dataset(config):
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        rd_config = (
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        label_dataset = RiverDataset(
+            patch_size=config.PATCH_SIZE,
+            dest_crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            path=rd_shape_path,
+            kc=False,
         )
-        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
-        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-        dataset_config = (
-            config.KC_LAYER,
-            config.KC_LABELS,
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        label_dataset = KaneCounty(
+            paht=kc_shape_path,
+            layer=config.KC_LAYER,
+            labels=config.KC_LABELS,
+            patch_size=config.PATCH_SIZE,
+            dest_crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            balance_classes=False,
         )
-        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=False)
         print("kc dataset loaded")
     return naip_dataset, label_dataset
 
@@ -230,18 +232,14 @@ def build_dataloaders(images, labels, split_rate, config):
         raise ValueError("Test dataset is empty after intersection!")
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        config={
-            "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
-        }
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
     )
     test_sampler = BalancedGridGeoSampler(
-        config={
-            "dataset": test_dataset,
-            "size": config.PATCH_SIZE,
-            "stride": config.PATCH_SIZE,
-        }
+        dataset=test_dataset,
+        size=config.PATCH_SIZE,
+        stride=config.PATCH_SIZE,
     )
 
     # Log sampler lengths
@@ -277,13 +275,13 @@ def build_dataloaders(images, labels, split_rate, config):
     return train_dataloader, test_dataloader
 
 
-def regularization_loss(model, reg_type, weight):
+def regularization_loss(model, reg_type, reg_weight):
     """Calculate the regularization loss for the model parameters.
 
     Args:
         model: The PyTorch model for which to calculate the regularization loss.
         reg_type: The type of regularization, either "l1" or "l2".
-        weight: The weight or strength of the regularization term.
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - float: The calculated regularization loss.
@@ -295,10 +293,17 @@ def regularization_loss(model, reg_type, weight):
     elif reg_type == "l2":
         for param in model.parameters():
             reg_loss += torch.sum(param**2)
-    return weight * reg_loss
+    return reg_weight * reg_loss
 
 
-def compute_loss(model, mask, y, loss_fn, reg_config):
+def compute_loss(
+    model,
+    mask,
+    y,
+    loss_fn,
+    reg_type: str,
+    reg_weight: float,
+):
     """Compute the total loss optionally the regularization loss.
 
     Args:
@@ -306,15 +311,13 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
         mask: The input mask tensor.
         y: The target tensor.
         loss_fn: The loss function to use for computing the base loss.
-        reg_config: a tuple of
-            reg_type: The type of regularization, either "l1" or "l2".
-            reg_weight: The weight or strength of the regularization term.
+        reg_type: The type of regularization, either "l1" or "l2".
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    reg_type, reg_weight = reg_config
     if reg_type is not None:
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
@@ -345,16 +348,15 @@ def create_model(
     if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
-    model_configs = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
-        "num_classes": num_classes,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
-        "in_channels": in_channels,
-    }
+    model = SegmentationModel(
+        model_type=config.MODEL,
+        backbone=config.BACKBONE,
+        weights=config.WEIGHTS,
+        num_classes=num_classes,
+        in_channels=in_channels,
+        dropout=config.DROPOUT,
+    ).model.to(device)
 
-    model = SegmentationModel(model_configs).model.to(device)
     if not debug:
         logging.info(model)
 
@@ -734,7 +736,8 @@ def train_epoch(
             outputs,
             y,
             loss_fn,
-            (config.REGULARIZATION_TYPE, config.REGULARIZATION_WEIGHT),
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
         )
 
         # update jaccard index
