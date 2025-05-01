@@ -1025,7 +1025,6 @@ def train(
     loss_fn,
     optimizer,
     jaccard_per_class,
-    train_test_config,
     spatial_augs,
     color_augs,
     out_root,
@@ -1042,20 +1041,18 @@ def train(
     Args:
         model: The deep learning model to be trained.
         train_test_config: A tuple containing:
-                - train_dataloader: DataLoader for training dataset.
-                - train_jaccard: Function to calculate Jaccard index for training.
-                - test_jaccard: Function to calculate Jaccard index for test.
-                - test_dataloader: DataLoader for test dataset.
-                - loss_fn: Loss function used for training and testing.
-                - optimizer: Optimization algorithm used for training.
-                - jaccard_per_class: Function to calculate Jaccard index per class.
-        aug_config: A tuple containing:
-                - spatial_augs: Spatial augmentations applied during training.
-                - color_augs: Color augmentations applied during training.
-        path_config: A tuple containing:
-                - out_root: Root directory for saving the trained model.
-                - train_images_root: Root directory for training images.
-                - test_image_root: Root directory for test images.
+        train_dataloader: DataLoader for training dataset.
+        train_jaccard: Function to calculate Jaccard index for training.
+        test_jaccard: Function to calculate Jaccard index for test.
+        test_dataloader: DataLoader for test dataset.
+        loss_fn: Loss function used for training and testing.
+        optimizer: Optimization algorithm used for training.
+        jaccard_per_class: Function to calculate Jaccard index per class.
+        spatial_augs: Spatial augmentations applied during training.
+        color_augs: Color augmentations applied during training.
+        out_root: Root directory for saving the trained model.
+        train_images_root: Root directory for training images.
+        test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
         wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
@@ -1066,25 +1063,6 @@ def train(
         Tuple[float, float]: A tuple containing the Jaccard index for the last
              epoch of training and for the test dataset.
     """
-    (
-        train_dataloader,
-        train_jaccard,
-        test_jaccard,
-        test_dataloader,
-        loss_fn,
-        optimizer,
-        jaccard_per_class,
-    ) = train_test_config
-    (
-        out_root,
-        train_images_root,
-        test_image_root,
-    ) = path_config
-    (
-        spatial_augs,
-        color_augs,
-    ) = aug_config
-
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
 
@@ -1260,24 +1238,6 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         config.IMAGE_AUG_INDICES,
     )
     logging.info("Trial %d\n====================================", num + 1)
-    train_test_config = (
-        train_dataloader,
-        train_jaccard,
-        test_jaccard,
-        test_dataloader,
-        loss_fn,
-        optimizer,
-        jaccard_per_class,
-    )
-    aug_config = (
-        spatial_augs,
-        color_augs,
-    )
-    path_config = (
-        out_root,
-        train_images_root,
-        test_image_root,
-    )
 
     train_iou, test_iou = train(
         model,
