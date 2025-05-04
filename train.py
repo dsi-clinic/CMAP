@@ -646,8 +646,16 @@ def train_setup(
 def train_epoch(
     dataloader,
     model,
-    train_config,
-    aug_config,
+    loss_fn,
+    jaccard,
+    optimizer,
+    epoch,
+    train_images_root,
+    num_classes,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
     writer,
     args,
     wandb_tune,
@@ -1084,16 +1092,6 @@ def train(
 
     for t in range(epoch):
         if t == 0:
-            test_config = (
-                loss_fn,
-                test_jaccard,
-                t,
-                plateau_count,
-                test_image_root,
-                writer,
-                len(labels.labels),
-                jaccard_per_class,
-            )
             test_loss, t_jaccard = test(
                 test_dataloader,
                 model,
@@ -1128,27 +1126,31 @@ def train(
         epoch_jaccard = train_epoch(
             train_dataloader,
             model,
-            train_config,
-            aug_config,
+            loss_fn,
+            train_jaccard,
+            optimizer,
+            t + 1,
+            train_images_root,
+            len(labels.labels),
+            spatial_augs,
+            color_augs,
+            config.SPATIAL_AUG_MODE,
+            config.COLOR_AUG_MODE,
             writer,
             args,
             wandb_tune,
         )
 
-        test_config = (
+        test_loss, t_jaccard = test(
+            test_dataloader,
+            model,
             loss_fn,
             test_jaccard,
             t + 1,
             plateau_count,
             test_image_root,
-            writer,
             len(labels),
             jaccard_per_class,
-        )
-        test_loss, t_jaccard = test(
-            test_dataloader,
-            model,
-            test_config,
             writer,
             wandb_tune,
             labels,
