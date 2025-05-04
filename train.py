@@ -439,14 +439,13 @@ def apply_augmentations(
 ):
     """Apply augmentations to the image and mask."""
     x_og, y_og = dataset
-    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
     x_aug, y_aug = apply_augs(
         spatial_augs,
         color_augs,
         spatial_aug_mode,
         color_aug_mode,
         x_og,
-        y_og
+        y_og,
     )
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
@@ -680,7 +679,6 @@ def train_epoch(
         optimizer: The optimizer to be used for updating model parameters.
         epoch: The current epoch number.
         train_images_root: The root directory for saving training sample images.
-        aug_config: a tuple of
         spatial_augs: The sequence of spatial augmentations.
         color_augs: The sequence of color augmentations.
         spatial_aug_mode: The mode for spatial augmentations.

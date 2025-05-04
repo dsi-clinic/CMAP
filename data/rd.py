@@ -262,6 +262,8 @@ class RiverDataset(GeoDataset):
                 t0 = time.time()
                 box_count = 0
                 for point in valid_points[points_added:]:
+                    print(f"points_added_265: {points_added}")
+                    print(f"n_points_266: {n_points}")
                     if points_added >= n_points:
                         break
 
@@ -280,6 +282,7 @@ class RiverDataset(GeoDataset):
                     t2 = time.time()
                     intersecting_rows = self.gdf[self.gdf.intersects(bbox)]
                     t3 = time.time()
+                    print(f"t3_283: {t3}")
 
                     if not intersecting_rows.empty:
                         self.index.insert(
