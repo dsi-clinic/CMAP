@@ -435,11 +435,11 @@ def add_extra_channels(image, model):
 
 
 def apply_augmentations(
-    x_og, 
+    x_og,
     y_og,
-    spatial_augs, 
-    color_augs, 
-    spatial_aug_mode, 
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
     color_aug_mode,
 ):
     """Apply augmentations to the image and mask."""
@@ -594,7 +594,6 @@ def train_setup(
     model,
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
-
     samp_image = sample["image"]
     samp_mask = sample["mask"]
 
@@ -728,7 +727,7 @@ def train_epoch(
             epoch,
             batch,
             train_images_root,
-            spatial_augs, 
+            spatial_augs,
             color_augs,
             spatial_aug_mode,
             color_aug_mode,
