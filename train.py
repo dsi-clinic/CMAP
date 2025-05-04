@@ -574,13 +574,16 @@ def normalize_channels(x):
 
 def train_setup(
     sample: defaultdict[str, Any],
-    train_config,
-    aug_config,
+    epoch,
+    batch,
+    train_images_root,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
     model,
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
-    epoch, batch, train_images_root = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -684,8 +687,8 @@ def train_epoch(
     # Add timing for dataloader initialization
     dataloader_start = time.time()
 
-    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
+    #loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
+    #spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     # start timing for this epoch
     epoch_start_time = time.time()
@@ -711,12 +714,15 @@ def train_epoch(
     train_loss = 0
     iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
-        train_config = (epoch, batch, train_images_root)
-        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
-            train_config,
-            aug_config,
+            epoch,
+            batch,
+            train_images_root,
+            spatial_augs, 
+            color_augs,
+            spatial_aug_mode,
+            color_aug_mode,
             model,
         )
         x = x.to(MODEL_DEVICE)
@@ -1109,20 +1115,6 @@ def train(
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        train_config = (
-            loss_fn,
-            train_jaccard,
-            optimizer,
-            t + 1,
-            train_images_root,
-            len(labels.labels),
-        )
-        aug_config = (
-            spatial_augs,
-            color_augs,
-            config.SPATIAL_AUG_MODE,
-            config.COLOR_AUG_MODE,
-        )
         epoch_jaccard = train_epoch(
             train_dataloader,
             model,
