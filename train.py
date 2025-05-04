@@ -632,7 +632,6 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x_norm, "normalized input", logging.getLogger())
 
-    img_data = (x_norm, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
         x_norm,
