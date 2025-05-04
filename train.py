@@ -435,12 +435,22 @@ def add_extra_channels(image, model):
 
 
 def apply_augmentations(
-    dataset, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    x_og, 
+    y_og,
+    spatial_augs, 
+    color_augs, 
+    spatial_aug_mode, 
+    color_aug_mode,
 ):
     """Apply augmentations to the image and mask."""
-    x_og, y_og = dataset
-    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
-    x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
+    x_aug, y_aug = apply_augs(
+        spatial_augs,
+        color_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        x_og,
+        y_og,
+    )
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed
@@ -625,7 +635,12 @@ def train_setup(
     img_data = (x_norm, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
-        img_data, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+        x_norm,
+        y,
+        spatial_augs,
+        color_augs,
+        spatial_aug_mode,
+        color_aug_mode,
     )
 
     if batch == 0:  # Log stats for first batch only
@@ -686,9 +701,6 @@ def train_epoch(
     """
     # Add timing for dataloader initialization
     dataloader_start = time.time()
-
-    #loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
-    #spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     # start timing for this epoch
     epoch_start_time = time.time()
