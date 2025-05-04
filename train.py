@@ -178,7 +178,7 @@ def initialize_dataset(config):
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
-            kc=True,
+            kc=False,
         )
         print("river dataset loaded")
     else:
@@ -439,14 +439,8 @@ def apply_augmentations(
 ):
     """Apply augmentations to the image and mask."""
     x_og, y_og = dataset
-    x_aug, y_aug = apply_augs(
-        spatial_augs,
-        color_augs,
-        spatial_aug_mode,
-        color_aug_mode,
-        x_og,
-        y_og,
-    )
+    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
+    x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed
@@ -580,16 +574,13 @@ def normalize_channels(x):
 
 def train_setup(
     sample: defaultdict[str, Any],
-    epoch,
-    batch,
-    train_images_root,
-    spatial_augs,
-    color_augs,
-    spatial_aug_mode,
-    color_aug_mode,
+    train_config,
+    aug_config,
     model,
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
+    epoch, batch, train_images_root = train_config
+    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -655,16 +646,8 @@ def train_setup(
 def train_epoch(
     dataloader,
     model,
-    loss_fn,
-    jaccard,
-    optimizer,
-    epoch,
-    train_images_root,
-    num_classes,
-    spatial_augs,
-    color_augs,
-    spatial_aug_mode,
-    color_aug_mode,
+    train_config,
+    aug_config,
     writer,
     args,
     wandb_tune,
@@ -674,21 +657,27 @@ def train_epoch(
     Args:
         dataloader: The data loader containing the training data.
         model: The PyTorch model to be trained.
-        loss_fn: The loss function to be used for training.
-        jaccard: The metric to measure Jaccard index during training.
-        optimizer: The optimizer to be used for updating model parameters.
-        epoch: The current epoch number.
-        train_images_root: The root directory for saving training sample images.
-        spatial_augs: The sequence of spatial augmentations.
-        color_augs: The sequence of color augmentations.
-        spatial_aug_mode: The mode for spatial augmentations.
-        color_aug_mode: The mode for color augmentations.
+        train_config: a tuple of
+            - loss_fn: The loss function to be used for training.
+            - jaccard: The metric to measure Jaccard index during training.
+            - optimizer: The optimizer to be used for updating model parameters.
+            - epoch: The current epoch number.
+            - train_images_root: The root directory for saving training sample images.
+        aug_config: a tuple of
+            - spatial_augs: The sequence of spatial augmentations.
+            - color_augs: The sequence of color augmentations.
+            - spatial_aug_mode: The mode for spatial augmentations.
+            - color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
+        args: Additional arguments for debugging or special training conditions.
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
     # Add timing for dataloader initialization
     dataloader_start = time.time()
+
+    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
+    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     # start timing for this epoch
     epoch_start_time = time.time()
@@ -714,15 +703,12 @@ def train_epoch(
     train_loss = 0
     iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
+        train_config = (epoch, batch, train_images_root)
+        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
-            epoch,
-            batch,
-            train_images_root,
-            spatial_augs,
-            color_augs,
-            spatial_aug_mode,
-            color_aug_mode,
+            train_config,
+            aug_config,
             model,
         )
         x = x.to(MODEL_DEVICE)
@@ -846,14 +832,16 @@ def test(
     Args:
         dataloader: Dataloader for the testing data.
         model: A PyTorch model.
-        loss_fn: A PyTorch loss function.
-        jaccard: The metric to be used for evaluation, specifically the Jaccard
-                Index.
-        epoch: The current epoch.
-        plateau_count: The number of epochs the loss has been plateauing.
-        test_image_root: The root directory for saving test images.
-        num_classes: The number of labels to predict.
-        jaccard_per_class: The metric to calculate Jaccard index per class.
+        test_config: A tuple containing:
+            - loss_fn: A PyTorch loss function.
+            - jaccard: The metric to be used for evaluation, specifically the
+                    Jaccard Index.
+            - epoch: The current epoch.
+            - plateau_count: The number of epochs the loss has been plateauing.
+            - test_image_root: The root directory for saving test images.
+            - writer: The TensorBoard writer for logging test metrics.
+            - num_classes: The number of labels to predict.
+            - jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
         labels: The labels for the dataset.
@@ -1048,6 +1036,7 @@ def train(
 
     Args:
         model: The deep learning model to be trained.
+        train_test_config: A tuple containing:
         train_dataloader: DataLoader for training dataset.
         train_jaccard: Function to calculate Jaccard index for training.
         test_jaccard: Function to calculate Jaccard index for test.
@@ -1095,6 +1084,16 @@ def train(
 
     for t in range(epoch):
         if t == 0:
+            test_config = (
+                loss_fn,
+                test_jaccard,
+                t,
+                plateau_count,
+                test_image_root,
+                writer,
+                len(labels.labels),
+                jaccard_per_class,
+            )
             test_loss, t_jaccard = test(
                 test_dataloader,
                 model,
@@ -1106,41 +1105,50 @@ def train(
                 len(labels.labels),
                 jaccard_per_class,
                 writer,
-                wandb_tune,
+                args,
                 labels,
             )
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        
-        epoch_jaccard = train_epoch(
-            train_dataloader,
-            model,
+        train_config = (
             loss_fn,
             train_jaccard,
             optimizer,
             t + 1,
             train_images_root,
             len(labels.labels),
+        )
+        aug_config = (
             spatial_augs,
             color_augs,
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
+        )
+        epoch_jaccard = train_epoch(
+            train_dataloader,
+            model,
+            train_config,
+            aug_config,
             writer,
             args,
             wandb_tune,
         )
 
-        test_loss, t_jaccard = test(
-            test_dataloader,
-            model,
+        test_config = (
             loss_fn,
             test_jaccard,
             t + 1,
             plateau_count,
             test_image_root,
+            writer,
             len(labels),
             jaccard_per_class,
+        )
+        test_loss, t_jaccard = test(
+            test_dataloader,
+            model,
+            test_config,
             writer,
             wandb_tune,
             labels,

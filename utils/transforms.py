@@ -87,10 +87,7 @@ def create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices
 
 
 def apply_augs(
-    spatial_transforms,
-    color_transforms,
-    spatial_mode,
-    color_mode,
+    aug_config,
     image,
     mask,
     rgb_channels=None,
@@ -102,6 +99,8 @@ def apply_augs(
     # Create a boolean mask for identifying RGB channels
     rgb_mask = torch.zeros(image.shape[1], dtype=torch.bool, device=image.device)
     rgb_mask[rgb_channels] = True
+
+    spatial_transforms, color_transforms, spatial_mode, color_mode = aug_config
 
     # Apply spatial augmentations to the image and mask
     augmented_image, augmented_mask = get_spatial_augmentation(
