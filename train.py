@@ -682,19 +682,17 @@ def train_epoch(
     Args:
         dataloader: The data loader containing the training data.
         model: The PyTorch model to be trained.
-        train_config: a tuple of
-            - loss_fn: The loss function to be used for training.
-            - jaccard: The metric to measure Jaccard index during training.
-            - optimizer: The optimizer to be used for updating model parameters.
-            - epoch: The current epoch number.
-            - train_images_root: The root directory for saving training sample images.
-        aug_config: a tuple of
-            - spatial_augs: The sequence of spatial augmentations.
-            - color_augs: The sequence of color augmentations.
-            - spatial_aug_mode: The mode for spatial augmentations.
-            - color_aug_mode: The mode for color augmentations.
+        loss_fn: The loss function to be used for training.
+        jaccard: The metric to measure Jaccard index during training.
+        optimizer: The optimizer to be used for updating model parameters.
+        epoch: The current epoch number.
+        train_images_root: The root directory for saving training sample images.
+        num_classes: The number of labels to predict.
+        spatial_augs: The sequence of spatial augmentations.
+        color_augs: The sequence of color augmentations.
+        spatial_aug_mode: The mode for spatial augmentations.
+        color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
-        args: Additional arguments for debugging or special training conditions.
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
@@ -857,16 +855,14 @@ def test(
     Args:
         dataloader: Dataloader for the testing data.
         model: A PyTorch model.
-        test_config: A tuple containing:
-            - loss_fn: A PyTorch loss function.
-            - jaccard: The metric to be used for evaluation, specifically the
-                    Jaccard Index.
-            - epoch: The current epoch.
-            - plateau_count: The number of epochs the loss has been plateauing.
-            - test_image_root: The root directory for saving test images.
-            - writer: The TensorBoard writer for logging test metrics.
-            - num_classes: The number of labels to predict.
-            - jaccard_per_class: The metric to calculate Jaccard index per class.
+        loss_fn: A PyTorch loss function.
+        jaccard: The metric to be used for evaluation, specifically the
+            Jaccard Index.
+        epoch: The current epoch.
+        plateau_count: The number of epochs the loss has been plateauing.
+        test_image_root: The root directory for saving test images.
+        num_classes: The number of labels to predict.
+        jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
         labels: The labels for the dataset.
