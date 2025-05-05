@@ -13,6 +13,7 @@ import random
 import shutil
 import sys
 import time  # Add time module for timing
+from argparse import Namespace
 from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
@@ -20,6 +21,7 @@ from typing import Any
 
 import kornia.augmentation as K
 import torch
+import torch.multiprocessing as mp
 import wandb
 from torch.nn.modules import Module
 from torch.optim import AdamW
@@ -36,13 +38,18 @@ from model import SegmentationModel
 from utils.plot import find_labels_in_ground_truth, plot_from_tensors
 from utils.transforms import apply_augs, create_augmentation_pipelines
 
-MODEL_DEVICE = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+
+def get_model_device():
+    """Returns model device for interpretation by multiprocessing"""
+    if torch.cuda.is_available():
+        return "cuda"
+    elif torch.backends.mps.is_available():
+        return "mps"
+    else:
+        return "cpu"
+
+
+MODEL_DEVICE = get_model_device()
 
 
 def arg_parsing(argument):
@@ -131,16 +138,19 @@ def writer_prep(exp_n, trial_num, wandb_tune, config):
     return train_images_root, test_images_root, out_root, writer, logger
 
 
+class RGBOnlyNAIP(NAIP):
+    """Generates RGB Dataset"""
+
+    def __getitem__(self, query):
+        """Returns sample from dataset"""
+        sample = super().__getitem__(query)
+        sample["image"] = sample["image"][:3]  # Keep only RGB channels
+        return sample
+
+
 def initialize_dataset(config):
     """Load and merge NAIP, KaneCounty, and optional DEM data."""
     if not config.USE_NIR:
-
-        class RGBOnlyNAIP(NAIP):
-            def __getitem__(self, query):
-                sample = super().__getitem__(query)
-                sample["image"] = sample["image"][:3]  # Keep only RGB channels
-                return sample
-
         naip_dataset = RGBOnlyNAIP(config.KC_IMAGE_ROOT)
 
     else:
@@ -163,24 +173,26 @@ def initialize_dataset(config):
     # Load appropriate label dataset
     if config.USE_RIVERDATASET:
         rd_shape_path = Path(config.KC_SHAPE_ROOT) / config.RD_SHAPE_FILE
-        rd_config = (
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        label_dataset = RiverDataset(
+            patch_size=config.PATCH_SIZE,
+            dest_crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            path=rd_shape_path,
+            kc=False,
         )
-        label_dataset = RiverDataset(rd_shape_path, rd_config, kc=True)
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
-        shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
-        dataset_config = (
-            config.KC_LAYER,
-            config.KC_LABELS,
-            config.PATCH_SIZE,
-            naip_dataset.crs,
-            naip_dataset.res,
+        kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
+        label_dataset = KaneCounty(
+            paht=kc_shape_path,
+            layer=config.KC_LAYER,
+            labels=config.KC_LABELS,
+            patch_size=config.PATCH_SIZE,
+            dest_crs=naip_dataset.crs,
+            res=naip_dataset.res,
+            balance_classes=False,
         )
-        label_dataset = KaneCounty(shape_path, dataset_config, balance_classes=False)
         print("kc dataset loaded")
     return naip_dataset, label_dataset
 
@@ -220,18 +232,14 @@ def build_dataloaders(images, labels, split_rate, config):
         raise ValueError("Test dataset is empty after intersection!")
 
     train_sampler = BalancedRandomBatchGeoSampler(
-        config={
-            "dataset": train_dataset,
-            "size": config.PATCH_SIZE,
-            "batch_size": config.BATCH_SIZE,
-        }
+        dataset=train_dataset,
+        size=config.PATCH_SIZE,
+        batch_size=config.BATCH_SIZE,
     )
     test_sampler = BalancedGridGeoSampler(
-        config={
-            "dataset": test_dataset,
-            "size": config.PATCH_SIZE,
-            "stride": config.PATCH_SIZE,
-        }
+        dataset=test_dataset,
+        size=config.PATCH_SIZE,
+        stride=config.PATCH_SIZE,
     )
 
     # Log sampler lengths
@@ -267,13 +275,13 @@ def build_dataloaders(images, labels, split_rate, config):
     return train_dataloader, test_dataloader
 
 
-def regularization_loss(model, reg_type, weight):
+def regularization_loss(model, reg_type, reg_weight):
     """Calculate the regularization loss for the model parameters.
 
     Args:
         model: The PyTorch model for which to calculate the regularization loss.
         reg_type: The type of regularization, either "l1" or "l2".
-        weight: The weight or strength of the regularization term.
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - float: The calculated regularization loss.
@@ -285,10 +293,17 @@ def regularization_loss(model, reg_type, weight):
     elif reg_type == "l2":
         for param in model.parameters():
             reg_loss += torch.sum(param**2)
-    return weight * reg_loss
+    return reg_weight * reg_loss
 
 
-def compute_loss(model, mask, y, loss_fn, reg_config):
+def compute_loss(
+    model,
+    mask,
+    y,
+    loss_fn,
+    reg_type: str,
+    reg_weight: float,
+):
     """Compute the total loss optionally the regularization loss.
 
     Args:
@@ -296,15 +311,13 @@ def compute_loss(model, mask, y, loss_fn, reg_config):
         mask: The input mask tensor.
         y: The target tensor.
         loss_fn: The loss function to use for computing the base loss.
-        reg_config: a tuple of
-            reg_type: The type of regularization, either "l1" or "l2".
-            reg_weight: The weight or strength of the regularization term.
+        reg_type: The type of regularization, either "l1" or "l2".
+        reg_weight: The weight or strength of the regularization term.
 
     Returns:
     - torch.Tensor: The total loss as a PyTorch tensor.
     """
     base_loss = loss_fn(mask, y)
-    reg_type, reg_weight = reg_config
     if reg_type is not None:
         reg_loss = regularization_loss(model, reg_type, reg_weight)
         base_loss += reg_loss
@@ -335,16 +348,15 @@ def create_model(
     if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
-    model_configs = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
-        "num_classes": num_classes,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
-        "in_channels": in_channels,
-    }
+    model = SegmentationModel(
+        model_type=config.MODEL,
+        backbone=config.BACKBONE,
+        weights=config.WEIGHTS,
+        num_classes=num_classes,
+        in_channels=in_channels,
+        dropout=config.DROPOUT,
+    ).model.to(device)
 
-    model = SegmentationModel(model_configs).model.to(device)
     if not debug:
         logging.info(model)
 
@@ -724,7 +736,8 @@ def train_epoch(
             outputs,
             y,
             loss_fn,
-            (config.REGULARIZATION_TYPE, config.REGULARIZATION_WEIGHT),
+            config.REGULARIZATION_TYPE,
+            config.REGULARIZATION_WEIGHT,
         )
 
         # update jaccard index
@@ -1272,9 +1285,72 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     return train_iou, test_iou
 
 
+def run_trials(trial_id, gpu_id, args_dict, split, exp_name, wandb_tune, num_trials):
+    """Running training for multiple trials"""
+    torch.cuda.set_device(gpu_id)
+
+    global config, images, labels
+    config = importlib.import_module(args_dict["config"])
+    print("Multiprocessing:", config.MULTIPROCESSING)
+    images, labels = initialize_dataset(config)
+
+    args = Namespace(**args_dict)
+
+    if wandb_tune:
+        wandb.init(project="CMAP")
+        print("wandb taken over config")
+    else:
+        # Initialize wandb with default configuration but disable logging
+        wandb.init(project="CMAP", config=config, mode="disabled")
+
+    train_ious = []
+    test_ious = []
+
+    if config.MULTIPROCESSING:
+        train_iou, test_iou = one_trial(
+            exp_name, trial_id, wandb_tune, images, labels, split, args
+        )
+        train_ious.append(round(float(train_iou), 3))
+        test_ious.append(round(float(test_iou), 3))
+    else:
+        for num in range(num_trials):
+            train_iou, test_iou = one_trial(
+                exp_name, num, wandb_tune, images, labels, split, args
+            )
+            train_ious.append(round(float(train_iou), 3))
+            test_ious.append(round(float(test_iou), 3))
+
+    test_average = mean(test_ious)
+    train_average = mean(train_ious)
+    test_std = 0
+    train_std = 0
+    if num_trials > 1:
+        test_std = stdev(test_ious)
+        train_std = stdev(train_ious)
+
+    print(
+        f"""
+        Training result: {train_ious},
+        average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
+    )
+    print(
+        f"""
+        Test result: {test_ious},
+        average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
+    )
+
+    if wandb_tune:
+        wandb.run.summary["average_test_jaccard_index"] = test_average
+        wandb.finish()
+
+
 if __name__ == "__main__":
     # Check GPU availability; if GPU available, run on compute node, else exit
+    mp.set_start_method("spawn", force=True)
+
     check_gpu_availability()
+    num_gpus = torch.cuda.device_count()
+    print("The number of GPUs available is:", num_gpus)
 
     # import config and experiment name from runtime args
     parser = argparse.ArgumentParser(
@@ -1314,62 +1390,33 @@ if __name__ == "__main__":
 
     config = importlib.import_module(args.config)
 
-    # enable debug mode
-    if args.debug:
-        epoch = 1
-    else:
-        epoch = config.EPOCHS
-    # Enable debug mode in config
-    config.DEBUG_MODE = args.debug
-
+    args_dict = vars(args)  # make argparse Namespace pickle-safe
+    print(args_dict)
     exp_name, split, wandb_tune, num_trials = arg_parsing(args)
+    num_trials = int(num_trials)
 
     logging.info("Using %s device", MODEL_DEVICE)
 
-    images, labels = initialize_dataset(config)
-
-    def run_trials():
-        """Running training for multiple trials"""
-        # Extract config dictionary from module
-
-        if wandb_tune:
-            wandb.init(project="CMAP")
-            print("wandb taken over config")
-        else:
-            # Initialize wandb with default configuration but disable logging
-            wandb.init(project="CMAP", config=config, mode="disabled")
-
-        train_ious = []
-        test_ious = []
-
-        for num in range(num_trials):
-            train_iou, test_iou = one_trial(
-                exp_name, num, wandb_tune, images, labels, split, args
+    if config.MULTIPROCESSING:
+        processes = []
+        for trial_id in range(num_trials):
+            gpu_id = trial_id % num_gpus
+            p = mp.Process(
+                target=run_trials,
+                args=(
+                    trial_id,
+                    gpu_id,
+                    args_dict,
+                    split,
+                    exp_name,
+                    wandb_tune,
+                    num_trials,
+                ),
             )
-            train_ious.append(round(float(train_iou), 3))
-            test_ious.append(round(float(test_iou), 3))
+            p.start()
+            processes.append(p)
 
-        test_average = mean(test_ious)
-        train_average = mean(train_ious)
-        test_std = 0
-        train_std = 0
-        if num_trials > 1:
-            test_std = stdev(test_ious)
-            train_std = stdev(train_ious)
-
-        print(
-            f"""
-            Training result: {train_ious},
-            average: {train_average:.3f}, standard deviation: {train_std:.3f}"""
-        )
-        print(
-            f"""
-            Test result: {test_ious},
-            average: {test_average:.3f}, standard deviation:{test_std:.3f}"""
-        )
-
-        if wandb_tune:
-            wandb.run.summary["average_test_jaccard_index"] = test_average
-            wandb.finish()
-
-    run_trials()
+        for p in processes:
+            p.join()
+    else:
+        run_trials(0, 0, args_dict, split, exp_name, wandb_tune, num_trials)

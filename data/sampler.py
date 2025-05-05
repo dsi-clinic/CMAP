@@ -26,30 +26,37 @@ class BalancedRandomBatchGeoSampler(BatchGeoSampler):
     background and features. Note that randomly sampled chips may overlap.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(
+        self,
+        dataset,
+        size,
+        batch_size,
+        length=None,
+        roi=None,
+        units=None,
+    ) -> None:
         """Initialize a new Sampler instance.
 
         Args:
-            config: A dictionary containing the following keys:
-                - dataset: dataset to index from
-                - size: dimensions of each patch
-                - batch_size: number of samples per batch
-                - length: number of samples per epoch
-                - roi: region of interest to sample from
-                - units: defines if size is in pixel or CRS units
+            dataset: dataset to index from
+            size: dimensions of each patch
+            batch_size: number of samples per batch
+            length: number of samples per epoch
+            roi: region of interest to sample from
+            units: defines if size is in pixel or CRS units
         """
-        super().__init__(config["dataset"], config.get("roi"))
-        self.size = _to_tuple(config["size"])
+        super().__init__(dataset, roi)
+        self.size = _to_tuple(size)
 
-        if config.get("units") is None or config.get("units") == Units.PIXELS:
+        if units is None or units == Units.PIXELS:
             self.size = (self.size[0] * self.res, self.size[1] * self.res)
 
-        self.batch_size = config["batch_size"]
+        self.batch_size = batch_size
         self.length = 0
         self.hits, self.areas = self.calculate_hits_and_areas()
 
-        if config.get("length") is not None:
-            self.length = config["length"]
+        if length is not None:
+            self.length = length
 
     def calculate_hits_and_areas(
         self,
@@ -142,22 +149,28 @@ class BalancedGridGeoSampler(GeoSampler):
     background and features.
     """
 
-    def __init__(self, config) -> None:
+    def __init__(
+        self,
+        dataset,
+        size,
+        stride,
+        roi=None,
+        units=None,
+    ) -> None:
         """Initialize a new Sampler instance.
 
         Args:
-            config: A dictionary containing the following keys:
-                - dataset: dataset to index from
-                - size: dimensions of each patch
-                - stride: distance to skip between each patch
-                - roi: region of interest to sample from
-                - units: defines if size and stride are in pixel or CRS units
+            dataset: dataset to index from
+            size: dimensions of each patch
+            stride: distance to skip between each patch
+            roi: region of interest to sample from
+            units: defines if size and stride are in pixel or CRS units
         """
-        super().__init__(config["dataset"], config.get("roi"))
-        self.size = _to_tuple(config["size"])
-        self.stride = _to_tuple(config["stride"])
+        super().__init__(dataset, roi)
+        self.size = _to_tuple(size)
+        self.stride = _to_tuple(stride)
 
-        if config.get("units") is None or config.get("units") == Units.PIXELS:
+        if units is None or units == Units.PIXELS:
             self.size = (self.size[0] * self.res, self.size[1] * self.res)
             self.stride = (self.stride[0] * self.res, self.stride[1] * self.res)
 

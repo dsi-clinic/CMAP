@@ -60,17 +60,25 @@ class KaneCounty(GeoDataset):
         15: "UNKNOWN",
     }
 
-    def __init__(self, path: str, configs, balance_classes: bool = False) -> None:
+    def __init__(
+        self,
+        layer: int,
+        labels: dict,
+        patch_size: int,
+        dest_crs: str,
+        res: float,
+        path: str,
+        balance_classes: bool = False,
+    ) -> None:
         """Initialize a new KaneCounty dataset instance.
 
         Args:
+            layer: specifying layer of GPKG
+            labels: a dictionary containing a label mapping for masks
+            patch_size: the patch size used for the model
+            dest_crs: the coordinate reference system (CRS) to convert to
+            res: resolution of the dataset in units of CRS
             path: directory to the file to load
-            configs: a tuple containing
-                layer: specifying layer of GPKG
-                labels: a dictionary containing a label mapping for masks
-                patch_size: the patch size used for the model
-                dest_crs: the coordinate reference system (CRS) to convert to
-                res: resolution of the dataset in units of CRS
             balance_classes: whether to balance classes by repeating underrepresented ones
 
         Raises:
@@ -78,25 +86,30 @@ class KaneCounty(GeoDataset):
         """
         super().__init__()
 
-        layer, labels, patch_size, dest_crs, res = configs
-
-        gdf = self._load_and_prepare_data(path, layer, labels, dest_crs)
-        self.gdf = gdf
-
-        context_size = math.ceil(patch_size / 2 * res)
-        print(f"context_size: {context_size}")
-        print(f"patch_size: {patch_size}")
-        print(f"res: {res}")
-        self.context_size = context_size
+        self.layer = layer
+        self.labels = labels
+        self.patch_size = patch_size
         self._crs = dest_crs
         self._res = res
+        self.path = path
+        self.balance_classes = balance_classes
 
-        self._populate_index(path, gdf, context_size, balance_classes)
+        gdf = self._load_and_prepare_data()
+        self.gdf = gdf
+
+        context_size = math.ceil(self.patch_size / 2 * self._res)
+        self.context_size = context_size
+
+        print(f"context_size: {context_size}")
+        print(f"patch_size: {self.patch_size}")
+        print(f"res: {self._res}")
+
+        self._populate_index()
         self.labels = labels
         self.colors = {i: self.all_colors[i] for i in labels.values()}
         self.labels_inverse = {v: k for k, v in labels.items()}
 
-    def _load_and_prepare_data(self, path, layer, labels, dest_crs):
+    def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
 
         Args:
@@ -108,12 +121,12 @@ class KaneCounty(GeoDataset):
         Returns:
             gdf: A GeoDataFrame filtered and converted to the target CRS
         """
-        gdf = gpd.read_file(path, layer=layer)[["BasinType", "geometry"]]
-        gdf = gdf[gdf["BasinType"].isin(labels.keys())]
-        gdf = gdf.to_crs(dest_crs)
+        gdf = gpd.read_file(self.path, layer=self.layer)[["BasinType", "geometry"]]
+        gdf = gdf[gdf["BasinType"].isin(self.labels.keys())]
+        gdf = gdf.to_crs(self._crs)
         return gdf
 
-    def _populate_index(self, path, gdf, context_size, balance_classes=False):
+    def _populate_index(self):
         """Populate the spatial index with data from the GeoDataFrame.
 
         Args:
@@ -123,8 +136,8 @@ class KaneCounty(GeoDataset):
             balance_classes: whether to balance classes by repeating underrepresented ones
         """
         # get counts of each class
-        class_counts = gdf["BasinType"].value_counts()
-        total_samples = len(gdf)
+        class_counts = self.gdf["BasinType"].value_counts()
+        total_samples = len(self.gdf)
 
         # log before-balancing distribution
         print("Class distribution before balancing:")
@@ -132,7 +145,7 @@ class KaneCounty(GeoDataset):
             percentage = (count / total_samples) * 100
             print(f"  {cls}: {count} samples ({percentage:.2f}%)")
 
-        if balance_classes:
+        if self.balance_classes:
             max_count = class_counts.max()
             class_multipliers = {
                 cls: max(1, int(max_count / count))
@@ -154,14 +167,14 @@ class KaneCounty(GeoDataset):
             print(f"\nClass balancing multipliers: {class_multipliers}")
 
         i = 0
-        for _, row in gdf.iterrows():
+        for _, row in self.gdf.iterrows():
             minx, miny, maxx, maxy = row["geometry"].bounds
             mint, maxt = 0, sys.maxsize
             coords = (
-                minx - context_size,
-                maxx + context_size,
-                miny - context_size,
-                maxy + context_size,
+                minx - self.context_size,
+                maxx + self.context_size,
+                miny - self.context_size,
+                maxy + self.context_size,
                 mint,
                 maxt,
             )
@@ -171,7 +184,7 @@ class KaneCounty(GeoDataset):
             i += 1
 
             # if balancing is enabled, repeat underrepresented classes
-            if balance_classes:
+            if self.balance_classes:
                 basin_type = row["BasinType"]
                 # repeat this item (multiplier-1) more times
                 for _ in range(class_multipliers[basin_type] - 1):
@@ -179,7 +192,7 @@ class KaneCounty(GeoDataset):
                     i += 1
 
         if i == 0:
-            msg = f"No {self.__class__.__name__} data was found in `path='{path}'`"
+            msg = f"No {self.__class__.__name__} data was found in `path='{self.path}'`"
             raise FileNotFoundError(msg)
 
     def __getitem__(self, query: BoundingBox):
@@ -208,8 +221,8 @@ class KaneCounty(GeoDataset):
             label = self.labels[obj["BasinType"]]
             shapes.append((shape, label))
 
-        width = (query.maxx - query.minx) / self._res
-        height = (query.maxy - query.miny) / self._res
+        width = (query.maxx - query.minx) / self.res
+        height = (query.maxy - query.miny) / self.res
         transform = rasterio.transform.from_bounds(
             query.minx, query.miny, query.maxx, query.maxy, width, height
         )
@@ -226,7 +239,7 @@ class KaneCounty(GeoDataset):
 
         sample = {
             "mask": torch.Tensor(masks).long(),
-            "crs": self.crs,
+            "crs": self._crs,
             "bbox": query,
         }
 

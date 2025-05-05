@@ -90,6 +90,53 @@ cd /home/YOUR_USERNAME/CMAP
 python train.py configs.config --experiment_name <ExperimentName> --aug_type <aug> --split <split> --num_trial <num_trial>
 ```
 
+### Example of Training with Slurm via `launcher_submitit.py` Script
+
+The `launcher_submitit.py` script streamlines running `train.py` on a Slurm/submitit cluster by submitting jobs and collecting performance metrics into a JSON summary file.
+
+**Usage:**
+
+In the Cluster's Login Node:
+
+```bash
+micromaba activate cmap
+
+python launcher_submitit.py <experiment_name> <num_trials> [--debug] [--log_file <path>]
+```
+
+- `<experiment_name>`: Title for the experiment&#x20;
+- `<num_trials>`: Number of trials to execute (default: `5`).
+- `--debug`: Optional flag to enable debug mode.
+- `--log_file <path>`: Optional path for the cumulative log file (default: `<launcher_directory>/iou_summary.json`).
+
+**Using the summary file for reproducibility:** 
+
+Before submitting any PR request that may alter the performace of the model the colaborator should should run a default train.py run (see below) and copy/paste the respective entry (see below) as seen in the summary file into the PR description. 
+
+The default train.py command:
+
+```bash
+python launcher_submitit.py <experiment_name> [--log_file <path>]
+```
+
+After running the default job, copy the corresponding JSON summary entry into your PR description. For example:
+
+```json
+"debug3": {
+    "Experiment": "debug3",
+    "AvgTrainIoU": 0.0,
+    "AvgTestIoU": 0.053,
+    "TrainList": [
+      "0.0",
+      "0.0"
+    ],
+    "TestList": [
+      "0.082",
+      "0.024"
+    ],
+    "OutputDir": "/net/projects/cmap/workspaces..."
+  }
+```
 
 ## RiverDataset Information
 
