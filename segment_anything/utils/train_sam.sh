@@ -6,29 +6,32 @@
 #SBATCH --error=/home/gregoryc25/slurm/out/%j.stderr
 #SBATCH --partition=general
 #SBATCH --nodes=1
-#SBATCH --ntasks=4          # total DDP ranks
-#SBATCH --gres=gpu:4        # one GPU per rank
-#SBATCH --cpus-per-task=4   # threads per rank
+#SBATCH --ntasks=4                # 4 total DDP processes
+#SBATCH --gres=gpu:4              # 1 GPU per DDP process
+#SBATCH --cpus-per-task=4         # 4 CPU threads per rank
 #SBATCH --mem=64G
 #SBATCH --time=12:00:00
+#SBATCH --chdir=/home/gregoryc25/CMAP/segment_anything/utils
 
-# Set up DDP rendezvous
-export MASTER_ADDR=$(scontrol show hostname $SLURM_NODELIST | head -n1)
-export MASTER_PORT=29505
-
-# Activate your environment
+# Load shell hooks for micromamba
 eval "$(micromamba shell hook -s bash)"
 micromamba activate cmap
 
-# Launch 4 processes, disable Slurm CPU binding
+# Set master address and unique port for DDP
+export MASTER_ADDR=$(hostname)
+export MASTER_PORT=$((12000 + RANDOM % 10000))
+
+# Launch DDP training
 srun --cpu-bind=none python -m torch.distributed.run \
      --nproc_per_node=$SLURM_NTASKS \
-     $(dirname "$0")/train_sam.py \
-       --image-dir /net/projects/cmap/data/KC-images \
-       --mask-dir  /net/projects/cmap/data/KC-masks/single-band-masks \
-       --checkpoint /home/gregoryc25/CMAP/segment_anything_source_code/sam_vit_h.pth \
-       --output fine_tuned_ddp.pth \
-       --epochs 5 \
-       --batch-size 1 \
-       --accum-steps 4 \
-       --lr 1e-4
+     /home/gregoryc25/CMAP/segment_anything/utils/train_sam.py \
+     --image-dir /net/projects/cmap/data/KC-images \
+     --mask-dir  /net/projects/cmap/data/KC-masks/single-band-masks \
+     --mask-prefix mask_ \
+     --checkpoint /home/gregoryc25/CMAP/segment_anything_source_code/sam_vit_h.pth \
+     --output /home/gregoryc25/CMAP/segment_anything/fine_tuned_ddp.pth \
+     --epochs 5 \
+     --batch-size 1 \
+     --accum-steps 4 \
+     --lr 1e-4
+
