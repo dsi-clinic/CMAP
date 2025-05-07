@@ -104,6 +104,7 @@ class RiverDataset(GeoDataset):
                 self.patch_size,
                 self._crs,
                 self._res,
+                balance_classes=False,
             )
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
@@ -130,6 +131,8 @@ class RiverDataset(GeoDataset):
                 i += 1
                 if i > max_kc:
                     break
+            
+            print(f"Number of KC sample points added to RiverDataset index: {i}")
 
             # Preserve label ordering when combining
             rd_labels = (
@@ -165,6 +168,7 @@ class RiverDataset(GeoDataset):
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
         # print(f"Initialized RiverDataset with configs: {river_config}")
+        print(f"Total sample points in combined RiverDataset index (before NAIP intersection): {len(self.index)}")
 
     def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
@@ -313,6 +317,8 @@ class RiverDataset(GeoDataset):
                 print(
                     f"Warning: Only added {points_added}/{n_points} points for geometry {idx} after {attempts} attempts"
                 )
+
+        print(f"\nTotal RD points inserted into index: {i}")
 
         print(f"\nTotal points inserted: {i}")
         print(f"Target points: {total_points}")
