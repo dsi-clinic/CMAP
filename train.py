@@ -178,7 +178,7 @@ def initialize_dataset(config):
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
-            kc=False,
+            kc=True,
         )
         print("river dataset loaded")
     else:
