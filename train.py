@@ -178,19 +178,19 @@ def initialize_dataset(config):
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
-            kc=False,
+            kc=True,
         )
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
-            paht=kc_shape_path,
             layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
+            path=kc_shape_path,
             balance_classes=False,
         )
         print("kc dataset loaded")
@@ -435,12 +435,22 @@ def add_extra_channels(image, model):
 
 
 def apply_augmentations(
-    dataset, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    x_og,
+    y_og,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
 ):
     """Apply augmentations to the image and mask."""
-    x_og, y_og = dataset
-    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
-    x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
+    x_aug, y_aug = apply_augs(
+        spatial_augs,
+        color_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        x_og,
+        y_og,
+    )
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
     return x_aug, y_squeezed
@@ -574,14 +584,16 @@ def normalize_channels(x):
 
 def train_setup(
     sample: defaultdict[str, Any],
-    train_config,
-    aug_config,
+    epoch,
+    batch,
+    train_images_root,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
     model,
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
-    epoch, batch, train_images_root = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
-
     samp_image = sample["image"]
     samp_mask = sample["mask"]
 
@@ -619,10 +631,14 @@ def train_setup(
     if batch == 0:  # Log stats for first batch only
         log_channel_stats(x_norm, "normalized input", logging.getLogger())
 
-    img_data = (x_norm, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
-        img_data, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+        x_norm,
+        y,
+        spatial_augs,
+        color_augs,
+        spatial_aug_mode,
+        color_aug_mode,
     )
 
     if batch == 0:  # Log stats for first batch only
@@ -646,8 +662,16 @@ def train_setup(
 def train_epoch(
     dataloader,
     model,
-    train_config,
-    aug_config,
+    loss_fn,
+    jaccard,
+    optimizer,
+    epoch,
+    train_images_root,
+    num_classes,
+    spatial_augs,
+    color_augs,
+    spatial_aug_mode,
+    color_aug_mode,
     writer,
     args,
     wandb_tune,
@@ -657,27 +681,22 @@ def train_epoch(
     Args:
         dataloader: The data loader containing the training data.
         model: The PyTorch model to be trained.
-        train_config: a tuple of
-            - loss_fn: The loss function to be used for training.
-            - jaccard: The metric to measure Jaccard index during training.
-            - optimizer: The optimizer to be used for updating model parameters.
-            - epoch: The current epoch number.
-            - train_images_root: The root directory for saving training sample images.
-        aug_config: a tuple of
-            - spatial_augs: The sequence of spatial augmentations.
-            - color_augs: The sequence of color augmentations.
-            - spatial_aug_mode: The mode for spatial augmentations.
-            - color_aug_mode: The mode for color augmentations.
+        loss_fn: The loss function to be used for training.
+        jaccard: The metric to measure Jaccard index during training.
+        optimizer: The optimizer to be used for updating model parameters.
+        epoch: The current epoch number.
+        train_images_root: The root directory for saving training sample images.
+        num_classes: The number of labels to predict.
+        spatial_augs: The sequence of spatial augmentations.
+        color_augs: The sequence of color augmentations.
+        spatial_aug_mode: The mode for spatial augmentations.
+        color_aug_mode: The mode for color augmentations.
         writer: The TensorBoard writer for logging training metrics.
-        args: Additional arguments for debugging or special training conditions.
         args: Additional arguments for debugging or special training conditions.
         wandb_tune: whether tuning with wandb
     """
     # Add timing for dataloader initialization
     dataloader_start = time.time()
-
-    loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
 
     # start timing for this epoch
     epoch_start_time = time.time()
@@ -703,12 +722,15 @@ def train_epoch(
     train_loss = 0
     iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
-        train_config = (epoch, batch, train_images_root)
-        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
         x, y = train_setup(
             sample,
-            train_config,
-            aug_config,
+            epoch,
+            batch,
+            train_images_root,
+            spatial_augs,
+            color_augs,
+            spatial_aug_mode,
+            color_aug_mode,
             model,
         )
         x = x.to(MODEL_DEVICE)
@@ -815,7 +837,13 @@ def train_epoch(
 def test(
     dataloader: DataLoader,
     model: Module,
-    test_config,
+    loss_fn,
+    jaccard,
+    epoch,
+    plateau_count,
+    test_image_root,
+    num_classes,
+    jaccard_per_class,
     writer,
     wandb_tune: bool,
     labels,
@@ -826,16 +854,14 @@ def test(
     Args:
         dataloader: Dataloader for the testing data.
         model: A PyTorch model.
-        test_config: A tuple containing:
-            - loss_fn: A PyTorch loss function.
-            - jaccard: The metric to be used for evaluation, specifically the
-                    Jaccard Index.
-            - epoch: The current epoch.
-            - plateau_count: The number of epochs the loss has been plateauing.
-            - test_image_root: The root directory for saving test images.
-            - writer: The TensorBoard writer for logging test metrics.
-            - num_classes: The number of labels to predict.
-            - jaccard_per_class: The metric to calculate Jaccard index per class.
+        loss_fn: A PyTorch loss function.
+        jaccard: The metric to be used for evaluation, specifically the
+            Jaccard Index.
+        epoch: The current epoch.
+        plateau_count: The number of epochs the loss has been plateauing.
+        test_image_root: The root directory for saving test images.
+        num_classes: The number of labels to predict.
+        jaccard_per_class: The metric to calculate Jaccard index per class.
         writer: The TensorBoard writer for logging test metrics.
         wandb_tune: whether tune with wandb
         labels: The labels for the dataset.
@@ -844,16 +870,6 @@ def test(
     Returns:
         float: The test loss for the epoch.
     """
-    (
-        loss_fn,
-        jaccard,
-        epoch,
-        plateau_count,
-        test_image_root,
-        writer,
-        num_classes,
-        jaccard_per_class,
-    ) = test_config
     num_batches = len(dataloader)
     model.eval()
     jaccard.reset()
@@ -1018,9 +1034,18 @@ def test(
 
 def train(
     model: Module,
-    train_test_config,
-    aug_config,
-    path_config: tuple[str, str, str],
+    train_dataloader,
+    train_jaccard,
+    test_jaccard,
+    test_dataloader,
+    loss_fn,
+    optimizer,
+    jaccard_per_class,
+    spatial_augs,
+    color_augs,
+    out_root,
+    train_images_root,
+    test_image_root,
     writer: SummaryWriter,
     wandb_tune: bool,
     args,
@@ -1032,20 +1057,18 @@ def train(
     Args:
         model: The deep learning model to be trained.
         train_test_config: A tuple containing:
-                - train_dataloader: DataLoader for training dataset.
-                - train_jaccard: Function to calculate Jaccard index for training.
-                - test_jaccard: Function to calculate Jaccard index for test.
-                - test_dataloader: DataLoader for test dataset.
-                - loss_fn: Loss function used for training and testing.
-                - optimizer: Optimization algorithm used for training.
-                - jaccard_per_class: Function to calculate Jaccard index per class.
-        aug_config: A tuple containing:
-                - spatial_augs: Spatial augmentations applied during training.
-                - color_augs: Color augmentations applied during training.
-        path_config: A tuple containing:
-                - out_root: Root directory for saving the trained model.
-                - train_images_root: Root directory for training images.
-                - test_image_root: Root directory for test images.
+        train_dataloader: DataLoader for training dataset.
+        train_jaccard: Function to calculate Jaccard index for training.
+        test_jaccard: Function to calculate Jaccard index for test.
+        test_dataloader: DataLoader for test dataset.
+        loss_fn: Loss function used for training and testing.
+        optimizer: Optimization algorithm used for training.
+        jaccard_per_class: Function to calculate Jaccard index per class.
+        spatial_augs: Spatial augmentations applied during training.
+        color_augs: Color augmentations applied during training.
+        out_root: Root directory for saving the trained model.
+        train_images_root: Root directory for training images.
+        test_image_root: Root directory for test images.
         writer: The writer object for logging training progress.
         wandb_tune: Whether running hyperparameter tuning with wandb.
         args: Additional arguments for debugging or special training conditions.
@@ -1056,25 +1079,6 @@ def train(
         Tuple[float, float]: A tuple containing the Jaccard index for the last
              epoch of training and for the test dataset.
     """
-    (
-        train_dataloader,
-        train_jaccard,
-        test_jaccard,
-        test_dataloader,
-        loss_fn,
-        optimizer,
-        jaccard_per_class,
-    ) = train_test_config
-    (
-        out_root,
-        train_images_root,
-        test_image_root,
-    ) = path_config
-    (
-        spatial_augs,
-        color_augs,
-    ) = aug_config
-
     # How much the loss needs to drop to reset a plateau
     threshold = config.THRESHOLD
 
@@ -1100,20 +1104,16 @@ def train(
 
     for t in range(epoch):
         if t == 0:
-            test_config = (
+            test_loss, t_jaccard = test(
+                test_dataloader,
+                model,
                 loss_fn,
                 test_jaccard,
                 t,
                 plateau_count,
                 test_image_root,
-                writer,
                 len(labels.labels),
                 jaccard_per_class,
-            )
-            test_loss, t_jaccard = test(
-                test_dataloader,
-                model,
-                test_config,
                 writer,
                 args,
                 labels,
@@ -1121,44 +1121,34 @@ def train(
             print(f"untrained loss {test_loss:.3f}, jaccard {t_jaccard:.3f}")
 
         logging.info(f"Epoch {t + 1}\n-------------------------------")
-        train_config = (
+        epoch_jaccard = train_epoch(
+            train_dataloader,
+            model,
             loss_fn,
             train_jaccard,
             optimizer,
             t + 1,
             train_images_root,
             len(labels.labels),
-        )
-        aug_config = (
             spatial_augs,
             color_augs,
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
-        )
-        epoch_jaccard = train_epoch(
-            train_dataloader,
-            model,
-            train_config,
-            aug_config,
             writer,
             args,
             wandb_tune,
         )
 
-        test_config = (
+        test_loss, t_jaccard = test(
+            test_dataloader,
+            model,
             loss_fn,
             test_jaccard,
             t + 1,
             plateau_count,
             test_image_root,
-            writer,
             len(labels),
             jaccard_per_class,
-        )
-        test_loss, t_jaccard = test(
-            test_dataloader,
-            model,
-            test_config,
             writer,
             wandb_tune,
             labels,
@@ -1250,7 +1240,9 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         config.IMAGE_AUG_INDICES,
     )
     logging.info("Trial %d\n====================================", num + 1)
-    train_test_config = (
+
+    train_iou, test_iou = train(
+        model,
         train_dataloader,
         train_jaccard,
         test_jaccard,
@@ -1258,22 +1250,11 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         loss_fn,
         optimizer,
         jaccard_per_class,
-    )
-    aug_config = (
         spatial_augs,
         color_augs,
-    )
-    path_config = (
         out_root,
         train_images_root,
         test_image_root,
-    )
-
-    train_iou, test_iou = train(
-        model,
-        train_test_config,
-        aug_config,
-        path_config,
         writer,
         wandb_tune,
         args,
