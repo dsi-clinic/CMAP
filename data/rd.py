@@ -98,12 +98,12 @@ class RiverDataset(GeoDataset):
         if self.kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
             kc_dataset = KaneCounty(
-                kc_shape_path,
-                KC_LAYER,
-                KC_LABELS,
-                self.patch_size,
-                self._crs,
-                self._res,
+                layer=KC_LAYER,
+                labels=KC_LABELS,
+                patch_size=self.patch_size,
+                dest_crs=self._crs,
+                res=self._res,
+                path=kc_shape_path,
             )
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
