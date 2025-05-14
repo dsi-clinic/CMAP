@@ -1,213 +1,200 @@
 #!/usr/bin/env python
 """
-train_sam.py
-Distributed Data Parallel (DDP) version for multi-GPU training on a single node.
+train_sam.py — DDP fine-tuning of SAM mask decoder on Kane County via TorchGeo
 """
 import sys, os, argparse, random, csv
 from pathlib import Path
 import numpy as np
-import cv2
-from PIL import Image
-from collections import defaultdict
 import torch
 import torch.distributed as dist
+import cv2
+from PIL import Image
 from torch.nn.parallel import DistributedDataParallel as DDP
-from torch.utils.data import Dataset, DataLoader, DistributedSampler
+from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
+from collections import defaultdict
 
-sys.path.append("/home/gregoryc25/CMAP/segment_anything_source_code")
+# Expose repo root so imports from `data` and `prompted_kc` work
+repo_root = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(repo_root))
+
+# TorchGeo
+from torchgeo.datasets import NAIP, stack_samples
+from torchgeo.samplers import RandomGeoSampler, Units
+
+# Local dataset subclass
+from prompted_kc import PromptedKaneCounty
+from data.kc import KaneCounty
+
+# SAM
+sys.path.append(str(repo_root / "segment_anything_source_code"))
 from segment_anything.build_sam import sam_model_registry
 from segment_anything.predictor import SamPredictor
 
 def parse_args():
-    p = argparse.ArgumentParser(description="Fine-tune SAM mask decoder with DDP")
-    p.add_argument("--image-dir", required=True)
-    p.add_argument("--mask-dir", required=True)
-    p.add_argument("--mask-prefix", default="mask_")
-    p.add_argument("--checkpoint", required=True)
-    p.add_argument("--output", default="fine_tuned_ddp.pth")
-    p.add_argument("--csv-output", default="per_class_ious_ddp.csv")
-    p.add_argument("--epochs", type=int, default=5)
-    p.add_argument("--batch-size", type=int, default=1)
-    p.add_argument("--accum-steps", type=int, default=4)
-    p.add_argument("--lr", type=float, default=1e-4)
-    p.add_argument("--local_rank", type=int, default=int(os.environ.get('LOCAL_RANK', 0)))
+    p = argparse.ArgumentParser(description="DDP fine-tune SAM on KC with TorchGeo")
+    # SAM checkpoint + outputs
+    p.add_argument("--checkpoint", required=True, help="Path to SAM checkpoint .pth")
+    p.add_argument("--output",     default="fine_tuned_sam.pth",    help="Where to save weights")
+    p.add_argument("--csv-output", default="per_class_ious.csv",    help="CSV of per-class IoUs")
+    # training hyperparams
+    p.add_argument("--epochs",      type=int,   default=5)
+    p.add_argument("--batch-size",  type=int,   default=1)
+    p.add_argument("--accum-steps", type=int,   default=4)
+    p.add_argument("--lr",          type=float, default=1e-5)
+    p.add_argument("--num-workers", type=int,   default=4)
+    # TorchGeo data
+    p.add_argument("--naip-root",  required=True, help="Root directory of NAIP imagery")
+    p.add_argument("--shape-path", required=True, help="Path to KC .gpkg file")
+    p.add_argument("--layer-name", default="Basins", help="Layer name in GeoPackage")
+    p.add_argument("--chip-size",  type=int, default=512, help="Patch size in pixels")
+    # DDP
+    p.add_argument("--local_rank", type=int, default=int(os.environ.get("LOCAL_RANK",0)))
     return p.parse_args()
-
-class AerialDataset(Dataset):
-    def __init__(self, image_dir, mask_dir, mask_prefix="mask_"):
-        self.image_dir = image_dir
-        self.mask_dir = mask_dir
-        self.mask_prefix = mask_prefix
-        imgs = sorted([f for f in os.listdir(image_dir) if f.lower().endswith(('.png', '.jpg', '.tif'))])
-        self.pairs = []
-        for img in imgs:
-            m = self.mask_prefix + img
-            if os.path.exists(os.path.join(mask_dir, m)):
-                self.pairs.append((img, m))
-            else:
-                print(f"Warning: mask not found for {img}")
-        if dist.get_rank() == 0:
-            print(f"Dataset: {len(self.pairs)} image-mask pairs found.")
-
-    def __len__(self):
-        return len(self.pairs)
-
-    def __getitem__(self, idx):
-        img_fn, mask_fn = self.pairs[idx]
-        img_path = os.path.join(self.image_dir, img_fn)
-        msk_path = os.path.join(self.mask_dir, mask_fn)
-        img = Image.open(img_path).convert('RGB')
-        msk = Image.open(msk_path).convert('L')
-        w, h = img.size
-        r = min(1024 / w, 1024 / h)
-        if r < 1.0:
-            img = img.resize((int(w * r), int(h * r)), Image.BILINEAR)
-            msk = msk.resize((int(w * r), int(h * r)), Image.NEAREST)
-        img_np = np.array(img)
-        msk_np = np.array(msk)
-
-        valid_labels = np.unique(msk_np)
-        valid_labels = valid_labels[valid_labels > 0]
-        if len(valid_labels) > 0:
-            selected_cls = np.random.choice(valid_labels)
-            coords = np.argwhere(msk_np == selected_cls)
-            yi, xi = coords[np.random.randint(len(coords))]
-            point = np.array([int(xi), int(yi)], np.int32)
-        else:
-            selected_cls = 1
-            point = np.array([0, 0], np.int32)
-
-        return img_np, msk_np, point
-
-def sam_collate_fn(batch):
-    imgs, msks, pts = zip(*batch)
-    return list(imgs), list(msks), list(pts)
-
-def compute_iou_per_class(pred, target, class_ids=(0, 1)):
-    ious = {}
-    for cls in class_ids:
-        pred_cls = (pred == cls)
-        target_cls = (target == cls)
-        intersection = (pred_cls & target_cls).sum().item()
-        union = (pred_cls | target_cls).sum().item()
-        ious[cls] = intersection / union if union != 0 else 0.0
-    return ious
 
 def main():
     args = parse_args()
 
-    if "MASTER_PORT" not in os.environ:
-        os.environ["MASTER_PORT"] = str(random.randint(10000, 20000))
-
-    dist.init_process_group(backend='nccl')
+    # ── DDP init ────────────────────────────────────────────────────────
+    os.environ.setdefault("MASTER_ADDR","localhost")
+    os.environ.setdefault("MASTER_PORT", str(10000 + random.randrange(10000)))
+    dist.init_process_group("nccl", init_method="env://")
     torch.cuda.set_device(args.local_rank)
-    device = torch.device('cuda', args.local_rank)
-    rank = dist.get_rank()
+    device = torch.device(f"cuda:{args.local_rank}")
+    rank  = dist.get_rank()
+    world = dist.get_world_size()
 
-    writer = SummaryWriter(log_dir="runs/sam_finetune") if rank == 0 else None
-
+    # ── Logging / TB ────────────────────────────────────────────────────
+    writer = SummaryWriter("runs/sam_kc") if rank == 0 else None
+    debug_dir = Path("debug_images")
     if rank == 0:
-        print(f"Using device(s): {torch.cuda.device_count()} GPUs for DDP")
+        debug_dir.mkdir(exist_ok=True)
 
-    ckpt = Path(args.checkpoint)
-    if not ckpt.exists():
-        raise FileNotFoundError(f"Checkpoint not found: {ckpt}")
-    sam = sam_model_registry['vit_h'](checkpoint=str(ckpt))
+    # ── Load & freeze SAM ───────────────────────────────────────────────
+    sam = sam_model_registry["vit_h"](checkpoint=str(args.checkpoint))
     sam.to(device)
-    predictor = SamPredictor(sam)
-
     for p in sam.image_encoder.parameters(): p.requires_grad = False
     for p in sam.prompt_encoder.parameters(): p.requires_grad = False
     sam.image_encoder.eval(); sam.prompt_encoder.eval(); sam.mask_decoder.train()
-
     sam = DDP(sam, device_ids=[args.local_rank], output_device=args.local_rank)
-    ds = AerialDataset(args.image_dir, args.mask_dir, mask_prefix=args.mask_prefix)
-    sampler = DistributedSampler(ds)
-    loader = DataLoader(ds, batch_size=args.batch_size, sampler=sampler,
-                        num_workers=4, collate_fn=sam_collate_fn)
 
-    optimizer = torch.optim.AdamW(sam.module.mask_decoder.parameters(), lr=args.lr, weight_decay=1e-4)
-    scaler = torch.amp.GradScaler()
+    # ── Build TorchGeo dataset & sampler ────────────────────────────────
+    naip_ds = NAIP(args.naip_root)
+    # identity map: GT id → same id
+    idmap = {k: k for k in KaneCounty.all_labels.keys()}
+    label_ds = PromptedKaneCounty(
+        args.shape_path,
+        (args.layer_name, idmap, args.chip_size, naip_ds.crs, naip_ds.res)
+    )
+    combined = naip_ds & label_ds
 
-    final_class_ious = defaultdict(list)
+    sampler = RandomGeoSampler(
+        combined,
+        size=args.chip_size,
+        length=max(1, len(combined)//world),
+        units=Units.PIXELS
+    )
+    loader = DataLoader(
+        combined,
+        batch_size=args.batch_size,
+        sampler=sampler,
+        num_workers=args.num_workers,
+        collate_fn=stack_samples,
+        pin_memory=True,
+    )
 
+    # ── Optimizer & scaler ───────────────────────────────────────────────
+    optimizer = torch.optim.AdamW(sam.module.mask_decoder.parameters(), lr=args.lr)
+    scaler    = torch.cuda.amp.GradScaler()
+
+    final_ious = defaultdict(list)
+
+    # ── Training loop ───────────────────────────────────────────────────
     for epoch in range(args.epochs):
-        sampler.set_epoch(epoch)
-        running_loss = running_iou = 0.0
-        total = len(loader)
-        class_iou_totals = defaultdict(float)
-        class_counts = defaultdict(int)
+        sam.module.mask_decoder.train()
+        running_loss = 0.0
+        running_iou  = 0.0
+        steps = 0
 
-        for i, (imgs, msks, pts) in enumerate(loader, 1):
-            img_np, gt_np, point = imgs[0], msks[0], pts[0]
-            predictor.model = sam.module
-            predictor.set_image(img_np)
-            emb = predictor.get_image_embedding().to(device)
-            ipt = np.expand_dims(point, 0).astype(np.int32)
-            lbl = np.array([[1]], np.int32)
-            pt_t = torch.from_numpy(ipt).to(device).unsqueeze(0)
-            lb_t = torch.from_numpy(lbl).to(device)
-            sparse, dense = sam.module.prompt_encoder((pt_t, lb_t), None, None)
+        for batch in loader:
+            imgs   = batch["image"].to(device)  # (B,C,H,W)
+            masks  = batch["mask"].to(device)   # (B,H,W)
+            points = batch["point"]             # list of [x,y]
+            B = imgs.size(0)
 
-            with torch.amp.autocast(device_type='cuda'):
-                low_res, _ = sam.module.mask_decoder(
-                    image_embeddings=emb,
-                    image_pe=sam.module.prompt_encoder.get_dense_pe().to(device),
-                    sparse_prompt_embeddings=sparse.to(device),
-                    dense_prompt_embeddings=dense.to(device),
-                    multimask_output=True)
-                lr = low_res[:, 0:1]
-                H, W = gt_np.shape
-                up = torch.nn.functional.interpolate(lr, size=(H, W), mode='bilinear', align_corners=False)
-                gt_t = torch.from_numpy(gt_np.astype(np.float32)).to(device).unsqueeze(0).unsqueeze(0)
-                loss = torch.nn.functional.binary_cross_entropy_with_logits(up, gt_t)
+            loss_batch = 0.0
+            with torch.cuda.amp.autocast():
+                for b in range(B):
+                    # 1) embed
+                    img_np = imgs[b].permute(1,2,0).cpu().numpy().astype(np.uint8)
+                    predictor = SamPredictor(sam.module)
+                    predictor.set_image(img_np)
+                    emb = predictor.get_image_embedding().to(device)
+                    # 2) prompt
+                    pt = torch.from_numpy(points[b]).to(device).unsqueeze(0).unsqueeze(0).float()
+                    lbl = torch.ones((1,1), device=device)
+                    sp, dn = sam.module.prompt_encoder((pt,lbl), None, None)
+                    # 3) decode
+                    low, _ = sam.module.mask_decoder(
+                        image_embeddings=emb,
+                        image_pe=sam.module.prompt_encoder.get_dense_pe().to(device),
+                        sparse_prompt_embeddings=sp,
+                        dense_prompt_embeddings=dn,
+                        multimask_output=False
+                    )
+                    up = torch.nn.functional.interpolate(
+                        low, size=masks[b].shape, mode="bilinear", align_corners=False
+                    )
+                    gt = (masks[b]>0).float().unsqueeze(0).unsqueeze(0)
+                    l  = torch.nn.functional.binary_cross_entropy_with_logits(up, gt)
+                    loss_batch += l
 
-            scaler.scale(loss).backward()
-            if i % args.accum_steps == 0 or i == total:
-                scaler.step(optimizer); scaler.update(); optimizer.zero_grad()
+                    # IoU
+                    pred_bin = (up.sigmoid()>0.5).int().squeeze()
+                    inter = (pred_bin & masks[b].int()).sum().item()
+                    union = (pred_bin | masks[b].int()).sum().item()
+                    iou = inter/union if union>0 else 1.0
+                    cls = int(masks[b][points[b][1], points[b][0]].item())
+                    final_ious[cls].append(iou)
+                    running_iou += iou
 
-            running_loss += loss.item()
-            with torch.no_grad():
-                pred = (torch.sigmoid(up) > 0.5).float()
-                pred_mask = pred.squeeze().cpu().int()
-                gt_mask = gt_t.squeeze().cpu().int()
-                class_ids = torch.unique(gt_mask).tolist()
-                ious = compute_iou_per_class(pred_mask, gt_mask, class_ids)
-                for cls, iou in ious.items():
-                    class_iou_totals[cls] += iou
-                    class_counts[cls] += 1
-                    final_class_ious[cls].append(iou)
-                inter = (pred * gt_t).sum().item()
-                union = (pred + gt_t - pred * gt_t).sum().item()
-                running_iou += (inter / union) if union else 0
+                # normalize by accumulation
+                loss_batch = loss_batch / (args.accum_steps * B)
 
-            if i % 10 == 0 and rank == 0:
-                print(f"Epoch {epoch+1}/{args.epochs}, Step {i}/{total} "
-                      f"– Loss {running_loss/i:.4f}, IoU {running_iou/i:.4f}")
+            scaler.scale(loss_batch).backward()
+            steps += 1
 
-        if rank == 0:
-            print(f"Epoch {epoch+1} complete – Avg Loss {running_loss/total:.4f}, Avg IoU {running_iou/total:.4f}\n")
-            writer.add_scalar("Loss/train", running_loss / total, epoch)
-            writer.add_scalar("IoU/train", running_iou / total, epoch)
-            for cls in sorted(class_iou_totals):
-                avg_cls_iou = class_iou_totals[cls] / class_counts[cls]
-                writer.add_scalar(f"IoU/Class_{cls}", avg_cls_iou, epoch)
+            if steps % args.accum_steps == 0:
+                scaler.step(optimizer)
+                scaler.update()
+                optimizer.zero_grad()
 
-    if rank == 0:
+            running_loss += loss_batch.item()
+
+            if rank==0 and steps%10==0:
+                avg_l = running_loss/steps
+                avg_i = running_iou/(steps*B)
+                print(f"[Epoch {epoch+1}] Step {steps} → loss {avg_l:.4f}, IoU {avg_i:.4f}")
+
+        dist.barrier()
+        if rank==0:
+            avg_l = running_loss/steps
+            avg_i = running_iou/(steps*B)
+            writer.add_scalar("Loss/train", avg_l, epoch)
+            writer.add_scalar("IoU/train",  avg_i, epoch)
+            print(f"*** Epoch {epoch+1} done: loss {avg_l:.4f}, IoU {avg_i:.4f}")
+
+    # ── Finalize ────────────────────────────────────────────────────────
+    if rank==0:
         torch.save(sam.module.state_dict(), args.output)
-        print(f"Fine-tuned weights saved to {args.output}")
+        with open(args.csv_output, "w", newline="") as f:
+            w = csv.writer(f)
+            w.writerow(["class_id","mean_iou","std_iou","count"])
+            for cls, ious in final_ious.items():
+                w.writerow([cls, np.mean(ious), np.std(ious), len(ious)])
         writer.close()
-
-        # Save per-class IOU CSV
-        with open(args.csv_output, 'w', newline='') as f:
-            writer_csv = csv.writer(f)
-            writer_csv.writerow(["class_id", "mean_iou", "std_iou", "count"])
-            for cls, iou_list in final_class_ious.items():
-                writer_csv.writerow([cls, np.mean(iou_list), np.std(iou_list), len(iou_list)])
-            print(f"Saved per-class IoUs to {args.csv_output}")
 
     dist.destroy_process_group()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
