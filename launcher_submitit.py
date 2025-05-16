@@ -13,6 +13,7 @@ Then:
 import argparse
 import json
 import re
+from typing import Tuple, List
 from datetime import datetime
 from pathlib import Path
 
@@ -39,23 +40,38 @@ def _build_cmd(args):
     return cmd
 
 
-def _parse_stdout(text):
-    """Return (avg_train, avg_test, train_list, test_list)."""
-    avg_vals = re.findall(r"average:\s*([0-9.]+)", text)
-    avg_train, avg_test = map(float, avg_vals[:2])
+def _parse_stdout(text: str) -> Tuple[float, float, List[str], List[str]]:
+    """
+    Extract:
+      • average train IoU
+      • average test  IoU
+      • list of individual train IoUs
+      • list of individual test  IoUs
+    from the stdout produced by ``train.py``.
+    """
+    # Strip ANSI colour codes, just in case                      
+    text = re.sub(r"\x1b\\[[0-9;]*m", "", text)
 
-    train_match = re.search(r"Training result:\s*\[([^]]*)]", text)
-    test_match = re.search(r"Test result:\s*\[([^]]*)]", text)
-    train_list = (
-        [s.strip() for s in train_match.group(1).split(",") if s.strip()]
-        if train_match
-        else []
-    )
-    test_list = (
-        [s.strip() for s in test_match.group(1).split(",") if s.strip()]
-        if test_match
-        else []
-    )
+    # Regexes for the two summary blocks                       
+    block   = r"{label} result:\s*\[([^\]]*)\][^\n]*?average:\s*([0-9.]+)"
+    train_r = re.search(block.format(label="Training"), text, re.I | re.S)
+    test_r  = re.search(block.format(label="Test"),     text, re.I | re.S)
+
+    if not (train_r and test_r):
+        raise RuntimeError(
+            "Could not locate ‘Training result’ or ‘Test result’ blocks in job "
+            "output. Check that train.py prints them unchanged."
+        )
+
+    # Helper: turn the comma-separated string into a list of numbers as strings
+    def _split(valuestr: str) -> List[str]:
+        return [v.strip() for v in valuestr.split(",") if v.strip()]
+
+    train_list = _split(train_r.group(1))
+    test_list  = _split(test_r.group(1))
+    avg_train  = float(train_r.group(2))
+    avg_test   = float(test_r.group(2))
+
     return avg_train, avg_test, train_list, test_list
 
 
