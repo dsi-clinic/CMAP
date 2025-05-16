@@ -21,7 +21,7 @@ OUTPUT_ROOT = str(Path("/net/projects/cmap/workspaces/") / f"{os.environ['USER']
 
 # model selection
 MODEL = "deeplabv3+"
-BACKBONE = "resnet101"
+BACKBONE = "resnext101_32x8d" # new encoder (SMP-supported) #resnet101
 # check backbone, mean, and std when setting weights
 WEIGHTS = True
 
