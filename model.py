@@ -60,7 +60,7 @@ class SegmentationModel:
         None
         """
         model = model_config["model"]
-        self.backbone = model_config["backbone"]
+        self.backbone = model_config["backbone"].lower()
         self.num_classes = model_config["num_classes"]
         self.weights = model_config["weights"]
         self.in_channels = model_config["in_channels"]
@@ -72,25 +72,31 @@ class SegmentationModel:
             # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
             if self.weights and self.weights is not True:
                 weights_module, weights_submodule = self.weights.split(".")
+                print(f"Loading weights module {weights_module} and submodule {weights_submodule}")
                 weights_attribute = getattr(
                     importlib.import_module("torchgeo.models"),
-                    weights_module + "." + weights_submodule,
+                    weights_module #+ "." + weights_submodule,
                 )
-                weights_chans = weights_attribute.meta["in_chans"]
+                weights_submodule = getattr(weights_attribute, weights_submodule)
+                print(f"Loading weights_attribute from {weights_attribute}")
+                weights_chans = weights_submodule.meta["in_chans"]
 
                 self.in_channels = max(self.in_channels, weights_chans)
 
-                weights_backbone = weights_module.split("_")[0]
+                weights_backbone = weights_submodule.meta["model"]   #weights_module.split("_")[0]
                 if (
                     weights_backbone.lower() != self.backbone
                     and self.backbone != "vit_small_patch16_224"
                 ):
                     raise ValueError(
-                        "Backbone for weights does not match model backbone."
+                        "Backbone for weights does not match model backbone. Bacbone for weights is "
+                        f"{weights_backbone.lower()} and backbone for model is {self.backbone.lower()}"
                     )
-
-                if isinstance(weights_attribute, WeightsEnum):
-                    state_dict = weights_attribute.get_state_dict(progress=True)
+                print(f"type weights_attribute: {type(weights_attribute)}")
+                print(f"Path exists : {Path.exists(Path('/home/acherman/CMAP'))}")
+                if isinstance(weights_submodule, WeightsEnum):
+                    state_dict = weights_submodule.get_state_dict(progress=True)
+                    print(f"Successfuly got state_dict: {state_dict}")
                 elif Path.exists(weights_attribute):
                     _, state_dict = utils.extract_backbone(weights_attribute)
                 else:
