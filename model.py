@@ -36,35 +36,40 @@ class SegmentationModel:
         backbone for weights does not match the model backbone.
     """
 
-    def __init__(self, model_config):
-        """Initialize the SegmentationModel object with the provided model configuration.
+    def __init__(
+        self,
+        model: str,
+        backbone: str,
+        num_classes: int,
+        weights: str | bool,
+        in_channels: int,
+        dropout: float = 0.3,
+    ):
+        """Initialize the SegmentationModel object with the provided parameters.
 
         Parameters
         ----------
-        model_config : dict
-            A dictionary containing configuration parameters for the model.
-            The dictionary should contain the following keys:
-                - "model": str, The model type to use. Options are
-                'unet', 'deeplabv3+', and 'fcn'.
-                - "backbone": str, The encoder to use, which is the classification
-                model that will be used to extract features. Options are
-                listed on the smp docs.
-                - "num_classes": int, The number of classes to predict. Should
-                match the number of classes in the mask.
-                - "weights": Union[str, bool], The weights to use for the model.
-                If True, uses imagenet weights. Can also accept a string path
-                to a weights file, or a WeightsEnum with pretrained weights.
-
-        Returns:
-        -------
-        None
+        model : str
+            The model type to use. Options are 'unet', 'deeplabv3+', and 'fcn'.
+        backbone : str
+            The encoder to use, which is the classification model that will be used to extract features.
+            Options are listed on the smp docs.
+        num_classes : int
+            The number of classes to predict. Should match the number of classes in the mask.
+        weights : Union[str, bool]
+            The weights to use for the model. If True, uses imagenet weights.
+            Can also accept a string path to a weights file, or a WeightsEnum with pretrained weights.
+        in_channels : int
+            Number of input channels to the model.
+        dropout : float, optional
+            Dropout rate to use in the model, by default 0.3
         """
-        model = model_config["model"]
-        self.backbone = model_config["backbone"].lower()
-        self.num_classes = model_config["num_classes"]
-        self.weights = model_config["weights"]
-        self.in_channels = model_config["in_channels"]
-        self.dropout = model_config.get("dropout", 0.3)
+        self.model_type = model
+        self.backbone = backbone.lower()
+        self.num_classes = num_classes
+        self.weights = weights
+        self.in_channels = in_channels
+        self.dropout = dropout
         if model != "fcn":
             state_dict = None
             # set custom weights

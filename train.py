@@ -345,16 +345,14 @@ def create_model(
     if config.USE_DIFFDEM or config.USE_BASEDEM:
         in_channels += 1  # add DEM channel
 
-    model_configs = {
-        "model": config.MODEL,
-        "backbone": config.BACKBONE,
-        "num_classes": num_classes,
-        "weights": config.WEIGHTS,
-        "dropout": config.DROPOUT,
-        "in_channels": in_channels,
-    }
-
-    model = SegmentationModel(model_configs).model.to(device)
+    model = SegmentationModel(
+        model=config.MODEL,
+        backbone=config.BACKBONE,
+        num_classes=num_classes,
+        weights=config.WEIGHTS,
+        in_channels=in_channels,
+        dropout=config.DROPOUT,
+    ).model.to(device)
     if not debug:
         logging.info(model)
 
