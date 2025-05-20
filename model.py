@@ -5,13 +5,8 @@ input channels, number of classes,
 number of filters, and weights to initialize the model.
 """
 
-import importlib
-from pathlib import Path
-
 import segmentation_models_pytorch as smp
-from torchgeo.models import get_weight
-from torchgeo.trainers import utils
-from torchvision.models._api import WeightsEnum
+from torchgeo.models import get_model, get_weight
 
 from fcn import FCN
 
@@ -44,6 +39,8 @@ class SegmentationModel:
         weights: str | bool,
         in_channels: int,
         dropout: float = 0.3,
+        freeze_backbone: bool = False,
+        freeze_decoder: bool = False,
     ):
         """Initialize the SegmentationModel object with the provided parameters.
 
@@ -63,6 +60,10 @@ class SegmentationModel:
             Number of input channels to the model.
         dropout : float, optional
             Dropout rate to use in the model, by default 0.3
+        freeze_backbone : bool, optional
+            Whether to freeze the backbone of the model, by default False
+        freeze_decoder : bool, optional
+            Whether to freeze the decoder of the model, by default False
         """
         self.model_type = model
         self.backbone = backbone.lower()
@@ -70,68 +71,32 @@ class SegmentationModel:
         self.weights = weights
         self.in_channels = in_channels
         self.dropout = dropout
-        if model != "fcn":
-            state_dict = None
-            # set custom weights
-            # Assuming config.WEIGHTS contains the desired value,
-            # e.g., "ResNet50_Weights.LANDSAT_TM_TOA_MOCO"
-            if self.weights and self.weights is not True:
-                weights_module, weights_submodule = self.weights.split(".")
-                print(f"Loading weights module {weights_module} and submodule {weights_submodule}")
-                weights_attribute = getattr(
-                    importlib.import_module("torchgeo.models"),
-                    weights_module #+ "." + weights_submodule,
-                )
-                weights_submodule = getattr(weights_attribute, weights_submodule)
-                print(f"Loading weights_attribute from {weights_attribute}")
-                weights_chans = weights_submodule.meta["in_chans"]
+        self.freeze_backbone = freeze_backbone
+        self.freeze_decoder = freeze_decoder
 
-                self.in_channels = max(self.in_channels, weights_chans)
+        if model == "unet":
+            self.model = smp.Unet(
+                encoder_name=self.backbone,
+                encoder_weights="swsl" if self.weights is True else None,
+                in_channels=self.in_channels,
+                classes=self.num_classes,
+                aux_params={
+                    "classes": self.num_classes,
+                    "dropout": self.dropout,
+                },
+            )
 
-                weights_backbone = weights_submodule.meta["model"]   #weights_module.split("_")[0]
-                if (
-                    weights_backbone.lower() != self.backbone
-                    and self.backbone != "vit_small_patch16_224"
-                ):
-                    raise ValueError(
-                        "Backbone for weights does not match model backbone. Bacbone for weights is "
-                        f"{weights_backbone.lower()} and backbone for model is {self.backbone.lower()}"
-                    )
-                print(f"type weights_attribute: {type(weights_attribute)}")
-                print(f"Path exists : {Path.exists(Path('/home/acherman/CMAP'))}")
-                if isinstance(weights_submodule, WeightsEnum):
-                    state_dict = weights_submodule.get_state_dict(progress=True)
-                    print(f"Successfuly got state_dict: {state_dict}")
-                elif Path.exists(weights_attribute):
-                    _, state_dict = utils.extract_backbone(weights_attribute)
-                else:
-                    state_dict = get_weight(weights_attribute).get_state_dict(
-                        progress=True
-                    )
-
-            if model == "unet":
-                self.model = smp.Unet(
-                    encoder_name=self.backbone,
-                    encoder_weights="swsl" if self.weights is True else None,
-                    in_channels=self.in_channels,
-                    classes=self.num_classes,
-                    aux_params={
-                        "classes": self.num_classes,
-                        "dropout": self.dropout,
-                    },
-                )
-
-            elif model == "deeplabv3+":
-                self.model = smp.DeepLabV3Plus(
-                    encoder_name=self.backbone,
-                    encoder_weights=("imagenet" if self.weights is True else None),
-                    in_channels=self.in_channels,
-                    classes=self.num_classes,
-                    aux_params={
-                        "classes": self.num_classes,
-                        "dropout": self.dropout,
-                    },
-                )
+        elif model == "deeplabv3+":
+            self.model = smp.DeepLabV3Plus(
+                encoder_name=self.backbone,
+                encoder_weights=("imagenet" if self.weights is True else None),
+                in_channels=self.in_channels,
+                classes=self.num_classes,
+                aux_params={
+                    "classes": self.num_classes,
+                    "dropout": self.dropout,
+                },
+            )
 
         elif model == "fcn":
             self.model = FCN(
@@ -140,15 +105,35 @@ class SegmentationModel:
                 num_filters=3,
                 dropout=self.dropout,
             )
-
         else:
             raise ValueError(
                 f"Model type '{model}' is not valid. "
                 "Currently, only supports 'unet', 'deeplabv3+' and 'fcn'."
             )
-        if self.weights and self.weights is not True:
-            self.model.encoder.load_state_dict(state_dict)
+
+        if model != "fcn" and self.weights and self.weights is not True:
+            weights = get_weight(self.weights)
+            if weights.meta["model"].lower() != self.backbone:
+                raise ValueError(
+                    f"Backbone for weights does not match model backbone. Backbone for weights is "
+                    f"{weights.meta['model']} and backbone for model is {self.backbone}"
+                )
+            encoder = get_model(weights.meta["model"])
+            weights_chans = encoder.meta["in_chans"]
+            encoder.load_state_dict(weights.get_state_dict(progress=True))
+            self.model.encoder = encoder
+
+            self.in_channels = max(self.in_channels, weights_chans)
+
         self.model.in_channels = self.in_channels
+
+        if self.freeze_backbone and model in ["unet", "deeplabv3+"]:
+            for param in self.model.encoder.parameters():
+                param.requires_grad = False
+
+        if self.freeze_decoder and model in ["unet", "deeplabv3+"]:
+            for param in self.model.decoder.parameters():
+                param.requires_grad = False
 
     def __getbackbone__(self):
         """Returns the backbone of the model"""

@@ -352,6 +352,8 @@ def create_model(
         weights=config.WEIGHTS,
         in_channels=in_channels,
         dropout=config.DROPOUT,
+        freeze_backbone=config.FREEZE_BACKBONE,
+        freeze_decoder=config.FREEZE_DECODER,
     ).model.to(device)
     if not debug:
         logging.info(model)
