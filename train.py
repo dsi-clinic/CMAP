@@ -18,6 +18,7 @@ from collections import defaultdict
 from pathlib import Path
 from statistics import mean, stdev
 from typing import Any
+from tqdm import tqdm
 
 import kornia.augmentation as K
 import torch
@@ -178,19 +179,19 @@ def initialize_dataset(config):
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
             path=rd_shape_path,
-            kc=False,
+            kc=True,
         )
         print("river dataset loaded")
     else:
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
-            path=kc_shape_path,
             layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
             dest_crs=naip_dataset.crs,
             res=naip_dataset.res,
+            path=kc_shape_path,
             balance_classes=False,
         )
         print("kc dataset loaded")
@@ -224,6 +225,110 @@ def build_dataloaders(images, labels, split_rate, config):
     logging.info("After intersection:")
     logging.info(f"Train dataset size: {len(train_dataset)}")
     logging.info(f"Test dataset size: {len(test_dataset)}")
+
+    # Class Proportions
+    num_classes = len(labels.labels)
+    ignore_index_val = getattr(config, "IGNORE_INDEX", None)
+
+    num_batches_for_proportions_calc = 5
+
+    def get_class_proportions_for_dataset(dataset, dataset_name_str, labels_obj, current_config, num_batches_to_sample):
+        if len(dataset) == 0:
+            logging.warning(f"{dataset_name_str} is empty. Cannot calculate class proportions.")
+            return
+
+        num_classes_local = len(labels_obj.labels)
+        ignore_index_local = getattr(current_config, "IGNORE_INDEX", None)
+        class_pixel_counts = torch.zeros(num_classes_local, dtype=torch.long)
+        valid_total_pixels = 0
+
+        temp_sampler = BalancedGridGeoSampler(
+            dataset=dataset,
+            size=current_config.PATCH_SIZE,
+            stride=current_config.PATCH_SIZE,
+        )
+
+        if len(temp_sampler) == 0:
+            logging.warning(f"Temporary sampler for {dataset_name_str} is empty (no patches to sample). Cannot calculate class proportions.")
+            return
+
+        temp_dataloader = DataLoader(
+            dataset=dataset,
+            batch_size=current_config.BATCH_SIZE,
+            sampler=temp_sampler,
+            collate_fn=stack_samples,
+            num_workers=current_config.NUM_WORKERS,
+            persistent_workers=True if current_config.NUM_WORKERS > 0 else False,
+        )
+        
+        total_available_batches = len(temp_dataloader)
+        batches_to_process = total_available_batches
+        desc_suffix = f"all {total_available_batches} batches"
+
+        if num_batches_to_sample is not None and num_batches_to_sample > 0:
+            if num_batches_to_sample < total_available_batches:
+                batches_to_process = num_batches_to_sample
+                desc_suffix = f"first {batches_to_process} of {total_available_batches} batches"
+                logging.info(
+                    f"Limiting class proportion calculation for {dataset_name_str} to the {desc_suffix} "
+                    f"as per configuration. This might not be representative of the entire dataset."
+                )
+            else:
+                logging.info(
+                    f"Requested {num_batches_to_sample} batches for proportion calculation for {dataset_name_str}, "
+                    f"which is >= total available batches ({total_available_batches}). Using all batches."
+                )
+        
+        logging.info(f"Calculating class proportions for {dataset_name_str} using {desc_suffix} (PATCH_SIZE: {current_config.PATCH_SIZE})...")
+        
+        processed_batches_count = 0
+        for batch_data in tqdm(temp_dataloader, desc=f"Analyzing {dataset_name_str} ({desc_suffix})", total=batches_to_process):
+            if processed_batches_count >= batches_to_process:
+                break # Stop after processing the desired number of batches
+
+            masks = batch_data['mask'].long()
+            
+            if ignore_index_local is not None:
+                valid_pixel_mask = (masks != ignore_index_local)
+                valid_total_pixels += valid_pixel_mask.sum().item()
+                
+                for class_idx in range(num_classes_local):
+                    if class_idx != ignore_index_local:
+                         class_pixel_counts[class_idx] += ((masks == class_idx) & valid_pixel_mask).sum().item()
+            else:
+                valid_total_pixels += masks.numel()
+                for class_idx in range(num_classes_local):
+                    class_pixel_counts[class_idx] += (masks == class_idx).sum().item()
+            
+            processed_batches_count += 1
+        
+        if valid_total_pixels == 0:
+            logging.warning(f"No valid pixels found in {dataset_name_str} (considering IGNORE_INDEX: {ignore_index_local}) after processing {processed_batches_count} batches. Cannot calculate class proportions.")
+            return
+
+        logging.info(f"--- Class Proportions for {dataset_name_str} (IGNORE_INDEX: {ignore_index_local}, based on {processed_batches_count} batches) ---")
+        for class_idx in range(num_classes_local):
+            if ignore_index_local is not None and class_idx == ignore_index_local:
+                logging.info(f"  Class ID {class_idx} is IGNORE_INDEX. Pixels: {class_pixel_counts[class_idx]}")
+                continue
+
+            class_name = labels_obj.labels_inverse.get(class_idx, f"Unknown Class {class_idx}")
+            proportion = (class_pixel_counts[class_idx] / valid_total_pixels) * 100 if valid_total_pixels > 0 else 0
+            logging.info(f"  {class_name} (ID: {class_idx}): {class_pixel_counts[class_idx]} pixels ({proportion:.2f}%)")
+        logging.info(f"Total valid pixels analyzed in {dataset_name_str} (from {processed_batches_count} batches): {valid_total_pixels}")
+        logging.info(f"--- End Class Proportions for {dataset_name_str} ---")
+
+    # Call the function for train_dataset
+    if len(train_dataset) > 0:
+        get_class_proportions_for_dataset(train_dataset, "Training Dataset", labels, config, num_batches_to_sample=num_batches_for_proportions_calc)
+    else:
+        logging.warning("Train dataset is empty after intersection. Skipping class proportion calculation.")
+
+    # Call the function for test_dataset
+    if len(test_dataset) > 0:
+        get_class_proportions_for_dataset(test_dataset, "Test Dataset", labels, config, num_batches_to_sample=num_batches_for_proportions_calc)
+    else:
+        logging.warning("Test dataset is empty after intersection. Skipping class proportion calculation.")
 
     # Check if datasets are empty before creating samplers
     if len(train_dataset) == 0:

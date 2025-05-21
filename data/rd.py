@@ -98,12 +98,12 @@ class RiverDataset(GeoDataset):
         if self.kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
             kc_dataset = KaneCounty(
-                kc_shape_path,
-                KC_LAYER,
-                KC_LABELS,
-                self.patch_size,
-                self._crs,
-                self._res,
+                layer=KC_LAYER,
+                labels=KC_LABELS,
+                patch_size=self.patch_size,
+                dest_crs=self._crs,
+                res=self._res,
+                path=kc_shape_path,
                 balance_classes=False,
             )
             print(f"river dataset crs {self.crs}")
@@ -127,7 +127,7 @@ class RiverDataset(GeoDataset):
                     item.bounds,
                     [obj_dict],  # wrap in list to match RD format
                 )
-                print(f"KC inserting coords {item.bounds}")
+                #print(f"KC inserting coords {item.bounds}")
                 i += 1
                 if i > max_kc:
                     break
