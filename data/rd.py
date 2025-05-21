@@ -98,12 +98,13 @@ class RiverDataset(GeoDataset):
         if self.kc:
             kc_shape_path = Path(KC_SHAPE_ROOT) / KC_SHAPE_FILENAME
             kc_dataset = KaneCounty(
-                kc_shape_path,
-                KC_LAYER,
-                KC_LABELS,
-                self.patch_size,
-                self._crs,
-                self._res,
+                layer=KC_LAYER,
+                labels=KC_LABELS,
+                patch_size=self.patch_size,
+                dest_crs=self._crs,
+                res=self._res,
+                path=kc_shape_path,
+                balance_classes=False,
             )
             print(f"river dataset crs {self.crs}")
             print(f"KC crs {kc_dataset.crs}")
@@ -126,10 +127,12 @@ class RiverDataset(GeoDataset):
                     item.bounds,
                     [obj_dict],  # wrap in list to match RD format
                 )
-                print(f"KC inserting coords {item.bounds}")
+                #print(f"KC inserting coords {item.bounds}")
                 i += 1
                 if i > max_kc:
                     break
+            
+            print(f"Number of KC sample points added to RiverDataset index: {i}")
 
             # Preserve label ordering when combining
             rd_labels = (
@@ -165,6 +168,7 @@ class RiverDataset(GeoDataset):
 
         self.labels_inverse = {v: k for k, v in self.labels.items()}
         # print(f"Initialized RiverDataset with configs: {river_config}")
+        print(f"Total sample points in combined RiverDataset index (before NAIP intersection): {len(self.index)}")
 
     def _load_and_prepare_data(self):
         """Load and prepare the GeoDataFrame.
@@ -314,10 +318,63 @@ class RiverDataset(GeoDataset):
                     f"Warning: Only added {points_added}/{n_points} points for geometry {idx} after {attempts} attempts"
                 )
 
+        print(f"\nTotal RD points inserted into index: {i}")
+
         print(f"\nTotal points inserted: {i}")
         print(f"Target points: {total_points}")
         print(f"Time taken: {time.time() - start:.0f} seconds")
 
+    # original __getitem__
+    # def __getitem__(self, query: BoundingBox):
+    #     """Retrieve image/mask and metadata indexed by query.
+
+    #     Args:
+    #         query: (minx, maxx, miny, maxy, mint, maxt) coordinates to index
+
+    #     Returns:
+    #         sample of image/mask and metadata at that index
+
+    #     Raises:
+    #         IndexError: if query is not found in the index
+    #     """
+    #     hits = self.index.intersection(tuple(query), objects=True)
+    #     if not hits:
+    #         raise IndexError(
+    #             f"query: {query} not found in index with bounds: {self.bounds}"
+    #         )
+
+    #     shapes = []
+    #     for hit in hits:
+    #         # hit.object is now a list of dictionaries
+    #         for obj in hit.object:
+    #             shape = obj["geometry"]
+    #             label = self.labels[obj["BasinType"]]
+    #             shapes.append((shape, label))
+
+    #     width = (query.maxx - query.minx) / self._res
+    #     height = (query.maxy - query.miny) / self._res
+    #     transform = rasterio.transform.from_bounds(
+    #         query.minx, query.miny, query.maxx, query.maxy, width, height
+    #     )
+    #     if shapes and min((round(height), round(width))) != 0:
+    #         masks = rasterio.features.rasterize(
+    #             shapes,
+    #             out_shape=(round(height), round(width)),
+    #             transform=transform,
+    #         )
+    #     else:
+    #         masks = np.zeros((round(height), round(width)), dtype=np.uint8)
+
+    #     sample = {
+    #         "mask": torch.Tensor(masks).long(),
+    #         "crs": self.crs,
+    #         "bbox": query,
+    #     }
+
+    #     if self.transforms is not None:
+    #         sample = self.transforms(sample)
+
+    #     return sample
     def __getitem__(self, query: BoundingBox):
         """Retrieve image/mask and metadata indexed by query.
 
@@ -328,42 +385,116 @@ class RiverDataset(GeoDataset):
             sample of image/mask and metadata at that index
 
         Raises:
-            IndexError: if query is not found in the index
+            IndexError: if query is not found in the index (implicitly via empty hits)
+                        Note: Now returns an empty mask instead of raising IndexError explicitly.
         """
+        # Query the spatial index for features intersecting the bounding box
         hits = self.index.intersection(tuple(query), objects=True)
-        if not hits:
-            raise IndexError(
-                f"query: {query} not found in index with bounds: {self.bounds}"
-            )
 
-        shapes = []
-        for hit in hits:
-            # hit.object is now a list of dictionaries
-            for obj in hit.object:
-                shape = obj["geometry"]
-                label = self.labels[obj["BasinType"]]
-                shapes.append((shape, label))
-
+        # Determine the output mask dimensions based on the query and resolution
         width = (query.maxx - query.minx) / self._res
         height = (query.maxy - query.miny) / self._res
-        transform = rasterio.transform.from_bounds(
-            query.minx, query.miny, query.maxx, query.maxy, width, height
-        )
-        if shapes and min((round(height), round(width))) != 0:
-            masks = rasterio.features.rasterize(
-                shapes,
-                out_shape=(round(height), round(width)),
-                transform=transform,
-            )
-        else:
-            masks = np.zeros((round(height), round(width)), dtype=np.uint8)
+        width_px = round(width)
+        height_px = round(height)
 
+        # Default mask is all background (0)
+        # Ensure non-negative dimensions before creating array
+        masks = np.zeros((max(0, height_px), max(0, width_px)), dtype=np.uint8)
+
+        # Proceed only if dimensions are valid and features were found
+        if min(height_px, width_px) > 0 and hits:
+            # Calculate the affine transform for rasterization
+            transform = rasterio.transform.from_bounds(
+                query.minx, query.miny, query.maxx, query.maxy, width_px, height_px
+            )
+
+            kc_shapes = []
+            river_shapes = []
+            # Ensure we have the correct label value for rivers from the combined labels
+            river_label_value = self.labels.get("STREAM/RIVER")
+            if river_label_value is None:
+                # Fallback or raise error if the expected river label isn't defined
+                print("Warning: 'STREAM/RIVER' label not found in self.labels. Check label definitions.")
+                # Assign a default or handle appropriately - here assuming 1 if not found
+                river_label_value = 1
+
+            # Separate features into KC and River lists
+            for hit in hits:
+                # hit.object is a list of dictionaries from _populate_index when using RD points,
+                # or a list containing one dict when adding KC features.
+                feature_list = hit.object if isinstance(hit.object, list) else [hit.object]
+
+                for obj in feature_list:
+                    # Check if obj is the dictionary we expect
+                    if not isinstance(obj, dict) or "geometry" not in obj or "BasinType" not in obj:
+                         print(f"Warning: Unexpected object format in index hit: {obj}. Skipping.")
+                         continue
+
+                    shape = obj["geometry"]
+                    basin_type = obj["BasinType"]
+                    label = self.labels.get(basin_type)
+
+                    if label is None:
+                        # Optional: Log if a BasinType from the shapefile isn't in the configured labels
+                        # print(f"Warning: BasinType '{basin_type}' not found in self.labels. Skipping shape.")
+                        continue
+
+                    # Check if the shape itself is valid before adding
+                    if shape is None or not shape.is_valid:
+                        # print(f"Warning: Invalid or None geometry for BasinType '{basin_type}'. Skipping shape.")
+                        continue
+
+                    if label == river_label_value:
+                        river_shapes.append((shape, label))
+                    else:
+                        kc_shapes.append((shape, label))
+
+            # --- Prioritized Rasterization ---
+            # 1. Rasterize Kane County (KC) features first. Default fill is 0 (BACKGROUND).
+            if kc_shapes:
+                try:
+                    masks = rasterio.features.rasterize(
+                        shapes=[(s, l) for s, l in kc_shapes if s is not None and s.is_valid], # Extra safety check
+                        out_shape=(height_px, width_px),
+                        transform=transform,
+                        fill=0,  # Background value
+                        dtype=np.uint8
+                    )
+                except Exception as e:
+                    print(f"Error rasterizing KC shapes for query {query}: {e}")
+                    # Keep the background mask if KC rasterization fails
+
+            # 2. Rasterize River features separately into a temporary mask.
+            if river_shapes:
+                try:
+                    # Create a temporary mask filled with 0s
+                    river_mask_only = np.zeros_like(masks, dtype=np.uint8)
+                    # Rasterize only rivers onto this temporary mask
+                    river_mask_only = rasterio.features.rasterize(
+                        shapes=[(s, l) for s, l in river_shapes if s is not None and s.is_valid], # Extra safety check
+                        out_shape=(height_px, width_px),
+                        transform=transform,
+                        fill=0, # Fill non-river areas with 0
+                        dtype=np.uint8
+                    )
+
+                    # 3. Overlay river pixels onto the main mask.
+                    # Where river_mask_only has the river label, update the main 'masks' array.
+                    masks[river_mask_only == river_label_value] = river_label_value
+
+                except Exception as e:
+                    print(f"Error rasterizing or overlaying River shapes for query {query}: {e}")
+                    # Continue with the KC mask if river rasterization/overlay fails
+
+        # --- Final Sample Preparation ---
         sample = {
-            "mask": torch.Tensor(masks).long(),
+            # Convert the final numpy mask to a Long tensor for PyTorch
+            "mask": torch.from_numpy(masks).long(),
             "crs": self.crs,
             "bbox": query,
         }
 
+        # Apply any specified transforms
         if self.transforms is not None:
             sample = self.transforms(sample)
 
