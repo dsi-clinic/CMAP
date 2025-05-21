@@ -24,6 +24,7 @@ from torch.utils.data import DataLoader
 from torch.utils.tensorboard import SummaryWriter
 from torchgeo.datasets import NAIP, stack_samples
 from torchgeo.samplers import RandomGeoSampler, Units
+from tqdm import tqdm  # Import tqdm
 
 from data.kc import KaneCounty
 from segment_anything.build_sam import sam_model_registry
@@ -39,9 +40,8 @@ import matplotlib.pyplot as plt
 # print(f"DEBUG: sys.path updated with repo_root: {repo_root}", flush=True)
 
 
-# === DEFINE PLOT_EVERY_N_BATCHES CONSTANT START ===
 PLOT_EVERY_N_BATCHES = 100  # save a debug image every 100 batches
-# === DEFINE PLOT_EVERY_N_BATCHES CONSTANT END ===
+UPDATE_TENSORBOARD_EVERY_N_ITERS = 50  # log to tensorboard every 50 optimizer steps
 RGBA_CHANNELS = 4  # number of channels in an RGBA image
 SIGMOID_THRESHOLD = 0.5  # threshold for converting sigmoid output to binary mask
 
@@ -111,7 +111,6 @@ def main():
     csv_output_path = output_dir / "per_class_ious.csv"
     log_file_path = output_dir / "training.log"
     debug_images_dir = output_dir / "debug_images"
-    tensorboard_log_dir = output_dir / "runs" / "sam_kc"
 
     log_level = logging.DEBUG  # Or use logging.INFO for less verbosity
     handlers_list = []
@@ -141,7 +140,7 @@ def main():
 
     # ── Logging / TB ────────────────────────────────────────────────────
     logging.debug("Setting up SummaryWriter and debug directory...")
-    writer = SummaryWriter(log_dir=str(tensorboard_log_dir)) if rank == 0 else None
+    writer = SummaryWriter(log_dir=str(output_dir)) if rank == 0 else None
     if rank == 0:
         debug_images_dir.mkdir(exist_ok=True)
     logging.debug("SummaryWriter and debug directory setup complete.")
@@ -244,33 +243,35 @@ def main():
     final_ious = defaultdict(list)
     logging.debug("Initialized final_ious defaultdict.")
 
+    total_optimizer_steps_taken = 0  # tracks total optimizer steps across all epochs
+
     logging.info("=== SETUP COMPLETE === Starting training loop... ===")
     for epoch in range(args.epochs):
         logging.info(f"Epoch {epoch+1}/{args.epochs} - Starting...")
         sam.module.mask_decoder.train()
-        running_loss = 0.0
-        running_iou = 0.0
-        steps = 0  # optimizer steps
+
+        epoch_loss_sum_scaled = 0.0  # Sum of (loss_batch_accumulator / accum_steps)
+        epoch_iou_sum = 0.0  # Sum of IoUs for all items processed in the epoch
+        epoch_items_processed = 0  # Total number of individual items processed for IoU
+        epoch_optimizer_steps = 0  # Number of optimizer steps taken in this epoch
+
+        pbar = None
+        if rank == 0:
+            pbar = tqdm(
+                total=len(loader), desc=f"Epoch {epoch+1}/{args.epochs}", unit="batch"
+            )
 
         logging.debug(
             f"Epoch {epoch+1} - About to iterate over DataLoader (length: {len(loader)})..."
         )
         for batch_idx, batch in enumerate(loader):
-            # `batch_idx` is the index of the current batch from the DataLoader
-            logging.debug(
-                f"Epoch {epoch+1} - Batch {batch_idx+1}/{len(loader)} received."
-            )
             imgs = batch["image"].to(device)
             masks = batch["mask"].to(device)  # ground truth masks
             points = batch["point"]
             B = imgs.size(0)  # actual batch size for this iteration
-            logging.debug(
-                f"Epoch {epoch+1} - Batch {batch_idx+1} - Data moved to device. Batch size: {B}"
-            )
 
             loss_batch_accumulator = 0.0  # accumulate loss for micro-batches
 
-            # Using recommended torch.amp.autocast for future compatibility
             with torch.cuda.amp.autocast():
                 for b in range(B):  # loop over items in the micro-batch
                     img_tensor_cpu = imgs[b].cpu()
@@ -346,9 +347,10 @@ def main():
                     prompt_y, prompt_x = points[b][1], points[b][0]  # points are [x,y]
                     cls = int(gt_mask_for_iou[prompt_y, prompt_x].item())
                     final_ious[cls].append(iou)
-                    running_iou += iou
 
-                    # === ADD PLOTTING CODE START ===
+                    epoch_iou_sum += iou
+                    epoch_items_processed += 1
+
                     if rank == 0 and b == 0 and batch_idx % PLOT_EVERY_N_BATCHES == 0:
                         logging.debug(
                             f"Generating debug plot for Epoch {epoch+1}, Batch {batch_idx+1}"
@@ -395,48 +397,77 @@ def main():
                                 f"ERROR saving plot {plot_filename}: {e_plot}"
                             )
                         plt.close(fig)  # close the figure to free memory
-                    # === ADD PLOTTING CODE END ===
 
             # Scale loss for gradient accumulation
             loss_to_scale = loss_batch_accumulator / args.accum_steps
             scaler.scale(loss_to_scale).backward()
-
             # Accumulate running loss (use the scaled loss for apples-to-apples comparison with printed loss)
-            running_loss += loss_to_scale.item()  # log the scaled loss
+            epoch_loss_sum_scaled += loss_to_scale.item()
 
             if (batch_idx + 1) % args.accum_steps == 0:
                 scaler.step(optimizer)
                 scaler.update()
                 optimizer.zero_grad()
-                steps += 1  # increment optimizer steps count
+                epoch_optimizer_steps += 1
+                total_optimizer_steps_taken += 1
 
-                if rank == 0 and steps % 10 == 0:  # log every 10 optimizer steps
-                    # Average loss is running_loss / (number of items contributing to running_loss)
-                    # Number of items = steps * B (if batch_size B is always constant)
-                    # Or, more simply, average loss per optimizer step:
-                    avg_l = (
-                        running_loss / steps
-                    )  # running_loss already accounts for B and accum_steps
-                    avg_i = running_iou / (
-                        steps * args.batch_size * args.accum_steps
-                    )  # iou is per item
-                    logging.info(
-                        f"[Epoch {epoch+1}] Opt_Step {steps} (Batch {batch_idx+1}) → loss {avg_l:.4f}, IoU {avg_i:.4f}"
+                if rank == 0:  # pbar and tensorboard updates only on rank 0
+                    avg_loss_disp = (
+                        epoch_loss_sum_scaled / epoch_optimizer_steps
+                        if epoch_optimizer_steps > 0
+                        else 0.0
                     )
+                    avg_iou_disp = (
+                        epoch_iou_sum / epoch_items_processed
+                        if epoch_items_processed > 0
+                        else 0.0
+                    )
+                    if pbar is not None:
+                        pbar.set_postfix(
+                            loss=f"{avg_loss_disp:.4f}",
+                            iou=f"{avg_iou_disp:.4f}",
+                            refresh=False,
+                        )
+
+                    if (
+                        writer is not None
+                        and total_optimizer_steps_taken
+                        % UPDATE_TENSORBOARD_EVERY_N_ITERS
+                        == 0
+                    ):
+                        writer.add_scalar(
+                            "train/loss",
+                            avg_loss_disp,
+                            total_optimizer_steps_taken,
+                        )
+                        writer.add_scalar(
+                            "train/IoU",
+                            avg_iou_disp,
+                            total_optimizer_steps_taken,
+                        )
+
+            if rank == 0 and pbar is not None:
+                pbar.update(1)
 
         logging.debug(f"Epoch {epoch+1} - Finished iterating over DataLoader.")
+
+        if rank == 0 and pbar is not None:
+            pbar.close()
+
         dist.barrier()
         logging.debug(f"Epoch {epoch+1} - Passed dist.barrier().")
         if rank == 0:
-            # Calculate epoch averages
-            # steps is total optimizer steps in this epoch
-            # total items processed = steps * args.batch_size * args.accum_steps
-            if steps > 0:  # avoid division by zero if epoch had no steps
-                avg_l_epoch = running_loss / steps
-                avg_i_epoch = running_iou / (steps * args.batch_size * args.accum_steps)
+            if epoch_optimizer_steps > 0:
+                avg_l_epoch = epoch_loss_sum_scaled / epoch_optimizer_steps
+                # Use epoch_items_processed for a more accurate IoU average
+                avg_i_epoch = (
+                    epoch_iou_sum / epoch_items_processed
+                    if epoch_items_processed > 0
+                    else 0.0
+                )
+
                 if writer:
                     writer.add_scalar("Loss/train", avg_l_epoch, epoch)
-                if writer:
                     writer.add_scalar("IoU/train", avg_i_epoch, epoch)
                 logging.info(
                     f"*** Epoch {epoch+1} done: loss {avg_l_epoch:.4f}, IoU {avg_i_epoch:.4f}"
