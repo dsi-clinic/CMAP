@@ -44,8 +44,8 @@ DATASET_STD = [
     # 0.1,  # DEM (optional)
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 512
-LEARNING_RATE = 1e-5
+PATCH_SIZE = 256
+LEARNING_RATE = 1e-4
 NUM_WORKERS = 1
 EPOCHS = 1
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
@@ -131,7 +131,7 @@ KC_LABELS = {
 RD_SHAPE_FILE = "Kane_Co_Open_Water_Layer.zip"
 RD_LAYER = 1
 
-USE_RIVERDATASET = True  # change to True if training w/ RiverDataset
+USE_RIVERDATASET = False  # change to True if training w/ RiverDataset
 
 # DEM data - a max of one should be enabled at a time
 USE_DIFFDEM = True  # change to True if training w/ difference DEM
