@@ -44,8 +44,8 @@ DATASET_STD = [
     # 0.1,  # DEM (optional)
 ]
 BATCH_SIZE = 16
-PATCH_SIZE = 512
-LEARNING_RATE = 1e-5
+PATCH_SIZE = 256
+LEARNING_RATE = 1e-4
 NUM_WORKERS = 1
 EPOCHS = 1
 IGNORE_INDEX = 0  # index in images to ignore for jaccard index
@@ -81,6 +81,15 @@ IMAGE_AUG_INDICES = [
     7,  # Gamma
 ]
 
+# only applied to DEM
+DEM_AUG_INDICES = [
+    0,  # Gaussian Blur
+    1,  # Gaussian Noise
+    2,  # Random Erasing
+    3,  # Elastic Transform
+    4,  # Gamma
+]
+
 # Augmentation
 ROTATION_DEGREES = 360
 COLOR_CONTRAST = 0.1
@@ -96,10 +105,16 @@ SATURATION_LIMIT = 0.3  # tuned
 SHADOW_INTENSITY = (-0.05, 0.0)
 SHADE_QUANTITY = (0.0, 0.05)
 GAMMA = (0.8, 1.2)
+# DEM Augmentation
+RANDOM_ERASING_SCALE = (0.02, 0.1)
+RANDOM_ERASING_RATIO = (0.3, 3.0)
+RANDOM_ELASTIC_TRANSFORM_ALPHA = (1.0, 2.0)
+RANDOM_ELASTIC_TRANSFORM_SIGMA = (9.0, 11.0)
 
 
 SPATIAL_AUG_MODE = "all"  # all or random
 COLOR_AUG_MODE = "all"  # all or random
+DEM_AUG_MODE = "all"  # all or random
 
 # KaneCounty data
 KC_SHAPE_FILENAME = "KC_StormwaterDataJan2024.gdb.zip"

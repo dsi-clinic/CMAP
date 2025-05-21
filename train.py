@@ -185,7 +185,7 @@ def initialize_dataset(config):
         # Default: use Kane County dataset
         kc_shape_path = Path(config.KC_SHAPE_ROOT) / config.KC_SHAPE_FILENAME
         label_dataset = KaneCounty(
-            paht=kc_shape_path,
+            path=kc_shape_path,
             layer=config.KC_LAYER,
             labels=config.KC_LABELS,
             patch_size=config.PATCH_SIZE,
@@ -435,11 +435,24 @@ def add_extra_channels(image, model):
 
 
 def apply_augmentations(
-    dataset, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+    dataset,
+    spatial_augs,
+    color_augs,
+    dem_augs,
+    spatial_aug_mode,
+    color_aug_mode,
+    dem_aug_mode,
 ):
     """Apply augmentations to the image and mask."""
     x_og, y_og = dataset
-    aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
+    aug_config = (
+        spatial_augs,
+        color_augs,
+        dem_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        dem_aug_mode,
+    )
     x_aug, y_aug = apply_augs(aug_config, x_og, y_og)
     y_aug = y_aug.type(torch.int64)  # Convert mask to int64 for loss function
     y_squeezed = y_aug.squeeze()  # Remove channel dim from mask
@@ -487,9 +500,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             plot_tensors.update(
                 {
                     "Difference DEM": x[i][3, :, :].cpu() / 255.0,
-                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :]
-                    .cpu()
-                    .clip(0, 1),
+                    "Augmented Difference DEM": x_aug_denorm[i][3, :, :].cpu() / 255.0,
                 }
             )
 
@@ -497,7 +508,7 @@ def save_training_images(epoch, train_images_root, x, samp_mask, x_aug, y_aug, s
             plot_tensors.update(
                 {
                     "Base DEM": x[i][3, :, :].cpu() / 255.0,
-                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu().clip(0, 1),
+                    "Augmented Base DEM": x_aug_denorm[i][3, :, :].cpu() / 255.0,
                 }
             )
 
@@ -580,7 +591,14 @@ def train_setup(
 ) -> tuple[torch.Tensor]:
     """Setup for training: sends images to device and applies augmentations."""
     epoch, batch, train_images_root = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
+    (
+        spatial_augs,
+        color_augs,
+        dem_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        dem_aug_mode,
+    ) = aug_config
 
     samp_image = sample["image"]
     samp_mask = sample["mask"]
@@ -622,7 +640,13 @@ def train_setup(
     img_data = (x_norm, y)
     # Apply augmentations
     x_aug, y_squeezed = apply_augmentations(
-        img_data, spatial_augs, color_augs, spatial_aug_mode, color_aug_mode
+        img_data,
+        spatial_augs,
+        color_augs,
+        dem_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        dem_aug_mode,
     )
 
     if batch == 0:  # Log stats for first batch only
@@ -666,8 +690,10 @@ def train_epoch(
         aug_config: a tuple of
             - spatial_augs: The sequence of spatial augmentations.
             - color_augs: The sequence of color augmentations.
+            - dem_augs: The sequence of DEM augmentations.
             - spatial_aug_mode: The mode for spatial augmentations.
             - color_aug_mode: The mode for color augmentations.
+            - dem_aug_mode: The mode for DEM augmentations.
         writer: The TensorBoard writer for logging training metrics.
         args: Additional arguments for debugging or special training conditions.
         args: Additional arguments for debugging or special training conditions.
@@ -677,7 +703,14 @@ def train_epoch(
     dataloader_start = time.time()
 
     loss_fn, jaccard, optimizer, epoch, train_images_root, num_classes = train_config
-    spatial_augs, color_augs, spatial_aug_mode, color_aug_mode = aug_config
+    (
+        spatial_augs,
+        color_augs,
+        dem_augs,
+        spatial_aug_mode,
+        color_aug_mode,
+        dem_aug_mode,
+    ) = aug_config
 
     # start timing for this epoch
     epoch_start_time = time.time()
@@ -704,7 +737,14 @@ def train_epoch(
     iteration_start_time = time.time()
     for batch, sample in enumerate(dataloader):
         train_config = (epoch, batch, train_images_root)
-        aug_config = (spatial_augs, color_augs, spatial_aug_mode, color_aug_mode)
+        aug_config = (
+            spatial_augs,
+            color_augs,
+            dem_augs,
+            spatial_aug_mode,
+            color_aug_mode,
+            dem_aug_mode,
+        )
         x, y = train_setup(
             sample,
             train_config,
@@ -1042,6 +1082,7 @@ def train(
         aug_config: A tuple containing:
                 - spatial_augs: Spatial augmentations applied during training.
                 - color_augs: Color augmentations applied during training.
+                - dem_augs: DEM augmentations applied during training.
         path_config: A tuple containing:
                 - out_root: Root directory for saving the trained model.
                 - train_images_root: Root directory for training images.
@@ -1073,6 +1114,10 @@ def train(
     (
         spatial_augs,
         color_augs,
+        dem_augs,
+        config.SPATIAL_AUG_MODE,
+        config.COLOR_AUG_MODE,
+        config.DEM_AUG_MODE,
     ) = aug_config
 
     # How much the loss needs to drop to reset a plateau
@@ -1132,8 +1177,10 @@ def train(
         aug_config = (
             spatial_augs,
             color_augs,
+            dem_augs,
             config.SPATIAL_AUG_MODE,
             config.COLOR_AUG_MODE,
+            config.DEM_AUG_MODE,
         )
         epoch_jaccard = train_epoch(
             train_dataloader,
@@ -1244,11 +1291,13 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
         device=MODEL_DEVICE,
         debug=args.debug,
     )
-    spatial_augs, color_augs = create_augmentation_pipelines(
+    spatial_augs, color_augs, dem_augs = create_augmentation_pipelines(
         config,
         config.SPATIAL_AUG_INDICES,
         config.IMAGE_AUG_INDICES,
+        config.DEM_AUG_INDICES,
     )
+    print("In one_trial(), DEM augs are:", config.DEM_AUG_INDICES)
     logging.info("Trial %d\n====================================", num + 1)
     train_test_config = (
         train_dataloader,
@@ -1262,6 +1311,10 @@ def one_trial(exp_n, num, wandb_tune, images, labels, split_rate, args):
     aug_config = (
         spatial_augs,
         color_augs,
+        dem_augs,
+        config.SPATIAL_AUG_MODE,
+        config.COLOR_AUG_MODE,
+        config.DEM_AUG_MODE,
     )
     path_config = (
         out_root,

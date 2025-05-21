@@ -25,13 +25,16 @@ def combine_channels(rgb, other_channels, rgb_mask, original_shape):
     return combined
 
 
-def create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices):
+def create_augmentation_pipelines(
+    config, spatial_aug_indices, color_aug_indices, dem_aug_indices
+):
     """Create lists of spatial and color augmentations.
 
     Args:
         config: configuration parameters for augmentations
         spatial_aug_indices: indices to select spatial augmentations
         color_aug_indices: indices to select color augs for RGB channels
+        dem_aug_indices: indices to select dem augs for DEM channel
 
     Returns:
         tuple containing lists of spatial and color augmentation objects
@@ -77,13 +80,45 @@ def create_augmentation_pipelines(config, spatial_aug_indices, color_aug_indices
         K.RandomGamma(gamma=config.GAMMA, p=0.5),
     ]
 
+    # Define all possible DEM augmentations
+    # (applied only to the DEM channel of the image)
+    all_dem_transforms = [
+        K.RandomGaussianBlur(
+            kernel_size=config.GAUSSIAN_BLUR_KERNEL,
+            sigma=config.GAUSSIAN_BLUR_SIGMA,
+            p=0.5,
+        ),
+        K.RandomGaussianNoise(
+            mean=0.0,
+            std=config.GAUSSIAN_NOISE_STD,
+            p=config.GAUSSIAN_NOISE_PROB,
+        ),
+        K.RandomErasing(
+            scale=config.RANDOM_ERASING_SCALE,
+            ratio=config.RANDOM_ERASING_RATIO,
+            value=0.0,
+            p=0.5,
+        ),
+        K.RandomElasticTransform(
+            alpha=config.RANDOM_ELASTIC_TRANSFORM_ALPHA,
+            sigma=config.RANDOM_ELASTIC_TRANSFORM_SIGMA,
+            p=0.5,
+        ),
+        K.RandomGamma(gamma=config.GAMMA, p=0.5),
+    ]
+
     # Select the specific augmentations for this pipeline based on the given indices
     selected_spatial_transforms = [
         all_spatial_transforms[i] for i in spatial_aug_indices
     ]
     selected_color_transforms = [all_color_transforms[i] for i in color_aug_indices]
+    selected_dem_transforms = [all_dem_transforms[i] for i in dem_aug_indices]
 
-    return selected_spatial_transforms, selected_color_transforms
+    return (
+        selected_spatial_transforms,
+        selected_color_transforms,
+        selected_dem_transforms,
+    )
 
 
 def apply_augs(
@@ -100,7 +135,14 @@ def apply_augs(
     rgb_mask = torch.zeros(image.shape[1], dtype=torch.bool, device=image.device)
     rgb_mask[rgb_channels] = True
 
-    spatial_transforms, color_transforms, spatial_mode, color_mode = aug_config
+    (
+        spatial_transforms,
+        color_transforms,
+        dem_transforms,
+        spatial_mode,
+        color_mode,
+        dem_mode,
+    ) = aug_config
 
     # Apply spatial augmentations to the image and mask
     augmented_image, augmented_mask = get_spatial_augmentation(
@@ -113,18 +155,25 @@ def apply_augs(
     # Apply color augmentations only to the RGB channels
     augmented_rgb = get_augmented_rgb(color_transforms, color_mode, rgb_only)
 
+    if non_rgb.shape[1] >= 1 and len(dem_transforms) > 0:
+        dem = non_rgb[:, 0:1, :, :]
+        dem_aug = get_dem_augmentation(dem_transforms, dem_mode, dem)
+        non_rgb[:, 0:1, :, :] = dem_aug
+
     # Recombine RGB and non-RGB channels
     fully_augmented_image = combine_channels(
         augmented_rgb, non_rgb, rgb_mask, image.shape
     )
 
-    # Generate a mask of non-padded areas in the augmented image
-    # and ensure color augmentations do not affect non-RGB channels
-    mask = augmented_image.any(dim=1, keepdim=True).to(augmented_image.device)
-    fully_augmented_image = torch.where(
-        rgb_mask.view(1, -1, 1, 1).to(augmented_image.device),
-        fully_augmented_image * mask,  # Apply mask only to RGB channels
-        augmented_image,  # Keep original values for non-RGB channels
+    # Generate mask of non-padded areas in the spatially augmented image
+    non_pad_mask = augmented_image.any(dim=1, keepdim=True).to(augmented_image.device)
+
+    # Only apply the mask to the RGB channels
+    rgb_mask = rgb_mask.view(1, -1, 1, 1).to(augmented_image.device)
+
+    # Apply mask to RGB channels in-place, leave other channels untouched
+    fully_augmented_image = fully_augmented_image * torch.where(
+        rgb_mask, non_pad_mask, torch.ones_like(non_pad_mask)
     )
 
     return fully_augmented_image, augmented_mask
@@ -141,7 +190,7 @@ def get_spatial_augmentation(spatial_transforms, mode, image, mask):
         mask (torch.Tensor): The corresponding mask tensor.
     """
     # Randomly select augmentations if modes are specified
-    if mode:
+    if mode == "random":
         spatial_augmentations = random.sample(
             spatial_transforms, k=secrets.randbelow(len(spatial_transforms)) + 1
         )
@@ -166,7 +215,7 @@ def get_augmented_rgb(color_transforms, mode, rgb_only):
                     or 'all' for all.
         rgb_only: The RGB channels to apply color augmentations to
     """
-    if mode:
+    if mode == "random":
         color_augmentations = random.sample(
             color_transforms, k=secrets.randbelow(len(color_transforms)) + 1
         )
@@ -179,3 +228,27 @@ def get_augmented_rgb(color_transforms, mode, rgb_only):
     )
 
     return color_aug_pipeline(rgb_only)
+
+
+def get_dem_augmentation(dem_transforms, mode, dem):
+    """Return the DEM channel after augmentation
+
+    Parameters:
+        dem_transforms (list): List of DEM augmentations to apply.
+        mode (str): Augmentation mode - 'random' for random augmentations
+                    or 'all' for all.
+        non_rgb: Non-RGB channels, the first will always be DEM if present
+    """
+    if mode == "random":
+        dem_augmentations = random.sample(
+            dem_transforms, k=secrets.randbelow(len(dem_transforms)) + 1
+        )
+    else:
+        dem_augmentations = dem_transforms
+
+    # Apply color augmentations only to the RGB channels
+    dem_aug_pipeline = K.AugmentationSequential(
+        *dem_augmentations, data_keys=["image"], same_on_batch=False
+    )
+
+    return dem_aug_pipeline(dem)
